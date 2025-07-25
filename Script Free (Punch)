@@ -1,0 +1,112 @@
+-- Slender Hub Free Key System (English Version)
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Slender Hub | Free Key System",
+    LoadingTitle = "Slender Hub",
+    LoadingSubtitle = "Free Key Validation",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "SlenderHubSystem",
+        FileName = "Key_" .. LocalPlayer.UserId
+    }
+})
+
+-- Valid Free Key
+local keys = {
+    Free = {
+        Key = "X8L2Z6C1D3YH",
+        Duration = 86400 -- 24 hours
+    }
+}
+
+-- State
+local config = Rayfield.LoadConfiguration()
+local now = os.time()
+local keyValid = false
+local keyAccepted = false
+
+-- Auto validation if key was saved
+if config and config["KeyType"] == "Free" and config["KeyTime"] and (now - config["KeyTime"] < keys.Free.Duration) then
+    keyValid = true
+end
+
+local KeyTab = Window:CreateTab("🔑 Key System", 4483362458)
+
+KeyTab:CreateParagraph({
+    Title = "How to get your Free Key",
+    Content = "Click the button below to copy the free key link. The Premium version is available on our Discord."
+})
+
+KeyTab:CreateButton({
+    Name = "📋 Copy Free Key Link (24h)",
+    Callback = function()
+        setclipboard("https://lootdest.org/s?AOAvAyEV")
+        Rayfield:Notify({
+            Title = "Link copied!",
+            Content = "Open it in your browser to get your free key.",
+            Duration = 6
+        })
+    end
+})
+
+KeyTab:CreateButton({
+    Name = "💎 Buy Premium (Monthly or Lifetime)",
+    Callback = function()
+        setclipboard("https://discord.gg/9Q6Q33Q7")
+        Rayfield:Notify({
+            Title = "Discord Link Copied",
+            Content = "Join the Discord to purchase Premium.",
+            Duration = 6
+        })
+    end
+})
+
+KeyTab:CreateInput({
+    Name = "📝 Enter Your Key",
+    PlaceholderText = "Ex: X8L2Z6C1D3YH",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(input)
+        if input == keys.Free.Key then
+            keyValid = true
+            keyAccepted = true
+            Rayfield:Notify({
+                Title = "✅ Valid Key!",
+                Content = "Click 'Access Script' below to continue.",
+                Duration = 5
+            })
+            Rayfield.SaveConfiguration({
+                ["KeyTime"] = os.time(),
+                ["KeyType"] = "Free"
+            })
+        else
+            keyValid = false
+            Rayfield:Notify({
+                Title = "❌ Invalid Key",
+                Content = "Please check your input and try again.",
+                Duration = 6
+            })
+        end
+    end
+})
+
+KeyTab:CreateButton({
+    Name = "🚀 Access Script",
+    Callback = function()
+        if keyValid then
+            Rayfield:Destroy()
+            wait(1)
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/.gitignore"))()
+        else
+            Rayfield:Notify({
+                Title = "⚠ Key Not Validated",
+                Content = "You must enter a valid key first.",
+                Duration = 5
+            })
+        end
+    end
+})
