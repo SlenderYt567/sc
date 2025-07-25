@@ -1,0 +1,106 @@
+-- Slender Hub Premium Key System (English Version)
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Slender Hub | Premium Key System",
+    LoadingTitle = "Slender Hub",
+    LoadingSubtitle = "Premium Key Validation",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "SlenderHubPremiumSystem",
+        FileName = "Key_" .. LocalPlayer.UserId
+    }
+})
+
+-- Valid keys
+local keys = {
+    Lifetime = {
+        Key = "LifeTimeF4K9L2P7V8JDHUtY",
+        Duration = math.huge
+    },
+    Monthly = {
+        Key = "Mensal0KJu7iYU2HJUTRFYXV",
+        Duration = 2592000 -- 30 days
+    }
+}
+
+-- Local saved state
+local config = Rayfield.LoadConfiguration()
+local now = os.time()
+local keyValid = false
+
+if config and config["KeyType"] and config["KeyTime"] then
+    local savedType = config["KeyType"]
+    if keys[savedType] and (now - config["KeyTime"] < keys[savedType].Duration) then
+        keyValid = true
+    end
+end
+
+-- GUI
+local KeyTab = Window:CreateTab("🔑 Premium Key", 4483362458)
+
+KeyTab:CreateParagraph({
+    Title = "Access Slender Hub Premium",
+    Content = "Enter your key below and click 'Access Premium'."
+})
+
+KeyTab:CreateInput({
+    Name = "📝 Enter your Premium Key",
+    PlaceholderText = "Ex: L2P7V8JDHUtY",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(input)
+        if input == keys.Lifetime.Key then
+            keyValid = true
+            Rayfield.SaveConfiguration({
+                ["KeyType"] = "Lifetime",
+                ["KeyTime"] = os.time()
+            })
+            Rayfield:Notify({
+                Title = "✅ Lifetime Key Valid!",
+                Content = "Click 'Access Premium' to continue.",
+                Duration = 5
+            })
+        elseif input == keys.Monthly.Key then
+            keyValid = true
+            Rayfield.SaveConfiguration({
+                ["KeyType"] = "Monthly",
+                ["KeyTime"] = os.time()
+            })
+            Rayfield:Notify({
+                Title = "✅ Monthly Key Valid!",
+                Content = "Click 'Access Premium' to continue.",
+                Duration = 5
+            })
+        else
+            keyValid = false
+            Rayfield:Notify({
+                Title = "❌ Invalid Key",
+                Content = "Please check your key and try again.",
+                Duration = 6
+            })
+        end
+    end
+})
+
+KeyTab:CreateButton({
+    Name = "🚀 Access Premium",
+    Callback = function()
+        if keyValid then
+            spawn(function()
+                Rayfield:Destroy()
+                wait(1)
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/kk"))()
+            end)
+        else
+            Rayfield:Notify({
+                Title = "⚠ Key Not Validated",
+                Content = "You must enter a valid key first.",
+                Duration = 5
+            })
+        end
+    end
+})
