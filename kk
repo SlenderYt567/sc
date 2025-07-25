@@ -49,7 +49,7 @@ autoTab:CreateToggle({
         if v then
             spawnLoop("AutoClick", function()
                 game.ReplicatedStorage.Events.DamageIncreaseOnClickEvent:FireServer()
-            end, 0.1)
+            end, 0.3)
         end
     end
 })
