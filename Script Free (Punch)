@@ -68,7 +68,7 @@ KeyTab:CreateButton({
 
 KeyTab:CreateInput({
     Name = "📝 Enter Your Key",
-    PlaceholderText = "Ex: X8L2Z6C1D3YH",
+    PlaceholderText = "Ex: AYUJGKL009987",
     RemoveTextAfterFocusLost = false,
     Callback = function(input)
         if input == keys.Free.Key then
