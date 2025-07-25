@@ -36,7 +36,7 @@ autoTab:CreateToggle{ Name = "Auto Click"; CurrentValue = false; Flag = "AutoCli
         Toggles.AutoClick = v
         if v then spawnLoop("AutoClick", function()
             game.ReplicatedStorage.Events.DamageIncreaseOnClickEvent:FireServer()
-        end, 0.1) end
+        end, 0.3) end
     end
 }
 autoTab:CreateToggle{ Name = "Auto Win"; CurrentValue = false; Flag = "AutoWin";
@@ -77,7 +77,7 @@ eggTab:CreateToggle{ Name = "Auto Hatch"; CurrentValue = false; Flag = "AutoHatc
         Toggles.AutoHatch = v
         if v then spawnLoop("AutoHatch", function()
             game.ReplicatedStorage.Events.PlayerPressedKeyOnEgg:FireServer(Settings.Egg,1)
-        end, 0.5) end
+        end, 0.7) end
     end
 }
 
