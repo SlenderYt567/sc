@@ -1,41 +1,150 @@
-# Compiled Lua sources
-luac.out
+-- Only execute in Punch Simulator
+if game.PlaceId ~= 14236123211 then return end
 
-# luarocks build files
-*.src.rock
-*.zip
-*.tar.gz
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Window = Rayfield:CreateWindow({
+    Name = "Slender HUB",
+    ConfigurationSaving = { Enabled = true, FolderName = "Slender", FileName = "Config" }
+})
 
-# Object files
-*.o
-*.os
-*.ko
-*.obj
-*.elf
+local Toggles = {}
+local Settings = { Craft = "ShortSwords", Egg = "1", Well = "Small" }
 
-# Precompiled Headers
-*.gch
-*.pch
+-- Craft List based on official wiki
+local craftItems = {
+    "ShortSwords", "Dagger", "HeavyHammer", "DualHammers", "QuadHammers",
+    "Clover", "LuckyTooth", "HorseShoe", "GoldenClover",
+    "HealthKit", "Heart", "HealthGem", "GoldenHealthGem",
+    "BootsofSwiftness", "JetFuel", "RocketJet",
+    "LuckyDie", "Magnet", "LuckyGem", "GemStack", "HandfulOfCoins"
+}
 
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-*.def
-*.exp
+-- Helper spawn-loop
+local function spawnLoop(flag, fn, delay)
+    spawn(function()
+        while Toggles[flag] do
+            pcall(fn)
+            task.wait(delay or 1)
+        end
+    end)
+end
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
+-- Auto Tab
+local autoTab = Window:CreateTab("Auto", 4483362458)
+autoTab:CreateToggle{ Name = "Auto Click"; CurrentValue = false; Flag = "AutoClick";
+    Callback = function(v)
+        Toggles.AutoClick = v
+        if v then spawnLoop("AutoClick", function()
+            game.ReplicatedStorage.Events.DamageIncreaseOnClickEvent:FireServer()
+        end, 0.1) end
+    end
+}
+autoTab:CreateToggle{ Name = "Auto Win"; CurrentValue = false; Flag = "AutoWin";
+    Callback = function(v)
+        Toggles.AutoWin = v
+        if v then spawnLoop("AutoWin", function()
+            game.ReplicatedStorage.Events.PushEvent:FireServer(true)
+        end, 0.2) end
+    end
+}
+autoTab:CreateDropdown{
+    Name = "Select Craft"; CurrentValue = Settings.Craft; Flag = "Craft";
+    Options = craftItems;
+    Callback = function(v) Settings.Craft = v end
+}
+autoTab:CreateToggle{ Name = "Auto Craft"; CurrentValue = false; Flag = "AutoCraft";
+    Callback = function(v)
+        Toggles.AutoCraft = v
+        if v then spawnLoop("AutoCraft", function()
+            game.ReplicatedStorage.Events.CraftingEvent:FireServer(Settings.Craft)
+        end, 1) end
+    end
+}
 
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+-- Eggs Tab
+local eggTab = Window:CreateTab("Eggs")
+eggTab:CreateDropdown{
+    Name = "Select Egg"; CurrentValue = Settings.Egg; Flag = "Egg";
+    Options = (function()
+        local t = {}
+        for i=1,30 do t[i] = tostring(i) end
+        return t
+    end)();
+    Callback = function(v) Settings.Egg = v end
+}
+eggTab:CreateToggle{ Name = "Auto Hatch"; CurrentValue = false; Flag = "AutoHatch";
+    Callback = function(v)
+        Toggles.AutoHatch = v
+        if v then spawnLoop("AutoHatch", function()
+            game.ReplicatedStorage.Events.PlayerPressedKeyOnEgg:FireServer(Settings.Egg,1)
+        end, 0.5) end
+    end
+}
 
+-- Misc Tab
+local miscTab = Window:CreateTab("Misc")
+miscTab:CreateDropdown{
+    Name = "Select Wishing Well"; CurrentValue = Settings.Well; Flag = "Well";
+    Options = {"Small", "Medium", "Mega"};
+    Callback = function(v) Settings.Well = v end
+}
+miscTab:CreateToggle{ Name = "Auto Wishing Well"; CurrentValue = false; Flag = "AutoWishingWell";
+    Callback = function(v)
+        Toggles.AutoWishingWell = v
+        if v then spawnLoop("AutoWishingWell", function()
+            game.ReplicatedStorage.Events.WishingWell:FireServer(Settings.Well)
+        end, 1) end
+    end
+}
+miscTab:CreateToggle{ Name = "Auto Spin"; CurrentValue = false; Flag = "AutoSpin";
+    Callback = function(v)
+        Toggles.AutoSpin = v
+        if v then spawnLoop("AutoSpin", function()
+            game.ReplicatedStorage.Events.SpinWheelEvent:FireServer(true)
+        end, 1) end
+    end
+}
+miscTab:CreateToggle{ Name = "Auto PowerCore 1"; CurrentValue = false; Flag = "AutoPower1";
+    Callback = function(v)
+        Toggles.AutoPower1 = v
+        if v then spawnLoop("AutoPower1", function()
+            game.ReplicatedStorage.Events.PowerCore:InvokeServer()
+        end, 1) end
+    end
+}
+miscTab:CreateToggle{ Name = "Auto PowerCore 2"; CurrentValue = false; Flag = "AutoPower2";
+    Callback = function(v)
+        Toggles.AutoPower2 = v
+        if v then spawnLoop("AutoPower2", function()
+            game.ReplicatedStorage.Events.PowerCoreV2:InvokeServer()
+        end, 2) end
+    end
+}
+miscTab:CreateToggle{ Name = "Auto Hack"; CurrentValue = false; Flag = "AutoHack";
+    Callback = function(v)
+        Toggles.AutoHack = v
+        if v then spawnLoop("AutoHack", function()
+            game.ReplicatedStorage.Events.HackEvent:InvokeServer()
+        end, 1) end
+    end
+}
+miscTab:CreateButton{ Name = "Fechar GUI"; Callback = function() Rayfield:Destroy() end }
+
+-- Dungeon Tab
+local dungeonTab = Window:CreateTab("Dungeon")
+dungeonTab:CreateToggle{ Name = "Auto Dungeon"; CurrentValue = false; Flag = "AutoDungeon";
+    Callback = function(v)
+        Toggles.AutoDungeon = v
+        if v then spawnLoop("AutoDungeon", function()
+            game.ReplicatedStorage.Events.DungeonTeleport:FireServer()
+            task.wait(3)
+            game.ReplicatedStorage.Events.StartDungeon:FireServer()
+            task.wait(10)
+            for _, mob in pairs(workspace.DungeonMobs:GetChildren()) do
+                if mob:FindFirstChild("HumanoidRootPart") then
+                    game.ReplicatedStorage.Events.DamageEvent:FireServer(mob)
+                end
+            end
+        end, 5) end
+    end
+}
