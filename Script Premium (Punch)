@@ -142,7 +142,7 @@ keyInputParagraph = KeyTab:CreateParagraph({
 
 keyInputField = KeyTab:CreateInput({
     Name = "📝 Enter your Premium Key",
-    PlaceholderText = "Ex: LifeTimeF4K9L2P7V8JDHUtY",
+    PlaceholderText = "Ex: K9L2P7V8JDHUtY",
     RemoveTextAfterFocusLost = false,
     Callback = function(rawInput)
         local input = rawInput:gsub("%s", "") -- Remove all whitespace
