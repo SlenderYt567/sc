@@ -1,150 +1,330 @@
--- Only execute in Punch Simulator
+-- Slender Hub - Punch Simulator Free Version
 if game.PlaceId ~= 14236123211 then return end
 
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
 local Window = Rayfield:CreateWindow({
-    Name = "Slender HUB",
-    ConfigurationSaving = { Enabled = true, FolderName = "Slender", FileName = "Config" }
+    Name = "Slender Hub - Free Version", -- Changed name
+    LoadingTitle = "Slender Hub - Free Version", -- Changed loading title
+    LoadingSubtitle = "by Slender",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = nil,
+        FileName = "SlenderHubFreeConfig" -- Changed config file name for Free version
+    },
+    Discord = {
+        Enabled = true,
+        Invite = "zFQMEvT6",
+        RememberJoins = true
+    }
 })
 
-local Toggles = {}
-local Settings = { Craft = "ShortSwords", Egg = "1", Well = "Small" }
+-- Global Variables
+_G.Autoclick = false
+_G.autoHatch = false
+_G.selectEgg = "1"
+_G.autoCraft = false
+_G.selectCraft = "ShortSwords"
+_G.autoWishingWell = false
+_G.selectWishingWell = "Small"
+_G.autoWin = false
+_G.autoSpin = false
+_G.autoPower1 = false
+_G.autoPower2 = false
+_G.autoHack = false
+_G.autoUGC = false
+_G.autoDungeon = false
+_G.autoEggBox = false
+_G.eventEggCount = 1
 
--- Craft List based on official wiki
-local craftItems = {
-    "ShortSwords", "Dagger", "HeavyHammer", "DualHammers", "QuadHammers",
-    "Clover", "LuckyTooth", "HorseShoe", "GoldenClover",
-    "HealthKit", "Heart", "HealthGem", "GoldenHealthGem",
-    "BootsofSwiftness", "JetFuel", "RocketJet",
-    "LuckyDie", "Magnet", "LuckyGem", "GemStack", "HandfulOfCoins"
-}
+-- Functions
+function Autoclick()
+    while _G.Autoclick do
+        game.ReplicatedStorage.Events.DamageIncreaseOnClickEvent:FireServer()
+        task.wait(0.4) -- adjusted delay for Free version
+    end
+end
 
--- Helper spawn-loop
-local function spawnLoop(flag, fn, delay)
-    spawn(function()
-        while Toggles[flag] do
-            pcall(fn)
-            task.wait(delay or 1)
-        end
-    end)
+function autoHatch()
+    while _G.autoHatch do
+        game.ReplicatedStorage.Events.PlayerPressedKeyOnEgg:FireServer(_G.selectEgg, 1)
+        task.wait(1.6) -- adjusted delay for Free version
+    end
+end
+
+function autoWin()
+    while _G.autoWin do
+        game.ReplicatedStorage.Events.PushEvent:FireServer(true)
+        task.wait(0.1)
+    end
+end
+
+function autoCraft()
+    while _G.autoCraft do
+        game:GetService("ReplicatedStorage").Events.CraftingEvent:FireServer(_G.selectCraft)
+        task.wait(0.5)
+    end
+end
+
+function autoWishingWell()
+    while _G.autoWishingWell do
+        game.ReplicatedStorage.Events.WishingWell:FireServer(_G.selectWishingWell)
+        task.wait(1)
+    end
+end
+
+function autoPower1()
+    while _G.autoPower1 do
+        game.ReplicatedStorage.Events.PowerCoreEvent:FireServer("PowerCoreOne")
+        task.wait(1)
+    end
+end
+
+function autoPower2()
+    while _G.autoPower2 do
+        game.ReplicatedStorage.Events.PowerCoreEvent:FireServer("PowerCoreTwo")
+        task.wait(1)
+    end
+end
+
+function autoHack()
+    while _G.autoHack do
+        game.ReplicatedStorage.Events.HackEvent:FireServer()
+        task.wait(0.7)
+    end
+end
+
+function autoUGC()
+    while _G.autoUGC do
+        game.ReplicatedStorage.Events.NewUGCEvents.ClickedEventClaimButton:FireServer("NextBossEvent")
+        task.wait(1)
+    end
+end
+
+function autoSpin()
+    while _G.autoSpin do
+        game.ReplicatedStorage.Events.SpinWheelEvent:FireServer("Spin")
+        task.wait(1)
+    end
+end
+
+function autoDungeon()
+    while _G.autoDungeon do
+        game.ReplicatedStorage.Events.StartDungeon:FireServer()
+        task.wait(2)
+    end
+end
+
+function autoEventEggBox()
+    while _G.autoEggBox do
+        local args = {_G.eventEggCount}
+        game:GetService("ReplicatedStorage").Events.RNGGame.EternalBloom.EternalBloomMysteryBoxEvents.PlayerWantsToRollMysteryBox:FireServer(unpack(args))
+        task.wait(1)
+    end
 end
 
 -- Auto Tab
-local autoTab = Window:CreateTab("Auto", 4483362458)
-autoTab:CreateToggle{ Name = "Auto Click"; CurrentValue = false; Flag = "AutoClick";
+local AutoTab = Window:CreateTab("Auto", 4483362458)
+AutoTab:CreateToggle({
+    Name = "Auto Damage",
+    CurrentValue = false,
+    Flag = "AutoDamage",
     Callback = function(v)
-        Toggles.AutoClick = v
-        if v then spawnLoop("AutoClick", function()
-            game.ReplicatedStorage.Events.DamageIncreaseOnClickEvent:FireServer()
-        end, 0.3) end
+        _G.Autoclick = v
+        if v then task.spawn(Autoclick) end
     end
-}
-autoTab:CreateToggle{ Name = "Auto Win"; CurrentValue = false; Flag = "AutoWin";
+})
+
+AutoTab:CreateToggle({
+    Name = "Auto Win",
+    CurrentValue = false,
+    Flag = "AutoWin",
     Callback = function(v)
-        Toggles.AutoWin = v
-        if v then spawnLoop("AutoWin", function()
-            game.ReplicatedStorage.Events.PushEvent:FireServer(true)
-        end, 0.2) end
+        _G.autoWin = v
+        if v then task.spawn(autoWin) end
     end
-}
-autoTab:CreateDropdown{
-    Name = "Select Craft"; CurrentValue = Settings.Craft; Flag = "Craft";
-    Options = craftItems;
-    Callback = function(v) Settings.Craft = v end
-}
-autoTab:CreateToggle{ Name = "Auto Craft"; CurrentValue = false; Flag = "AutoCraft";
+})
+
+AutoTab:CreateToggle({
+    Name = "Auto Craft",
+    CurrentValue = false,
+    Flag = "AutoCraft",
     Callback = function(v)
-        Toggles.AutoCraft = v
-        if v then spawnLoop("AutoCraft", function()
-            game.ReplicatedStorage.Events.CraftingEvent:FireServer(Settings.Craft)
-        end, 1) end
+        _G.autoCraft = v
+        if v then task.spawn(autoCraft) end
     end
-}
+})
+
+AutoTab:CreateDropdown({
+    Name = "Select Craft",
+    Options = {
+        "ShortSwords", "Clover", "HealthKit", "BootsofSwiftness", "LuckyDie", "Magnet", "Dagger", "LuckyTooth",
+        "JetFuel", "LuckyGem", "Heart", "HeavyHammer", "HorseShoe", "HandfulOfCoins", "HealthGem", "DualHammers",
+        "GoldenClover", "GemStack", "GoldenHealthGem", "RocketJet", "QuadHammers"
+    },
+    CurrentOption = {"ShortSwords"},
+    MultipleOptions = false,
+    Flag = "DropdownCraft",
+    Callback = function(Options)
+        _G.selectCraft = Options[1]
+    end
+})
 
 -- Eggs Tab
-local eggTab = Window:CreateTab("Eggs")
-eggTab:CreateDropdown{
-    Name = "Select Egg"; CurrentValue = Settings.Egg; Flag = "Egg";
+local EggTab = Window:CreateTab("Eggs", 4483362458)
+EggTab:CreateDropdown({
+    Name = "Select Egg",
     Options = (function()
         local t = {}
-        for i=1,30 do t[i] = tostring(i) end
+        for i = 1, 30 do t[#t+1] = tostring(i) end
         return t
-    end)();
-    Callback = function(v) Settings.Egg = v end
-}
-eggTab:CreateToggle{ Name = "Auto Hatch"; CurrentValue = false; Flag = "AutoHatch";
-    Callback = function(v)
-        Toggles.AutoHatch = v
-        if v then spawnLoop("AutoHatch", function()
-            game.ReplicatedStorage.Events.PlayerPressedKeyOnEgg:FireServer(Settings.Egg,1)
-        end, 0.7) end
+    end)(),
+    CurrentOption = {"1"},
+    MultipleOptions = false,
+    Flag = "DropdownEgg",
+    Callback = function(Options)
+        _G.selectEgg = Options[1]
     end
-}
+})
+
+EggTab:CreateToggle({
+    Name = "Auto Hatch",
+    CurrentValue = false,
+    Flag = "AutoHatch",
+    Callback = function(v)
+        _G.autoHatch = v
+        if v then task.spawn(autoHatch) end
+    end
+})
 
 -- Misc Tab
-local miscTab = Window:CreateTab("Misc")
-miscTab:CreateDropdown{
-    Name = "Select Wishing Well"; CurrentValue = Settings.Well; Flag = "Well";
-    Options = {"Small", "Medium", "Mega"};
-    Callback = function(v) Settings.Well = v end
-}
-miscTab:CreateToggle{ Name = "Auto Wishing Well"; CurrentValue = false; Flag = "AutoWishingWell";
+local MiscTab = Window:CreateTab("Misc", 4483362458)
+MiscTab:CreateToggle({
+    Name = "Auto PowerCore 1",
+    CurrentValue = false,
+    Flag = "AutoPower1",
     Callback = function(v)
-        Toggles.AutoWishingWell = v
-        if v then spawnLoop("AutoWishingWell", function()
-            game.ReplicatedStorage.Events.WishingWell:FireServer(Settings.Well)
-        end, 1) end
+        _G.autoPower1 = v
+        if v then task.spawn(autoPower1) end
     end
-}
-miscTab:CreateToggle{ Name = "Auto Spin"; CurrentValue = false; Flag = "AutoSpin";
+})
+
+MiscTab:CreateToggle({
+    Name = "Auto PowerCore 2",
+    CurrentValue = false,
+    Flag = "AutoPower2",
     Callback = function(v)
-        Toggles.AutoSpin = v
-        if v then spawnLoop("AutoSpin", function()
-            game.ReplicatedStorage.Events.SpinWheelEvent:FireServer(true)
-        end, 1) end
+        _G.autoPower2 = v
+        if v then task.spawn(autoPower2) end
     end
-}
-miscTab:CreateToggle{ Name = "Auto PowerCore 1"; CurrentValue = false; Flag = "AutoPower1";
+})
+
+MiscTab:CreateToggle({
+    Name = "Auto Hack",
+    CurrentValue = false,
+    Flag = "AutoHack",
     Callback = function(v)
-        Toggles.AutoPower1 = v
-        if v then spawnLoop("AutoPower1", function()
-            game.ReplicatedStorage.Events.PowerCore:InvokeServer()
-        end, 1) end
+        _G.autoHack = v
+        if v then task.spawn(autoHack) end
     end
-}
-miscTab:CreateToggle{ Name = "Auto PowerCore 2"; CurrentValue = false; Flag = "AutoPower2";
+})
+
+MiscTab:CreateToggle({
+    Name = "Auto UGC Claim",
+    CurrentValue = false,
+    Flag = "AutoUGC",
     Callback = function(v)
-        Toggles.AutoPower2 = v
-        if v then spawnLoop("AutoPower2", function()
-            game.ReplicatedStorage.Events.PowerCoreV2:InvokeServer()
-        end, 2) end
+        _G.autoUGC = v
+        if v then task.spawn(autoUGC) end
     end
-}
-miscTab:CreateToggle{ Name = "Auto Hack"; CurrentValue = false; Flag = "AutoHack";
+})
+
+MiscTab:CreateToggle({
+    Name = "Auto Spin",
+    CurrentValue = false,
+    Flag = "AutoSpin",
     Callback = function(v)
-        Toggles.AutoHack = v
-        if v then spawnLoop("AutoHack", function()
-            game.ReplicatedStorage.Events.HackEvent:InvokeServer()
-        end, 1) end
+        _G.autoSpin = v
+        if v then task.spawn(autoSpin) end
     end
-}
-miscTab:CreateButton{ Name = "Fechar GUI"; Callback = function() Rayfield:Destroy() end }
+})
 
 -- Dungeon Tab
-local dungeonTab = Window:CreateTab("Dungeon")
-dungeonTab:CreateToggle{ Name = "Auto Dungeon"; CurrentValue = false; Flag = "AutoDungeon";
+local DungeonTab = Window:CreateTab("Dungeon", 4483362458)
+DungeonTab:CreateToggle({
+    Name = "Auto Dungeon",
+    CurrentValue = false,
+    Flag = "AutoDungeon",
     Callback = function(v)
-        Toggles.AutoDungeon = v
-        if v then spawnLoop("AutoDungeon", function()
-            game.ReplicatedStorage.Events.DungeonTeleport:FireServer()
-            task.wait(3)
-            game.ReplicatedStorage.Events.StartDungeon:FireServer()
-            task.wait(10)
-            for _, mob in pairs(workspace.DungeonMobs:GetChildren()) do
-                if mob:FindFirstChild("HumanoidRootPart") then
-                    game.ReplicatedStorage.Events.DamageEvent:FireServer(mob)
-                end
-            end
-        end, 5) end
+        _G.autoDungeon = v
+        if v then task.spawn(autoDungeon) end
     end
-}
+})
+
+-- Event Tab
+local EventTab = Window:CreateTab("Event", 4483362458) -- Translated tab name
+EventTab:CreateDropdown({
+    Name = "Egg Quantity", -- Translated
+    Options = {"1", "10"},
+    CurrentOption = {"1"},
+    MultipleOptions = false,
+    Flag = "EventEggCount",
+    Callback = function(option)
+        _G.eventEggCount = tonumber(option[1]) or 1
+    end
+})
+
+EventTab:CreateToggle({
+    Name = "Auto Egg Box",
+    CurrentValue = false,
+    Flag = "AutoEggBox",
+    Callback = function(value)
+        _G.autoEggBox = value
+        if value then
+            task.spawn(autoEventEggBox)
+        end
+    end
+})
+
+-- Settings Tab
+local ConfigTab = Window:CreateTab("Settings", 4483362458) -- Translated tab name
+ConfigTab:CreateButton({
+    Name = "Enable Anti-AFK", -- Translated
+    Callback = function()
+        local vu = game:GetService("VirtualUser")
+        game:GetService("Players").LocalPlayer.Idled:Connect(function()
+            vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            task.wait(1)
+            vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            print("[Anti-AFK] Simulated movement to prevent kick.") -- Translated print
+        end)
+    end
+})
+
+ConfigTab:CreateButton({
+    Name = "Save Settings", -- Translated
+    Callback = function()
+        Window:SaveConfiguration()
+        print("[Config] Settings saved successfully.") -- Translated print
+    end
+})
+
+ConfigTab:CreateButton({
+    Name = "Close Script", -- Translated
+    Callback = function()
+        _G.Autoclick = false
+        _G.autoHatch = false
+        _G.autoCraft = false
+        _G.autoWishingWell = false
+        _G.autoWin = false
+        _G.autoSpin = false
+        _G.autoPower1 = false
+        _G.autoPower2 = false
+        _G.autoHack = false
+        _G.autoUGC = false
+        _G.autoDungeon = false
+        _G.autoEggBox = false
+        Window:Destroy()
+        print("[Script] Interface closed and scripts disabled.") -- Translated print
+    end
+})
