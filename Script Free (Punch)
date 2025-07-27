@@ -15,7 +15,7 @@ local CONFIG_FILE = "FreeKey_" .. LocalPlayer.UserId .. ".rayfield" -- Unique fi
 local CONFIG_PATH = CONFIG_FOLDER .. "/" .. CONFIG_FILE
 
 -- Valid Key and Duration
-local KEY = "X8L2Z6C1D3YH" -- Double-check this key
+local KEY = "X8L2Z6C1D3YH" -- Double-check this key - this is the actual key for validation
 local KEY_DURATION = 86400 -- 24 hours in seconds
 local currentTime = os.time()
 local keyValid = false
@@ -41,7 +41,7 @@ local function loadKeyConfig()
             else
                 print("Key HAS EXPIRED.")
                 Rayfield:Notify({
-                    Title = "⚠ Your Free Key Expired!",
+                    Title = "⚠️ Your Free Key Expired!",
                     Content = "Please enter a new key to continue using Free features.",
                     Duration = 7
                 })
@@ -50,7 +50,7 @@ local function loadKeyConfig()
         else
             print("Invalid, unrecognized or corrupted data in config file. Deleting old file.")
             Rayfield:Notify({
-                Title = "⚠ Saved Key Error!",
+                Title = "⚠️ Saved Key Error!",
                 Content = "Your saved key is invalid or corrupted. Please re-enter a valid key.",
                 Duration = 7
             })
@@ -134,7 +134,7 @@ copyKeyLinkButton = KeyTab:CreateButton({
 
 keyInputField = KeyTab:CreateInput({
     Name = "📝 Enter Your Key",
-    PlaceholderText = "Ex: " .. KEY,
+    PlaceholderText = "Ex: K9L2P7V8JDHUtY", -- <<< MODIFIED LINE HERE
     RemoveTextAfterFocusLost = false,
     Callback = function(rawInput)
         -- CRITICAL FIX: Remove all whitespace from the input before comparison
@@ -219,7 +219,7 @@ buyPremiumButton = KeyTab:CreateButton({
     Name = "✨ Buy Premium Access",
     Callback = function()
         -- Assuming the Discord link is where users can get Premium keys
-        setclipboard("https://discord.gg/zFQMEvT6") -- This is the Discord invite from your Premium script
+        setclipboard("https://discord.gg/zFQMEvT6") -- This is the Discord invite from your previous scripts
         Rayfield:Notify({
             Title = "Premium Discord Link Copied!",
             Content = "Paste in browser to join and learn how to get Premium.",
@@ -236,7 +236,7 @@ resetKeyButton = KeyTab:CreateButton({
 
 -- Add Show Key Timer Button
 showKeyTimerButton = KeyTab:CreateButton({
-    Name = "⏱ Show Key Timer",
+    Name = "⏱️ Show Key Timer",
     Callback = showKeyTimer
 })
 
