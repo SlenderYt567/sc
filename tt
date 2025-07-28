@@ -1,0 +1,434 @@
+-- ! IMPORTANTE: Este script deve ser executado por um executor (ex: Synapse X, Script-Ware, Fluxus).
+-- ! Ele não funcionará como um LocalScript comum no Roblox Studio ou em um jogo publicado,
+-- ! pois usa `game:HttpGet` e `loadstring`.
+
+if game.PlaceId ~= 228181322 then
+    -- Rayfield:Notify({Title = "Slender Hub", Content = "Este script é para o jogo Dinosaur Simulator (ID: 228181322).", Duration = 10})
+    return -- Sai do script se não estiver no jogo correto
+end
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Slender Hub - Dinosaur Simulator",
+    LoadingTitle = "Slender Hub",
+    LoadingSubtitle = "ESP Amber",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "SlenderHub",
+        FileName = "DinoSimConfig"
+    },
+    Discord = { Enabled = false },
+    KeySystem = false
+})
+
+local ESPAmberEnabled = false
+local ESPObjects = {} -- Armazena as BaseParts da amber com ESP ativo
+
+local AmberListeners = {
+    Added = nil,
+    Removed = nil
+}
+
+local isAutoWalkActive = false
+local autoWalkTask = nil
+local originalWalkSpeed = 16
+local originalJumpPower = 50
+local originalAutoRotate = true
+
+-- Variáveis para Auto Farm
+local isAutoEatActive = false
+local autoEatTask = nil
+local isAutoWaterActive = false
+local autoWaterTask = nil
+
+-- === Funções de ESP Amber ===
+
+local function DisableESPAmberForPart(part)
+    if not part then return end
+
+    local highlight = part:FindFirstChild("ESPHighlight")
+    if highlight and highlight:IsA("Highlight") then
+        highlight:Destroy()
+    end
+
+    local billboard = part:FindFirstChild("AmberDistance")
+    if billboard and billboard:IsA("BillboardGui") then
+        billboard:Destroy()
+    end
+
+    -- CORREÇÃO: Usar ')' para fechar o loop 'for'
+    for i = #ESPObjects, 1, -1 do
+        if ESPObjects[i] == part then
+            table.remove(ESPObjects, i)
+            break
+        end
+    end -- Aqui era '}', agora é ')'
+end
+
+local function EnableESPAmberForPart(part)
+    if not part or not part:IsA("BasePart") or not part.Name:lower():find("amber") or part:FindFirstChild("ESPHighlight") then
+        return
+    end
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESPHighlight"
+    highlight.FillColor = Color3.fromRGB(255, 130, 0)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.1
+    highlight.OutlineTransparency = 0
+    highlight.Adornee = part
+    highlight.Parent = part
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "AmberDistance"
+    billboard.Size = UDim2.new(0, 100, 0, 20)
+    billboard.AlwaysOnTop = true
+    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+    billboard.Adornee = part
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+    textLabel.TextStrokeTransparency = 0.5
+    textLabel.TextScaled = true
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.Name = "DistanceLabel"
+    textLabel.Text = "Loading..."
+    textLabel.Parent = billboard
+    billboard.Parent = part
+    table.insert(ESPObjects, part)
+end
+
+local function ScanAndApplyESPAmber()
+    -- Limpa qualquer ESP antigo para evitar duplicatas antes de re-escanear
+    -- Criamos uma cópia para iterar de forma segura enquanto modificamos a original
+    local currentESPObjects = {}
+    for _, obj in pairs(ESPObjects) do
+        table.insert(currentESPObjects, obj)
+    end
+    for _, obj in pairs(currentESPObjects) do
+        DisableESPAmberForPart(obj)
+    end
+    table.clear(ESPObjects) -- Garante que a lista está realmente vazia
+
+    for _, v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") and v.Name:lower():find("amber") then
+            EnableESPAmberForPart(v)
+        end
+    end
+end
+
+local function SetupAmberListeners()
+    AmberListeners.Added = Workspace.DescendantAdded:Connect(function(descendant)
+        if ESPAmberEnabled and descendant:IsA("BasePart") and descendant.Name:lower():find("amber") then
+            EnableESPAmberForPart(descendant)
+        end
+    end)
+    AmberListeners.Removed = Workspace.DescendantRemoving:Connect(function(descendant)
+        if descendant:IsA("BasePart") and descendant.Name:lower():find("amber") then
+            DisableESPAmberForPart(descendant)
+        end
+    end)
+end
+
+local function DisconnectAmberListeners()
+    if AmberListeners.Added then AmberListeners.Added:Disconnect() end
+    if AmberListeners.Removed then AmberListeners.Removed:Disconnect() end
+    AmberListeners.Added = nil
+    AmberListeners.Removed = nil
+end
+
+task.spawn(function()
+    while task.wait(0.5) do
+        if ESPAmberEnabled then
+            -- Iterar de trás para frente para remoção segura enquanto itera
+            for i = #ESPObjects, 1, -1 do
+                local obj = ESPObjects[i]
+                -- Verifica se o objeto ainda é válido, está no Workspace e é uma BasePart
+                if not obj or not obj:IsDescendantOf(Workspace) or not obj:IsA("BasePart") or obj.Parent == nil then
+                    DisableESPAmberForPart(obj) -- Limpa e remove da lista
+                    continue
+                end
+                local gui = obj:FindFirstChild("AmberDistance")
+                if gui and gui:FindFirstChild("DistanceLabel") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local distance = math.floor((obj.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude)
+                    gui.DistanceLabel.Text = "Distance: " .. distance .. " studs"
+                else
+                    DisableESPAmberForPart(obj) -- Se o GUI não for encontrado (ex: foi destruído), limpa o ESP
+                end
+            end
+        end
+    end
+end)
+
+-- === Funções de Auto-Walk para Amber ===
+local function RestoreHumanoidProperties()
+    local character = LocalPlayer.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = originalWalkSpeed
+            humanoid.JumpPower = originalJumpPower
+            humanoid.AutoRotate = originalAutoRotate
+            humanoid:MoveTo(humanoid.Parent.HumanoidRootPart.Position) -- Para qualquer movimento pendente
+        end
+    end
+end
+
+local function StartAutoWalk()
+    isAutoWalkActive = true
+    local character = LocalPlayer.Character
+    if not character then
+        Rayfield:Notify({Title = "Caminhada Automática", Content = "Seu personagem não está disponível!", Duration = 5})
+        isAutoWalkActive = false
+        return
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local playerHRP = character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not playerHRP then
+        Rayfield:Notify({Title = "Caminhada Automática", Content = "Humanoid ou HRP não encontrados!", Duration = 5})
+        isAutoWalkActive = false
+        return
+    end
+
+    originalWalkSpeed = humanoid.WalkSpeed
+    originalJumpPower = humanoid.JumpPower
+    originalAutoRotate = humanoid.AutoRotate
+
+    humanoid.WalkSpeed = 500
+    humanoid.JumpPower = 0
+    humanoid.AutoRotate = false
+
+    Rayfield:Notify({Title = "Caminhada Automática", Content = "Iniciando caminhada automática para amber...", Duration = 3})
+
+    autoWalkTask = task.spawn(function()
+        while isAutoWalkActive and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") do
+            local currentHumanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            local currentHRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not currentHumanoid or not currentHRP then break end
+
+            local closestAmber = nil
+            local minDistance = math.huge
+
+            for _, amberPart in pairs(ESPObjects) do
+                if amberPart and amberPart:IsDescendantOf(Workspace) and amberPart:IsA("BasePart") then
+                    local currentDistance = (amberPart.Position - currentHRP.Position).Magnitude
+                    if currentDistance < minDistance then
+                        minDistance = currentDistance
+                        closestAmber = amberPart
+                    end
+                end
+            end
+
+            if closestAmber then
+                currentHumanoid:MoveTo(closestAmber.Position)
+                Rayfield:Notify({Title = "Caminhada Automática", Content = "Indo para: " .. closestAmber.Name .. " (" .. math.floor(minDistance) .. " studs)", Duration = 1})
+
+                local monitorDistance = minDistance
+                while isAutoWalkActive and currentHumanoid and currentHRP and closestAmber and closestAmber:IsDescendantOf(Workspace) and monitorDistance > 5 do
+                    task.wait(0.1)
+                    if currentHRP and closestAmber then
+                        monitorDistance = (closestAmber.Position - currentHRP.Position).Magnitude
+                    else
+                        break
+                    end
+                end
+                task.wait(0.5)
+            else
+                Rayfield:Notify({Title = "Caminhada Automática", Content = "Nenhuma amber encontrada no momento. Aguardando...", Duration = 2})
+                task.wait(2)
+            end
+        end
+        RestoreHumanoidProperties()
+        isAutoWalkActive = false
+        Rayfield:Notify({Title = "Caminhada Automática", Content = "Caminhada automática encerrada.", Duration = 3})
+    end)
+end
+
+local function StopAutoWalk()
+    isAutoWalkActive = false
+    if autoWalkTask then
+        task.cancel(autoWalkTask)
+        autoWalkTask = nil
+    end
+    RestoreHumanoidProperties()
+    Rayfield:Notify({Title = "Caminhada Automática", Content = "Caminhada automática interrompida.", Duration = 3})
+end
+
+-- === Funções de Auto Farm (Otimizadas para Velocidade) ===
+
+local function AutoEatLoop()
+    while isAutoEatActive do
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local hrp = character.HumanoidRootPart
+            local closestFood = nil
+            local minDistance = 200 -- Aumentado para procurar em uma área maior
+
+            for _, v in pairs(Workspace:GetDescendants()) do
+                if v:IsA("BasePart") and v.Name:lower():find("leaf") then -- Confirme se "leaf" é o nome correto da comida
+                    local dist = (v.Position - hrp.Position).Magnitude
+                    if dist < minDistance then
+                        closestFood = v
+                        minDistance = dist
+                    end
+                end
+            end
+
+            if closestFood then
+                workspace.GameEvents.EatPlant:FireServer(closestFood)
+                Rayfield:Notify({
+                    Title = "Auto Eat",
+                    Content = "Comendo " .. closestFood.Name .. " (" .. math.floor(minDistance) .. " studs)",
+                    Duration = 0.3 -- Mais rápido
+                })
+                task.wait(0.5) -- Espera um pouco menor antes de tentar comer novamente
+            else
+                Rayfield:Notify({
+                    Title = "Auto Eat",
+                    Content = "Nenhuma comida encontrada próxima. Aguardando...",
+                    Duration = 1.5 -- Reduzido para tentar encontrar mais rápido
+                })
+                task.wait(1.5) -- Reduzido para tentar encontrar mais rápido
+            end
+        else
+            Rayfield:Notify({
+                Title = "Auto Eat",
+                Content = "Personagem não disponível. Aguardando...",
+                Duration = 1
+            })
+            task.wait(1)
+        end
+        task.wait(0.1) -- Pequeno delay final para evitar loop excessivo
+    end
+    Rayfield:Notify({Title = "Auto Eat", Content = "Auto Eat desativado.", Duration = 3})
+    autoEatTask = nil
+end
+
+local function AutoWaterLoop()
+    while isAutoWaterActive do
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local hrp = character.HumanoidRootPart
+            local closestWaterPart = nil
+            local closestWaterPos = Vector3.new()
+            local minDistance = 200 -- Aumentado para procurar em uma área maior
+
+            for _, v in pairs(Workspace:GetDescendants()) do
+                if v:IsA("BasePart") and (v.Name:lower():find("water") or v.Name:lower():find("wavetile")) then
+                    local dist = (v.Position - hrp.Position).Magnitude
+                    if dist < minDistance then
+                        closestWaterPart = v
+                        closestWaterPos = v.Position
+                        minDistance = dist
+                    end
+                end -- CORREÇÃO: Usar ')' para fechar o loop 'for'
+            end -- Aqui era '}', agora é ')'
+
+            if closestWaterPart then
+                workspace.GameEvents.addThirst:FireServer(closestWaterPart, closestWaterPos)
+                Rayfield:Notify({
+                    Title = "Auto Water",
+                    Content = "Bebendo de " .. closestWaterPart.Name .. " (" .. math.floor(minDistance) .. " studs)",
+                    Duration = 0.3 -- Mais rápido
+                })
+                task.wait(0.5) -- Espera um pouco menor antes de tentar beber novamente
+            else
+                Rayfield:Notify({
+                    Title = "Auto Water",
+                    Content = "Nenhuma água encontrada próxima. Aguardando...",
+                    Duration = 1.5 -- Reduzido para tentar encontrar mais rápido
+                })
+                task.wait(1.5) -- Reduzido para tentar encontrar mais rápido
+            end
+        else
+            Rayfield:Notify({
+                Title = "Auto Water",
+                Content = "Personagem não disponível. Aguardando...",
+                Duration = 1
+            })
+            task.wait(1)
+        end
+        task.wait(0.1) -- Pequeno delay final
+    end
+    Rayfield:Notify({Title = "Auto Water", Content = "Auto Water desativado.", Duration = 3})
+    autoWaterTask = nil
+end
+
+-- === Configuração do Rayfield ===
+
+-- Aba de ESP
+local MainTab = Window:CreateTab("ESP", 4483362458) -- Ícone opcional, ajuste se necessário
+MainTab:CreateToggle({
+    Name = "ESP Amber (com distância)",
+    CurrentValue = false,
+    Callback = function(Value)
+        ESPAmberEnabled = Value
+        if ESPAmberEnabled then
+            ScanAndApplyESPAmber() -- Faz um scan inicial para ambers já existentes
+            SetupAmberListeners()  -- Começa a ouvir por ambers que spawnarem/sumirem
+        else
+            DisconnectAmberListeners() -- Para de ouvir
+            -- Garante que todos os ESPs sejam desativados e a lista limpa
+            local ambersToDisable = {}
+            for _, obj in pairs(ESPObjects) do -- Pega todos os objetos atualmente na lista
+                table.insert(ambersToDisable, obj)
+            end
+            for _, obj in pairs(ambersToDisable) do -- Itera sobre a cópia para desativar
+                DisableESPAmberForPart(obj)
+            end
+            table.clear(ESPObjects) -- Garante que a lista esteja completamente vazia
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Caminhada Automática para Amber",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            StartAutoWalk()
+        else
+            StopAutoWalk()
+        end
+    end
+})
+
+-- Nova Aba: FARM
+local FarmTab = Window:CreateTab("Farm")
+
+-- Toggle Auto Eat
+FarmTab:CreateToggle({
+    Name = "Auto Eat",
+    CurrentValue = false,
+    Callback = function(Value)
+        isAutoEatActive = Value
+        if isAutoEatActive then
+            autoEatTask = task.spawn(AutoEatLoop)
+        else
+            if autoEatTask then
+                task.cancel(autoEatTask)
+                autoEatTask = nil
+            end
+        end
+    end
+})
+
+-- Toggle Auto Water
+FarmTab:CreateToggle({
+    Name = "Auto Water",
+    CurrentValue = false,
+    Callback = function(Value)
+        isAutoWaterActive = Value
+        if isAutoWaterActive then
+            autoWaterTask = task.spawn(AutoWaterLoop)
+        else
+            if autoWaterTask then
+                task.cancel(autoWaterTask)
+                autoWaterTask = nil
+            end
+        end
+    end
+})
