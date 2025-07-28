@@ -13,9 +13,9 @@ local Workspace = game:GetService("Workspace")
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 local Window = Rayfield:CreateWindow({
-    Name = "Slender Hub - Dinosaur Simulator",
+    Name = "Slender Hub - Dinosaur Simulator Free",
     LoadingTitle = "Slender Hub",
-    LoadingSubtitle = "ESP Amber",
+    LoadingSubtitle = "ScriptFree",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "SlenderHub",
