@@ -134,7 +134,7 @@ copyKeyLinkButton = KeyTab:CreateButton({
 
 keyInputField = KeyTab:CreateInput({
     Name = "📝 Enter Your Key",
-    PlaceholderText = "Ex: " .. KEY,
+    PlaceholderText = "Ex: HKOLPUY897HGT",
     RemoveTextAfterFocusLost = false,
     Callback = function(rawInput)
         -- CRITICAL FIX: Remove all whitespace from the input before comparison
