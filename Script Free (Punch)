@@ -15,7 +15,7 @@ local CONFIG_FILE = "FreeKey_" .. LocalPlayer.UserId .. ".rayfield" -- Unique fi
 local CONFIG_PATH = CONFIG_FOLDER .. "/" .. CONFIG_FILE
 
 -- Valid Key and Duration
-local KEY = "X8L2Z6C1D3YH" -- Double-check this key
+local KEY = "P8Z1V6KD4XY" -- Double-check this key
 local KEY_DURATION = 86400 -- 24 hours in seconds
 local currentTime = os.time()
 local keyValid = false
