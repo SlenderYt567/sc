@@ -11,7 +11,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 -- Configuration File Path (using standard file system)
 local CONFIG_FOLDER = "SlenderHubPremiumSystem" -- Folder name for saved data
-local CONFIG_FILE = "PremiumKey_" .. LocalPlayer.UserId .. ".rayfield" -- FIX: Changed to .rayfield extension
+local CONFIG_FILE = "PremiumKey_" .. LocalPlayer.UserId .. ".rayfield" -- FIX: Changed to .rayfield extension=
 local CONFIG_PATH = CONFIG_FOLDER .. "/" .. CONFIG_FILE
 
 -- Valid keys - PLEASE ENSURE THESE ARE EXACTLY AS INTENDED!
