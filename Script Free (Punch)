@@ -1,5 +1,6 @@
---// Slender Hub - Free Key System (Enhanced Persistence & Dynamic UI)
+--// Slender Hub - Free Key System (Enhanced Persistence & Dynamic UI with Multi-Key Support)
 --// Developed by Gemini for Slender
+--// Version 2.0: Implemented multi-key list and optimized validation logic.
 
 -- Services
 local HttpService = game:GetService("HttpService")
@@ -14,8 +15,31 @@ local CONFIG_FOLDER = "SlenderHubFreeSystem" -- Unique folder for Free version
 local CONFIG_FILE = "FreeKey_" .. LocalPlayer.UserId .. ".rayfield" -- Unique file name
 local CONFIG_PATH = CONFIG_FOLDER .. "/" .. CONFIG_FILE
 
--- Valid Key and Duration
-local KEY = "X8L2Z6C1D3YH" -- Double-check this key
+--[[================================================================================
+    KEY CONFIGURATION
+    - All valid keys are listed here.
+    - The system will accept any key from this list.
+================================================================================]]--
+local VALID_KEYS = {
+    "P8Z1V6KD4XYL", "J3M9Q2HF7CRS", "T7WN4YEK2LUV", "B6QX5JZH8GMD", "L9HR2KCV5TNE",
+    "X4CY3LQF9TWM", "U1ZR6EHD5PKN", "E8MW7JKL3YTB", "K2FG5QXL9RHC", "Y7AD3EVN6MPL",
+    "M9VT1XKD4QHE", "C4BR7YEL8NGQ", "R2WQ5JHZ6KMC", "Z3XF8KVL1DPN", "A7KT9QWE5YLM",
+    "V5HG4ELD3XRN", "F6MQ1JVC9PTY", "N9LR2XEH5GWD", "S3PY8VKF4QML", "G1XC7LWE2RTZ",
+    "D2VH9EKM5LYP", "W4YN3QFL8HCT", "Q8PM6JKX1RDV", "H9TL5ECZ7KMW", "O3FX2YRL6BPN",
+    "U5MA7JQK9VHD", "L8NR1EKZ3PXT", "T2YG4CVM5HLQ", "E7WX9LKP1MFD", "K6ZH3QVE8YNR",
+    "M4RC2JKL5XWH", "N1PY6EVZ9TQD", "S8FD3KXM7LWR", "B3LH9YQK2TVM", "Z7KM5EWC1LRP",
+    "F9TN2XHL8YQD", "Y6MQ4JVE5KRP", "R5LC7KPN2HWX", "D8XE9YVL3FQT", "C6HR2EJW5LMP",
+    "V1ZG8KQC9YTW", "H4PN3XKM7ELD", "A9WM5EVR2KLT", "O7QT1YHZ6CLM", "X5LC9FKD3MPQ",
+    "G3KN7QXE1YVD", "W2ZH8KRP5LMF", "J6VL9EMT4QPY", "T1RF7XKL3DWC", "L4MQ5KYE2HPN"
+}
+
+-- Create a lookup table (set) for instant O(1) key validation. This is much faster than iterating the list.
+local VALID_KEYS_SET = {}
+for _, key in ipairs(VALID_KEYS) do
+    VALID_KEYS_SET[key] = true
+end
+
+-- Key Duration and State
 local KEY_DURATION = 86400 -- 24 hours in seconds
 local currentTime = os.time()
 local keyValid = false
@@ -27,9 +51,10 @@ local function loadKeyConfig()
     if isfile(CONFIG_PATH) then
         print("Found config file at:", CONFIG_PATH)
         local dataString = readfile(CONFIG_PATH)
-        local data = HttpService:JSONDecode(dataString)
+        local success, data = pcall(function() return HttpService:JSONDecode(dataString) end)
 
-        if data and data.Key == KEY and data.Timestamp then -- Check for key value AND timestamp
+        -- Check if JSON decoding was successful and if the saved key is still in our valid list
+        if success and data and data.Key and data.Timestamp and VALID_KEYS_SET[data.Key] then
             local savedTimestamp = data.Timestamp
             print("Loaded data - Key:", data.Key, " Timestamp:", savedTimestamp)
 
@@ -48,10 +73,10 @@ local function loadKeyConfig()
                 pcall(function() deletefile(CONFIG_PATH) end) -- Delete expired file
             end
         else
-            print("Invalid, unrecognized or corrupted data in config file. Deleting old file.")
+            print("Invalid, unrecognized, removed, or corrupted data in config file. Deleting old file.")
             Rayfield:Notify({
                 Title = "⚠ Saved Key Error!",
-                Content = "Your saved key is invalid or corrupted. Please re-enter a valid key.",
+                Content = "Your saved key is invalid or has been removed. Please re-enter a valid key.",
                 Duration = 7
             })
             pcall(function() deletefile(CONFIG_PATH) end) -- Attempt to delete old invalid file
@@ -83,7 +108,7 @@ end
 
 -- Main Window Initialization
 local Window = Rayfield:CreateWindow({
-    Name = "Slender Hub | Free Key System", -- Updated name
+    Name = "Slender Hub | Free Key System",
     LoadingTitle = "Slender Hub",
     LoadingSubtitle = "Free Key Validation",
     ConfigurationSaving = {
@@ -96,22 +121,15 @@ local KeyTab = Window:CreateTab("🔑 Key System", 4483362458)
 -- References to UI elements for dynamic visibility control
 local howToParagraph, copyKeyLinkButton, keyInputField
 local keyValidatedParagraph
-local accessScriptButton, resetKeyButton, showKeyTimerButton, buyPremiumButton -- Declare here for wider scope
+local accessScriptButton, resetKeyButton, showKeyTimerButton, buyPremiumButton
 
 -- Function to update the UI state (show/hide elements)
 local function updateUIState(isValid)
-    -- Hide/Show elements based on keyValid state
     if howToParagraph then howToParagraph.Visible = not isValid end
     if copyKeyLinkButton then copyKeyLinkButton.Visible = not isValid end
     if keyInputField then keyInputField.Visible = not isValid end
-
     if keyValidatedParagraph then keyValidatedParagraph.Visible = isValid end
-
-    -- Access Script, Reset Key, Show Key Timer buttons are always visible,
-    -- but Access Script is enabled/disabled based on keyValid.
     if accessScriptButton then accessScriptButton:Set("Enabled", isValid) end
-    -- The Buy Premium button will always be visible, regardless of key validity,
-    -- as it's an upgrade option.
 end
 
 -- Create all UI elements initially
@@ -134,24 +152,23 @@ copyKeyLinkButton = KeyTab:CreateButton({
 
 keyInputField = KeyTab:CreateInput({
     Name = "📝 Enter Your Key",
-    PlaceholderText = "Ex: HKOLPUY897HGT",
+    PlaceholderText = "Ex: P8Z1V6KD4XYL",
     RemoveTextAfterFocusLost = false,
     Callback = function(rawInput)
-        -- CRITICAL FIX: Remove all whitespace from the input before comparison
-        local input = rawInput:gsub("%s", "")
-        print("Input received:", rawInput)
-        print("Cleaned input (no spaces):", input)
+        local input = rawInput:gsub("%s", "") -- Remove all whitespace
+        print("Cleaned input:", input)
 
-        if input == KEY then
+        if VALID_KEYS_SET[input] then -- Check if the cleaned key exists in our lookup table
             keyValid = true
-            saveKeyConfig(KEY, os.time())
+            -- CRITICAL FIX: Save the actual key the user entered, not a static variable
+            saveKeyConfig(input, os.time())
             Rayfield:Notify({
                 Title = "✅ Key Accepted!",
                 Content = "Click 'Access Script' to continue.",
                 Duration = 5
             })
             print("Key matched and saved.")
-            updateUIState(true) -- Update UI to show valid state
+            updateUIState(true)
         else
             Rayfield:Notify({
                 Title = "❌ Invalid Key",
@@ -159,7 +176,7 @@ keyInputField = KeyTab:CreateInput({
                 Duration = 5
             })
             print("No key matched. 'keyValid' remains:", keyValid)
-            updateUIState(false) -- Ensure UI shows invalid state if it wasn't valid before
+            updateUIState(false)
         end
     end
 })
@@ -172,16 +189,16 @@ keyValidatedParagraph = KeyTab:CreateParagraph({
 -- Function to reset the key
 local function resetKey()
     print("--- Free Key System: Resetting Key ---")
-    pcall(function() deletefile(CONFIG_PATH) end) -- Attempt to delete the file
+    pcall(function() deletefile(CONFIG_PATH) end)
     keyValid = false
-    loadedConfigData = nil -- Clear loaded config data
+    loadedConfigData = nil
     Rayfield:Notify({
         Title = "🔑 Key Reset!",
         Content = "Your key has been cleared. Please enter a new key.",
         Duration = 5
     })
-    print("Key reset completed. Setting UI to invalid state.")
-    updateUIState(false) -- Update UI to show key input field
+    print("Key reset completed.")
+    updateUIState(false)
 end
 
 -- Function to show key timer
@@ -189,7 +206,6 @@ local function showKeyTimer()
     print("--- Free Key System: Showing Key Timer ---")
     if not keyValid or not loadedConfigData then
         Rayfield:Notify({ Title = "No Active Key", Content = "Please enter a valid key first.", Duration = 5 })
-        print("Cannot show timer: no valid key active or data missing.")
         return
     end
 
@@ -199,7 +215,6 @@ local function showKeyTimer()
     
     if remaining <= 0 then
         Rayfield:Notify({ Title = "Key Status", Content = "Your key has EXPIRED!", Duration = 5 })
-        print("Key has expired. Initiating reset.")
         resetKey() -- Auto-reset expired key
         return
     end
@@ -211,18 +226,16 @@ local function showKeyTimer()
 
     local message = string.format("Time Left: %d hours, %d minutes, %d seconds", hours, minutes, seconds)
     Rayfield:Notify({ Title = "Key Status", Content = message, Duration = 7 })
-    print("Timer: " .. message)
 end
 
--- Add Buy Premium Button (always visible)
+-- Add Buy Premium Button
 buyPremiumButton = KeyTab:CreateButton({
     Name = "✨ Buy Premium Access",
     Callback = function()
-        -- Assuming the Discord link is where users can get Premium keys
-        setclipboard("https://discord.gg/zFQMEvT6") -- This is the Discord invite from your Premium script
+        setclipboard("https://discord.gg/zFQMEvT6")
         Rayfield:Notify({
             Title = "Premium Discord Link Copied!",
-            Content = "Paste in browser to join and learn how to get Premium.",
+            Content = "Join our Discord to learn how to get Premium.",
             Duration = 8
         })
     end
@@ -244,11 +257,10 @@ showKeyTimerButton = KeyTab:CreateButton({
 accessScriptButton = KeyTab:CreateButton({
     Name = "🚀 Access Script",
     Callback = function()
-        print("Access Script button clicked. Current 'keyValid' state:", keyValid)
         if keyValid then
             Rayfield:Destroy()
             task.wait(1)
-            -- IMPORTANT: Replace this URL with the actual URL of your main FREE script
+            -- IMPORTANT: Replace with the actual URL of your main FREE script
             loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/.gitignore"))()
         else
             Rayfield:Notify({
@@ -263,4 +275,4 @@ accessScriptButton = KeyTab:CreateButton({
 -- Perform initial key validation when the script starts
 keyValid = loadKeyConfig()
 print("Final 'keyValid' state after initial load:", keyValid)
-updateUIState(keyValid) -- Set initial UI state based on loaded key validity
+updateUIState(keyValid) -- Set initial UI state
