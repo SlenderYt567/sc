@@ -1,9 +1,9 @@
--- ! IMPORTANTE: Este script deve ser executado por um executor (ex: Synapse X, Script-Ware, Fluxus).
--- ! Ele não funcionará como um LocalScript comum no Roblox Studio ou em um jogo publicado,
--- ! pois usa game:HttpGet e loadstring.
+-- ! IMPORTANT: This script must be executed by a script executor (e.g., Synapse X, Script-Ware, Fluxus).
+-- ! It will not work as a regular LocalScript in Roblox Studio or a published game,
+-- ! as it uses game:HttpGet and loadstring.
 
 if game.PlaceId ~= 228181322 then
-    return -- Sai do script se não estiver no jogo correto
+    return -- Exits the script if it's not in the correct game
 end
 
 local Players = game:GetService("Players")
@@ -14,7 +14,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Slender Hub - Dinosaur Simulator",
     LoadingTitle = "Slender Hub",
-    LoadingSubtitle = "Script Free",
+    LoadingSubtitle = "by Gemini & Slender",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "SlenderHub",
@@ -24,10 +24,10 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false
 })
 
--- === VARIÁVEIS DE CONTROLE GERAL ===
-local ESPAmberEnabled = false
-local ESPObjects = {}
-local AmberListeners = { Added = nil, Removed = nil }
+-- === GENERAL CONTROL VARIABLES ===
+local isAmberESPEnabled = false
+local espObjects = {}
+local amberListeners = { Added = nil, Removed = nil }
 
 local originalWalkSpeed = 16
 local originalJumpPower = 50
@@ -44,77 +44,73 @@ local autoDNATask = nil
 local isAutoCollectActive = false
 local autoCollectTask = nil
 
--- *** NOVAS VARIÁVEIS PARA AUTO DAMAGE ***
 local isAutoDamageActive = false
 local autoDamageTask = nil
 local isAutoAOEDamageActive = false
 local autoAOEDamageTask = nil
 
--- === CONFIGURAÇÕES ===
+-- === SETTINGS ===
 local SAFE_DNA_FARM_LOCATION = Vector3.new(-310.9116516113281, 949.654052734375, 652.5374145507812)
 local AUTO_WALK_SPEED = 70
 
--- === Funções de ESP Amber (sem alterações) ===
-local function DisableESPAmberForPart(part) if not part then return end; local h = part:FindFirstChild("ESPHighlight"); if h then h:Destroy() end; local b = part:FindFirstChild("AmberDistance"); if b then b:Destroy() end; for i = #ESPObjects, 1, -1 do if ESPObjects[i] == part then table.remove(ESPObjects, i); break end end end
-local function ClearAllESPAmber() local a = {}; for _, o in pairs(ESPObjects) do table.insert(a, o) end; for _, o in pairs(a) do DisableESPAmberForPart(o) end; table.clear(ESPObjects) end
-local function EnableESPAmberForPart(part) if not part or not part:IsA("BasePart") or not part.Name:lower():find("amber") or part:FindFirstChild("ESPHighlight") then return end; local h = Instance.new("Highlight", part); h.Name = "ESPHighlight"; h.FillColor = Color3.fromRGB(255, 130, 0); h.OutlineColor = Color3.fromRGB(255, 255, 255); h.FillTransparency = 0.1; h.Adornee = part; local b = Instance.new("BillboardGui", part); b.Name = "AmberDistance"; b.Size = UDim2.new(0, 100, 0, 20); b.AlwaysOnTop = true; b.StudsOffset = Vector3.new(0, 2.5, 0); b.Adornee = part; local t = Instance.new("TextLabel", b); t.Size = UDim2.new(1, 0, 1, 0); t.BackgroundTransparency = 1; t.TextColor3 = Color3.fromRGB(255, 255, 0); t.TextStrokeTransparency = 0.5; t.TextScaled = true; t.Font = Enum.Font.GothamBold; t.Name = "DistanceLabel"; t.Text = "Loading..."; table.insert(ESPObjects, part) end
-local function ScanAndApplyESPAmber() ClearAllESPAmber(); for _, v in pairs(Workspace:GetDescendants()) do if v:IsA("BasePart") and v.Name:lower():find("amber") then EnableESPAmberForPart(v) end end end
-local function SetupAmberListeners() AmberListeners.Added = Workspace.DescendantAdded:Connect(function(d) if ESPAmberEnabled and d:IsA("BasePart") and d.Name:lower():find("amber") then EnableESPAmberForPart(d) end end); AmberListeners.Removed = Workspace.DescendantRemoving:Connect(function(d) if d:IsA("BasePart") and d.Name:lower():find("amber") then DisableESPAmberForPart(d) end end) end
-local function DisconnectAmberListeners() if AmberListeners.Added then AmberListeners.Added:Disconnect(); AmberListeners.Added = nil end; if AmberListeners.Removed then AmberListeners.Removed:Disconnect(); AmberListeners.Removed = nil end end
-task.spawn(function() while task.wait(0.5) do if ESPAmberEnabled then for i = #ESPObjects, 1, -1 do local o = ESPObjects[i]; if not o or not o:IsDescendantOf(Workspace) or not o.Parent then DisableESPAmberForPart(o); continue end; local g = o:FindFirstChild("AmberDistance"); if g and g:FindFirstChild("DistanceLabel") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then local d = math.floor((o.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude); g.DistanceLabel.Text = "Distance: " .. d .. " studs" else DisableESPAmberForPart(o) end end end end end)
+-- === Amber ESP Functions (unchanged) ===
+local function disableAmberESPForPart(part) if not part then return end; local h = part:FindFirstChild("ESPHighlight"); if h then h:Destroy() end; local b = part:FindFirstChild("AmberDistance"); if b then b:Destroy() end; for i = #espObjects, 1, -1 do if espObjects[i] == part then table.remove(espObjects, i); break end end end
+local function clearAllAmberESP() local a = {}; for _, o in pairs(espObjects) do table.insert(a, o) end; for _, o in pairs(a) do disableAmberESPForPart(o) end; table.clear(espObjects) end
+local function enableAmberESPForPart(part) if not part or not part:IsA("BasePart") or not part.Name:lower():find("amber") or part:FindFirstChild("ESPHighlight") then return end; local h = Instance.new("Highlight", part); h.Name = "ESPHighlight"; h.FillColor = Color3.fromRGB(255, 130, 0); h.OutlineColor = Color3.fromRGB(255, 255, 255); h.FillTransparency = 0.1; h.Adornee = part; local b = Instance.new("BillboardGui", part); b.Name = "AmberDistance"; b.Size = UDim2.new(0, 100, 0, 20); b.AlwaysOnTop = true; b.StudsOffset = Vector3.new(0, 2.5, 0); b.Adornee = part; local t = Instance.new("TextLabel", b); t.Size = UDim2.new(1, 0, 1, 0); t.BackgroundTransparency = 1; t.TextColor3 = Color3.fromRGB(255, 255, 0); t.TextStrokeTransparency = 0.5; t.TextScaled = true; t.Font = Enum.Font.GothamBold; t.Name = "DistanceLabel"; t.Text = "Loading..."; table.insert(espObjects, part) end
+local function scanAndApplyAmberESP() clearAllAmberESP(); for _, v in pairs(Workspace:GetDescendants()) do if v:IsA("BasePart") and v.Name:lower():find("amber") then enableAmberESPForPart(v) end end end
+local function setupAmberListeners() amberListeners.Added = Workspace.DescendantAdded:Connect(function(d) if isAmberESPEnabled and d:IsA("BasePart") and d.Name:lower():find("amber") then enableAmberESPForPart(d) end end); amberListeners.Removed = Workspace.DescendantRemoving:Connect(function(d) if d:IsA("BasePart") and d.Name:lower():find("amber") then disableAmberESPForPart(d) end end) end
+local function disconnectAmberListeners() if amberListeners.Added then amberListeners.Added:Disconnect(); amberListeners.Added = nil end; if amberListeners.Removed then amberListeners.Removed:Disconnect(); amberListeners.Removed = nil end end
+task.spawn(function() while task.wait(0.5) do if isAmberESPEnabled then for i = #espObjects, 1, -1 do local o = espObjects[i]; if not o or not o:IsDescendantOf(Workspace) or not o.Parent then disableAmberESPForPart(o); continue end; local g = o:FindFirstChild("AmberDistance"); if g and g:FindFirstChild("DistanceLabel") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then local d = math.floor((o.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude); g.DistanceLabel.Text = "Distance: " .. d .. " studs" else disableAmberESPForPart(o) end end end end end)
 
--- === Funções de Auto-Walk e Auto Farm ===
-local function RestoreHumanoidProperties() local c = LocalPlayer.Character; if c then local h = c:FindFirstChildOfClass("Humanoid"); if h then h.WalkSpeed = originalWalkSpeed; h.JumpPower = originalJumpPower; h.AutoRotate = originalAutoRotate; h:MoveTo(h.Parent.HumanoidRootPart.Position) end end end
-local function AutoEatLoop() while isAutoEatActive and LocalPlayer.Character do local f; for _, v in pairs(Workspace:GetDescendants()) do if v:IsA("BasePart") and v.Name:lower():find("leaf") then f = v; break end end; if f then workspace.GameEvents.EatPlant:FireServer(f); task.wait(0.1) else task.wait(2) end; task.wait() end; autoEatTask = nil end
-local function AutoWaterLoop() while isAutoWaterActive and LocalPlayer.Character do local w; for _, v in pairs(Workspace:GetDescendants()) do if v:IsA("BasePart") and (v.Name:lower():find("water") or v.Name:lower():find("wavetile")) then w = v; break end end; if w then workspace.GameEvents.addThirst:FireServer(w, w.Position); task.wait(0.1) else task.wait(2) end; task.wait() end; autoWaterTask = nil end
+-- === Auto-Walk and Auto-Farm Functions ===
+local function restoreHumanoidProperties() local c = LocalPlayer.Character; if c then local h = c:FindFirstChildOfClass("Humanoid"); if h then h.WalkSpeed = originalWalkSpeed; h.JumpPower = originalJumpPower; h.AutoRotate = originalAutoRotate; h:MoveTo(h.Parent.HumanoidRootPart.Position) end end end
+local function autoEatLoop() while isAutoEatActive and LocalPlayer.Character do local f; for _, v in pairs(Workspace:GetDescendants()) do if v:IsA("BasePart") and v.Name:lower():find("leaf") then f = v; break end end; if f then workspace.GameEvents.EatPlant:FireServer(f); task.wait(0.1) else task.wait(2) end; task.wait() end; autoEatTask = nil end
+local function autoWaterLoop() while isAutoWaterActive and LocalPlayer.Character do local w; for _, v in pairs(Workspace:GetDescendants()) do if v:IsA("BasePart") and (v.Name:lower():find("water") or v.Name:lower():find("wavetile")) then w = v; break end end; if w then workspace.GameEvents.addThirst:FireServer(w, w.Position); task.wait(0.1) else task.wait(2) end; task.wait() end; autoWaterTask = nil end
 
-local function StartAutoDNAFarm() isAutoDNAActive = true; Rayfield:Notify({Title = "Auto DNA Farm", Content = "Iniciando...", Duration = 3}); local c = LocalPlayer.Character; if not c or not c:FindFirstChild("Humanoid") then Rayfield:Notify({Title = "Erro", Content = "Personagem não disponível."}); isAutoDNAActive = false; return end; local h = c.Humanoid; originalWalkSpeed = h.WalkSpeed; h.WalkSpeed = AUTO_WALK_SPEED; h.JumpPower = 0; h.AutoRotate = false; isAutoEatActive = true; autoEatTask = task.spawn(AutoEatLoop); isAutoWaterActive = true; autoWaterTask = task.spawn(AutoWaterLoop); Rayfield:Notify({Title = "Auto DNA Farm", Content = "Caminhando para local seguro...", Duration = 4}); autoDNATask = task.spawn(function() while isAutoDNAActive and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do local hrp = LocalPlayer.Character.HumanoidRootPart; if (hrp.Position - SAFE_DNA_FARM_LOCATION).Magnitude > 5 then h:MoveTo(SAFE_DNA_FARM_LOCATION) end; task.wait(2) end; StopAutoDNAFarm() end) end
-local function StopAutoDNAFarm() isAutoDNAActive = false; if autoDNATask then task.cancel(autoDNATask); autoDNATask = nil end; isAutoEatActive = false; if autoEatTask then task.cancel(autoEatTask); autoEatTask = nil end; isAutoWaterActive = false; if autoWaterTask then task.cancel(autoWaterTask); autoWaterTask = nil end; RestoreHumanoidProperties(); Rayfield:Notify({Title = "Auto DNA Farm", Content = "Parado.", Duration = 3}) end
+local function startAutoDNAFarm() isAutoDNAActive = true; Rayfield:Notify({Title = "Auto DNA Farm", Content = "Starting...", Duration = 3}); local c = LocalPlayer.Character; if not c or not c:FindFirstChild("Humanoid") then Rayfield:Notify({Title = "Error", Content = "Character not available."}); isAutoDNAActive = false; return end; local h = c.Humanoid; originalWalkSpeed = h.WalkSpeed; h.WalkSpeed = AUTO_WALK_SPEED; h.JumpPower = 0; h.AutoRotate = false; isAutoEatActive = true; autoEatTask = task.spawn(autoEatLoop); isAutoWaterActive = true; autoWaterTask = task.spawn(autoWaterLoop); Rayfield:Notify({Title = "Auto DNA Farm", Content = "Walking to safe location...", Duration = 4}); autoDNATask = task.spawn(function() while isAutoDNAActive and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do local hrp = LocalPlayer.Character.HumanoidRootPart; if (hrp.Position - SAFE_DNA_FARM_LOCATION).Magnitude > 5 then h:MoveTo(SAFE_DNA_FARM_LOCATION) end; task.wait(2) end; stopAutoDNAFarm() end) end
+local function stopAutoDNAFarm() isAutoDNAActive = false; if autoDNATask then task.cancel(autoDNATask); autoDNATask = nil end; isAutoEatActive = false; if autoEatTask then task.cancel(autoEatTask); autoEatTask = nil end; isAutoWaterActive = false; if autoWaterTask then task.cancel(autoWaterTask); autoWaterTask = nil end; restoreHumanoidProperties(); Rayfield:Notify({Title = "Auto DNA Farm", Content = "Stopped.", Duration = 3}) end
 
-local function StartAutoCollectAmber() isAutoCollectActive = true; local c = LocalPlayer.Character; if not c or not c:FindFirstChild("Humanoid") then Rayfield:Notify({Title = "Erro", Content = "Personagem não disponível."}); isAutoCollectActive = false; return end; local h = c.Humanoid; originalWalkSpeed = h.WalkSpeed; h.WalkSpeed = AUTO_WALK_SPEED; h.JumpPower = 0; h.AutoRotate = false; Rayfield:Notify({Title = "Auto Collect Amber", Content = "Iniciado...", Duration = 3}); autoCollectTask = task.spawn(function() if not ESPAmberEnabled then Rayfield:SetToggle("ESP", "ESP Amber (com distância)", true); ESPAmberEnabled = true; SetupAmberListeners() end; ScanAndApplyESPAmber(); task.wait(0.2); while isAutoCollectActive and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") do local hrp = LocalPlayer.Character.HumanoidRootPart; local ca, md = nil, math.huge; for _, ap in pairs(ESPObjects) do if ap and ap:IsDescendantOf(Workspace) then local d = (ap.Position - hrp.Position).Magnitude; if d < md then md, ca = d, ap end end end; if ca then h:MoveTo(ca.Position); h.MoveToFinished:Wait(10); task.wait(0.25) else task.wait(3) end end; RestoreHumanoidProperties(); isAutoCollectActive = false end) end
-local function StopAutoCollectAmber() isAutoCollectActive = false; if autoCollectTask then task.cancel(autoCollectTask); autoCollectTask = nil end; RestoreHumanoidProperties(); Rayfield:Notify({Title = "Auto Collect Amber", Content = "Parado.", Duration = 3}) end
+local function startAutoCollectAmber() isAutoCollectActive = true; local c = LocalPlayer.Character; if not c or not c:FindFirstChild("Humanoid") then Rayfield:Notify({Title = "Error", Content = "Character not available."}); isAutoCollectActive = false; return end; local h = c.Humanoid; originalWalkSpeed = h.WalkSpeed; h.WalkSpeed = AUTO_WALK_SPEED; h.JumpPower = 0; h.AutoRotate = false; Rayfield:Notify({Title = "Auto Collect Amber", Content = "Started...", Duration = 3}); autoCollectTask = task.spawn(function() if not isAmberESPEnabled then Rayfield:SetToggle("ESP", "Amber ESP (with distance)", true); isAmberESPEnabled = true; setupAmberListeners() end; scanAndApplyAmberESP(); task.wait(0.2); while isAutoCollectActive and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") do local hrp = LocalPlayer.Character.HumanoidRootPart; local ca, md = nil, math.huge; for _, ap in pairs(espObjects) do if ap and ap:IsDescendantOf(Workspace) then local d = (ap.Position - hrp.Position).Magnitude; if d < md then md, ca = d, ap end end end; if ca then h:MoveTo(ca.Position); h.MoveToFinished:Wait(10); task.wait(0.25) else task.wait(3) end end; restoreHumanoidProperties(); isAutoCollectActive = false end) end
+local function stopAutoCollectAmber() isAutoCollectActive = false; if autoCollectTask then task.cancel(autoCollectTask); autoCollectTask = nil end; restoreHumanoidProperties(); Rayfield:Notify({Title = "Auto Collect Amber", Content = "Stopped.", Duration = 3}) end
 
--- *** NOVAS FUNÇÕES: AUTO DAMAGE ***
-local function AutoDamageLoop()
+local function autoDamageLoop()
     while isAutoDamageActive do
         workspace.GameEvents.Damage:FireServer()
-        task.wait(0.1) -- Delay pequeno para spam rápido
+        task.wait(0.1) -- Small delay for rapid spam
     end
     autoDamageTask = nil
 end
 
-local function AutoAOEDamageLoop()
+local function autoAOEDamageLoop()
     while isAutoAOEDamageActive do
         workspace.GameEvents.AOEDamage:FireServer()
-        task.wait(0.1) -- Delay pequeno para spam rápido
+        task.wait(0.1) -- Small delay for rapid spam
     end
     autoAOEDamageTask = nil
 end
 
 
--- === Configuração do Rayfield ===
-local ESPTab = Window:CreateTab("ESP")
-ESPTab:CreateToggle({Name = "ESP Amber (com distância)", CurrentValue = false, Callback = function(Value) ESPAmberEnabled = Value; if ESPAmberEnabled then ScanAndApplyESPAmber(); SetupAmberListeners() else DisconnectAmberListeners(); ClearAllESPAmber() end end})
-ESPTab:CreateToggle({Name = "Auto Collect Amber", CurrentValue = false, Callback = function(Value) if Value then if isAutoDNAActive then StopAutoDNAFarm(); Rayfield:SetToggle("Farm", "Auto DNA Farm (Caminhada Rápida)", false) end; StartAutoCollectAmber() else StopAutoCollectAmber() end end})
+-- === Rayfield UI Setup ===
+local espTab = Window:CreateTab("ESP")
+espTab:CreateToggle({Name = "Amber ESP (with distance)", CurrentValue = false, Callback = function(Value) isAmberESPEnabled = Value; if isAmberESPEnabled then scanAndApplyAmberESP(); setupAmberListeners() else disconnectAmberListeners(); clearAllAmberESP() end end})
+espTab:CreateToggle({Name = "Auto Collect Amber", CurrentValue = false, Callback = function(Value) if Value then if isAutoDNAActive then stopAutoDNAFarm(); Rayfield:SetToggle("Farm", "Auto DNA Farm (Fast Walk)", false) end; startAutoCollectAmber() else stopAutoCollectAmber() end end})
 
-local FarmTab = Window:CreateTab("Farm")
-FarmTab:CreateToggle({Name = "Auto Eat", CurrentValue = false, Callback = function(Value) if isAutoDNAActive then Rayfield:SetToggle(FarmTab, "Auto Eat", true); return end; isAutoEatActive = Value; if Value then autoEatTask = task.spawn(AutoEatLoop) elseif autoEatTask then task.cancel(autoEatTask); autoEatTask = nil end end})
-FarmTab:CreateToggle({Name = "Auto Water", CurrentValue = false, Callback = function(Value) if isAutoDNAActive then Rayfield:SetToggle(FarmTab, "Auto Water", true); return end; isAutoWaterActive = Value; if Value then autoWaterTask = task.spawn(AutoWaterLoop) elseif autoWaterTask then task.cancel(autoWaterTask); autoWaterTask = nil end end})
-FarmTab:CreateToggle({Name = "Auto DNA Farm (Caminhada Rápida)", CurrentValue = false, Callback = function(Value) if Value then if isAutoCollectActive then StopAutoCollectAmber(); Rayfield:SetToggle("ESP", "Auto Collect Amber", false) end; StartAutoDNAFarm(); Rayfield:SetToggle(FarmTab, "Auto Eat", true); Rayfield:SetToggle(FarmTab, "Auto Water", true) else StopAutoDNAFarm(); Rayfield:SetToggle(FarmTab, "Auto Eat", false); Rayfield:SetToggle(FarmTab, "Auto Water", false) end end})
+local farmTab = Window:CreateTab("Farm")
+farmTab:CreateToggle({Name = "Auto Eat", CurrentValue = false, Callback = function(Value) if isAutoDNAActive then Rayfield:SetToggle(farmTab, "Auto Eat", true); return end; isAutoEatActive = Value; if Value then autoEatTask = task.spawn(autoEatLoop) elseif autoEatTask then task.cancel(autoEatTask); autoEatTask = nil end end})
+farmTab:CreateToggle({Name = "Auto Water", CurrentValue = false, Callback = function(Value) if isAutoDNAActive then Rayfield:SetToggle(farmTab, "Auto Water", true); return end; isAutoWaterActive = Value; if Value then autoWaterTask = task.spawn(autoWaterLoop) elseif autoWaterTask then task.cancel(autoWaterTask); autoWaterTask = nil end end})
+farmTab:CreateToggle({Name = "Auto DNA Farm (Fast Walk)", CurrentValue = false, Callback = function(Value) if Value then if isAutoCollectActive then stopAutoCollectAmber(); Rayfield:SetToggle("ESP", "Auto Collect Amber", false) end; startAutoDNAFarm(); Rayfield:SetToggle(farmTab, "Auto Eat", true); Rayfield:SetToggle(farmTab, "Auto Water", true) else stopAutoDNAFarm(); Rayfield:SetToggle(farmTab, "Auto Eat", false); Rayfield:SetToggle(farmTab, "Auto Water", false) end end})
 
--- *** NOVA ABA: DAMAGE ***
-local DamageTab = Window:CreateTab("Damage")
-
-DamageTab:CreateToggle({
+local damageTab = Window:CreateTab("Damage")
+damageTab:CreateToggle({
     Name = "Auto Damage (Loop)",
     CurrentValue = false,
     Callback = function(Value)
         isAutoDamageActive = Value
         if Value then
-            Rayfield:Notify({Title = "Auto Damage", Content = "Ativado.", Duration = 2})
-            autoDamageTask = task.spawn(AutoDamageLoop)
+            Rayfield:Notify({Title = "Auto Damage", Content = "Enabled.", Duration = 2})
+            autoDamageTask = task.spawn(autoDamageLoop)
         else
-            Rayfield:Notify({Title = "Auto Damage", Content = "Desativado.", Duration = 2})
+            Rayfield:Notify({Title = "Auto Damage", Content = "Disabled.", Duration = 2})
             if autoDamageTask then
                 task.cancel(autoDamageTask)
                 autoDamageTask = nil
@@ -123,16 +119,16 @@ DamageTab:CreateToggle({
     end
 })
 
-DamageTab:CreateToggle({
+damageTab:CreateToggle({
     Name = "Auto AOE Damage (Loop)",
     CurrentValue = false,
     Callback = function(Value)
         isAutoAOEDamageActive = Value
         if Value then
-            Rayfield:Notify({Title = "Auto AOE Damage", Content = "Ativado.", Duration = 2})
-            autoAOEDamageTask = task.spawn(AutoAOEDamageLoop)
+            Rayfield:Notify({Title = "Auto AOE Damage", Content = "Enabled.", Duration = 2})
+            autoAOEDamageTask = task.spawn(autoAOEDamageLoop)
         else
-            Rayfield:Notify({Title = "Auto AOE Damage", Content = "Desativado.", Duration = 2})
+            Rayfield:Notify({Title = "Auto AOE Damage", Content = "Disabled.", Duration = 2})
             if autoAOEDamageTask then
                 task.cancel(autoAOEDamageTask)
                 autoAOEDamageTask = nil
