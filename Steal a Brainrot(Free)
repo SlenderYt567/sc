@@ -1,0 +1,369 @@
+-- Game ID
+if game.PlaceId == 109983668079237 then
+    -- Rayfield Library
+    local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+    -- Main Window
+    local Window = Rayfield:CreateWindow({
+        Name = "Slender Hub - Steal a Brairot(Free)",
+        Icon = 82795327169782, -- Assuming this is a Roblox image ID
+        LoadingTitle = "Slender Hub - Free Version",
+        LoadingSubtitle = "by Slender",
+        ShowText = "Rayfield",
+        Theme = "Default",
+        ToggleUIKeybind = "K",
+        DisableRayfieldPrompts = false,
+        DisableBuildWarnings = false,
+        ConfigurationSaving = {
+            Enabled = true,
+            FolderName = nil,
+            FileName = "Big Hub"
+        },
+        Discord = {
+            Enabled = false,
+            Invite = "noinvitelink",
+            RememberJoins = true
+        },
+        KeySystem = false,
+        KeySettings = {
+            Title = "Rayfield Example Key",
+            Subtitle = "Key System",
+            Note = "No method of obtaining the key is provided",
+            FileName = "Key",
+            SaveKey = true,
+            GrabKeyFromSite = false,
+            Key = {"Example Key"}
+        }
+    })
+
+    local RunService = game:GetService("RunService")
+    local Players = game:GetService("Players")
+    local UserInputService = game:GetService("UserInputService")
+    local VirtualUser = game:GetService("VirtualUser")
+    local player = Players.LocalPlayer
+
+    -- Anti-AFK activation on script run
+    player.Idled:Connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+
+    -- Vars
+    local SPEED_VALUE = 50
+    local FLY_SPEED = 50
+    local JUMP_POWER = 200
+    local bv
+    local speedLoop
+    local noclipLoop
+    local espLoop
+    local lockBaseLoop
+    local flyBV
+    local flyBG
+    local flyLoop
+    local infiniteJumpConn
+    local defaultJumpPower = 50
+
+    -- Utility function to create Highlight
+    local function createHighlight(target, color)
+        if not target or not target.Parent then return end
+        if not target:FindFirstChild("SlenderESP") then
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "SlenderESP"
+            highlight.FillColor = color
+            highlight.OutlineColor = color
+            highlight.FillTransparency = 0.5
+            highlight.OutlineTransparency = 0
+            highlight.Parent = target
+        end
+    end
+
+    -- =========================
+    -- Player Tab
+    -- =========================
+    local PlayerTab = Window:CreateTab("Player", "person-standing") -- Using Lucide icon for movement/player
+
+    PlayerTab:CreateSection("Movement")
+
+    -- Slider Speed
+    PlayerTab:CreateSlider({
+        Name = "Speed Value",
+        Range = {0, 250},
+        Increment = 1,
+        CurrentValue = SPEED_VALUE,
+        Flag = "SpeedValue",
+        Callback = function(val)
+            SPEED_VALUE = val
+        end
+    })
+
+    -- Toggle Speed Hack
+    PlayerTab:CreateToggle({
+        Name = "Speed Hack (Uses BodyVelocity to move the character)",
+        CurrentValue = false,
+        Flag = "SpeedHackToggle",
+        Callback = function(state)
+            local character = player.Character or player.CharacterAdded:Wait()
+            local hrp = character:WaitForChild("HumanoidRootPart")
+
+            if state then
+                if not bv then
+                    bv = Instance.new("BodyVelocity")
+                    bv.MaxForce = Vector3.new(1e4, 0, 1e4)
+                    bv.Velocity = Vector3.zero
+                    bv.Parent = hrp
+                end
+                if speedLoop then speedLoop:Disconnect() end
+                speedLoop = RunService.Heartbeat:Connect(function()
+                    if not player.Character then return end
+                    local hrp2 = player.Character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                    if not hrp2 or not humanoid then return end
+                    local moveDir = humanoid.MoveDirection
+                    bv.Velocity = (moveDir.Magnitude > 0) and (moveDir * SPEED_VALUE) or Vector3.zero
+                end)
+            else
+                if speedLoop then speedLoop:Disconnect() speedLoop = nil end
+                if bv then bv:Destroy() bv = nil end
+            end
+        end
+    })
+
+    -- Toggle NoClip
+    PlayerTab:CreateToggle({
+        Name = "NoClip (Removes collision from character parts)",
+        CurrentValue = false,
+        Flag = "NoClipToggle",
+        Callback = function(state)
+            if state then
+                if noclipLoop then noclipLoop:Disconnect() end
+                noclipLoop = RunService.Stepped:Connect(function()
+                    if player.Character then
+                        for _, part in ipairs(player.Character:GetDescendants()) do
+                            if part:IsA("BasePart") and part.CanCollide then
+                                part.CanCollide = false
+                            end
+                        end
+                    end
+                end)
+            else
+                if noclipLoop then noclipLoop:Disconnect() noclipLoop = nil end
+            end
+        end
+    })
+
+    -- Slider Fly Speed
+    PlayerTab:CreateSlider({
+        Name = "Fly Speed",
+        Range = {0, 250},
+        Increment = 1,
+        CurrentValue = FLY_SPEED,
+        Flag = "FlySpeed",
+        Callback = function(val)
+            FLY_SPEED = val
+        end
+    })
+
+    -- Toggle Fly
+    PlayerTab:CreateToggle({
+        Name = "Fly (Horizontal: WASD/Joystick, Vertical PC: Space/Shift)",
+        CurrentValue = false,
+        Flag = "FlyToggle",
+        Callback = function(state)
+            local character = player.Character or player.CharacterAdded:Wait()
+            local hrp = character:WaitForChild("HumanoidRootPart")
+            local humanoid = character:WaitForChild("Humanoid")
+
+            if state then
+                if not flyBV then
+                    flyBV = Instance.new("BodyVelocity")
+                    flyBV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+                    flyBV.Velocity = Vector3.zero
+                    flyBV.Parent = hrp
+                end
+                if not flyBG then
+                    flyBG = Instance.new("BodyGyro")
+                    flyBG.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+                    flyBG.P = 10000
+                    flyBG.Parent = hrp
+                end
+                if flyLoop then flyLoop:Disconnect() end
+                flyLoop = RunService.Heartbeat:Connect(function()
+                    if not player.Character then return end
+                    local cam = workspace.CurrentCamera
+                    local horizontal = Vector3.new()
+                    local vertical = 0
+                    local moveDir = humanoid.MoveDirection
+                    if moveDir.Magnitude > 0 then
+                        horizontal = (cam.CFrame * moveDir - cam.CFrame.Position) * FLY_SPEED
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                        vertical = FLY_SPEED
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                        vertical = -FLY_SPEED
+                    end
+                    flyBV.Velocity = horizontal + Vector3.new(0, vertical, 0)
+                    flyBG.CFrame = cam.CFrame
+                end)
+            else
+                if flyLoop then flyLoop:Disconnect() flyLoop = nil end
+                if flyBV then flyBV:Destroy() flyBV = nil end
+                if flyBG then flyBG:Destroy() flyBG = nil end
+            end
+        end
+    })
+
+    -- Slider Jump Power
+    PlayerTab:CreateSlider({
+        Name = "Jump Power",
+        Range = {50, 500},
+        Increment = 10,
+        CurrentValue = JUMP_POWER,
+        Flag = "JumpPower",
+        Callback = function(val)
+            JUMP_POWER = val
+            if player.Character then
+                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.JumpPower = JUMP_POWER
+                end
+            end
+        end
+    })
+
+    -- Toggle JumpFly (Infinite Jump)
+    PlayerTab:CreateToggle({
+        Name = "JumpFly (Allows infinite jumping to fly, with high jump)",
+        CurrentValue = false,
+        Flag = "JumpFlyToggle",
+        Callback = function(state)
+            if state then
+                if player.Character then
+                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                    if humanoid then
+                        defaultJumpPower = humanoid.JumpPower
+                        humanoid.JumpPower = JUMP_POWER
+                    end
+                end
+                if infiniteJumpConn then infiniteJumpConn:Disconnect() end
+                infiniteJumpConn = UserInputService.JumpRequest:Connect(function()
+                    if player.Character then
+                        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                        if humanoid then
+                            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                        end
+                    end
+                end)
+            else
+                if infiniteJumpConn then infiniteJumpConn:Disconnect() infiniteJumpConn = nil end
+                if player.Character then
+                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                    if humanoid then
+                        humanoid.JumpPower = defaultJumpPower
+                    end
+                end
+            end
+        end
+    })
+
+    -- Bind menu
+    PlayerTab:CreateKeybind({
+        Name = "Rayfield Interface Bind (Key to open/close the menu)",
+        CurrentKeybind = "K",
+        HoldToInteract = false,
+        Flag = "WindowMenuBind",
+        Callback = function()
+            -- Note: Rayfield does not natively support runtime changes to the UI toggle keybind.
+            -- The keybind is saved via flag, but UI toggle remains "K" unless set initially.
+        end
+    })
+
+    -- =========================
+    -- ESP Tab
+    -- =========================
+    local ESPTab = Window:CreateTab("ESP", "eye") -- Using Lucide icon for visibility
+
+    ESPTab:CreateSection("ESP Functions")
+
+    -- ESP Players
+    ESPTab:CreateToggle({
+        Name = "ESP Players (Yellow - Applies yellow Highlight to other players)",
+        CurrentValue = false,
+        Flag = "ESPPlayersToggle",
+        Callback = function(state)
+            if state then
+                if espLoop then espLoop:Disconnect() end
+                espLoop = RunService.Heartbeat:Connect(function()
+                    for _, plr in ipairs(Players:GetPlayers()) do
+                        if plr ~= player and plr.Character then
+                            createHighlight(plr.Character, Color3.fromRGB(255,255,0))
+                        end
+                    end
+                end)
+            else
+                if espLoop then espLoop:Disconnect() espLoop = nil end
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr.Character and plr.Character:FindFirstChild("SlenderESP") then
+                        plr.Character.SlenderESP:Destroy()
+                    end
+                end
+            end
+        end
+    })
+
+    -- ESP LockBase
+    ESPTab:CreateToggle({
+        Name = "ESP LockBase (Red + Timer - Highlights the base and shows a timer)",
+        CurrentValue = false,
+        Flag = "ESPLockBaseToggle",
+        Callback = function(state)
+            local lockBaseName = "Base"
+            local base = workspace:FindFirstChild(lockBaseName)
+
+            local function cleanup()
+                if lockBaseLoop then lockBaseLoop:Disconnect() lockBaseLoop = nil end
+                if base then
+                    if base:FindFirstChild("SlenderESP") then base.SlenderESP:Destroy() end
+                    local bp = base:FindFirstChildWhichIsA("BasePart")
+                    if bp and bp:FindFirstChild("LockBaseTimer") then bp.LockBaseTimer:Destroy() end
+                end
+            end
+
+            if state and base then
+                createHighlight(base, Color3.fromRGB(255,0,0))
+                local part = base:FindFirstChildWhichIsA("BasePart") or base
+                local billboard = Instance.new("BillboardGui")
+                billboard.Name = "LockBaseTimer"
+                billboard.Size = UDim2.new(0, 100, 0, 50)
+                billboard.StudsOffset = Vector3.new(0, 5, 0)
+                billboard.AlwaysOnTop = true
+                billboard.Parent = part
+
+                local label = Instance.new("TextLabel")
+                label.Size = UDim2.new(1, 0, 1, 0)
+                label.BackgroundTransparency = 1
+                label.TextColor3 = Color3.fromRGB(255, 0, 0)
+                label.TextScaled = true
+                label.Font = Enum.Font.GothamBold
+                label.Parent = billboard
+
+                local timeLeft = 30
+                label.Text = tostring(timeLeft).."s"
+
+                if lockBaseLoop then lockBaseLoop:Disconnect() end
+                lockBaseLoop = RunService.Heartbeat:Connect(function(dt)
+                    timeLeft = timeLeft - dt
+                    if timeLeft > 0 then
+                        label.Text = string.format("%ds", math.ceil(timeLeft))
+                    else
+                        billboard:Destroy()
+                        if base:FindFirstChild("SlenderESP") then base.SlenderESP:Destroy() end
+                        lockBaseLoop:Disconnect()
+                    end
+                end)
+            else
+                cleanup()
+            end
+        end
+    })
+end
