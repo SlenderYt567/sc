@@ -1,369 +1,430 @@
--- Game ID
-if game.PlaceId == 109983668079237 then
-    -- Rayfield Library
-    local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+--[[
+    Slender Hub - Unified Script (Free + Premium Features)
+    Developed by Gemini for Slender
+    Version 1.0: Integrated with unified key system, dynamic access levels.
+]]
 
-    -- Main Window
-    local Window = Rayfield:CreateWindow({
-        Name = "Slender Hub - Steal a Brairot(Free)",
-        Icon = 82795327169782, -- Assuming this is a Roblox image ID
-        LoadingTitle = "Slender Hub - Free Version",
-        LoadingSubtitle = "by Slender",
-        ShowText = "Rayfield",
-        Theme = "Default",
-        ToggleUIKeybind = "K",
-        DisableRayfieldPrompts = false,
-        DisableBuildWarnings = false,
-        ConfigurationSaving = {
-            Enabled = true,
-            FolderName = nil,
-            FileName = "Big Hub"
-        },
-        Discord = {
-            Enabled = false,
-            Invite = "noinvitelink",
-            RememberJoins = true
-        },
-        KeySystem = false,
-        KeySettings = {
-            Title = "Rayfield Example Key",
-            Subtitle = "Key System",
-            Note = "No method of obtaining the key is provided",
-            FileName = "Key",
-            SaveKey = true,
-            GrabKeyFromSite = false,
-            Key = {"Example Key"}
-        }
-    })
+--//==============================[ SERVICES & DEPENDENCIES ]==============================//--
+-- Loads the Rayfield library (reloading here ensures it's available in this script's environment)
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-    local RunService = game:GetService("RunService")
-    local Players = game:GetService("Players")
-    local UserInputService = game:GetService("UserInputService")
-    local VirtualUser = game:GetService("VirtualUser")
-    local player = Players.LocalPlayer
+-- Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService") -- Added for more robust loop management
 
-    -- Anti-AFK activation on script run
-    player.Idled:Connect(function()
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-    end)
+--//==============================[ ACCESS LEVEL INJECTION ]==============================//--
+-- The key system sets _G.SlenderHubAccessLevel before loading this script.
+local accessLevel = _G.SlenderHubAccessLevel or "Free" -- Default to Free if not set (fallback)
+_G.SlenderHubAccessLevel = nil -- Clear global variable after use to avoid pollution
 
-    -- Vars
-    local SPEED_VALUE = 50
-    local FLY_SPEED = 50
-    local JUMP_POWER = 200
-    local bv
-    local speedLoop
-    local noclipLoop
-    local espLoop
-    local lockBaseLoop
-    local flyBV
-    local flyBG
-    local flyLoop
-    local infiniteJumpConn
-    local defaultJumpPower = 50
+print("Slender Hub Unified Script loaded with access level: " .. accessLevel)
 
-    -- Utility function to create Highlight
-    local function createHighlight(target, color)
-        if not target or not target.Parent then return end
-        if not target:FindFirstChild("SlenderESP") then
-            local highlight = Instance.new("Highlight")
-            highlight.Name = "SlenderESP"
-            highlight.FillColor = color
-            highlight.OutlineColor = color
-            highlight.FillTransparency = 0.5
-            highlight.OutlineTransparency = 0
-            highlight.Parent = target
+--//==============================[ REMOTE EVENT REFERENCES ]==============================//--
+-- We use :WaitForChild() to ensure objects are loaded
+local FishingMinigameClick = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Net"):WaitForChild("RE/FishingRod.MinigameClick")
+local FishingRodCast = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Net"):WaitForChild("RE/FishingRod.Cast")
+local PlotServiceSell = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Net"):WaitForChild("RE/PlotService/Sell")
+
+--//==============================[ CONTROL VARIABLES ]==============================//--
+
+-- Control variables for the full auto-fishing cycle
+local isFullAutoFishingEnabled = false
+local currentDelayAfterCast = 6.0    -- Wait time after casting for the click minigame to appear
+local currentClickDuration = 8.0     -- Total duration of clicks in the fishing minigame
+local currentClickSpeedDelay = 0.1   -- Delay between EACH individual click during the minigame (click speed)
+
+-- Control variables for Anti-AFK and Anti-Kick
+local isAntiAFKEnabled = false
+local isAntiKickEnabled = false
+
+-- Control variables for Auto Sell
+local isAutoSellEnabled = false
+local selectedPlotId = 1             -- Default to Slot 1 for selling
+local autoSellDelay = 3.0            -- 3 seconds delay as requested
+
+--//==============================[ CORE FUNCTIONALITY LOOPS ]==============================//--
+
+-- Main function for the automatic fishing cycle
+local function performFullAutoFishingCycle()
+    while isFullAutoFishingEnabled and RunService.Running do -- Added RunService.Running check for robustness
+        -- 1. Cast the fishing rod
+        if FishingRodCast then
+            FishingRodCast:FireServer(0)
+            Rayfield:Notify({
+                Title = "🎣 Auto Fishing Active",
+                Content = "Fishing rod cast! Waiting for minigame...",
+                Duration = 2,
+                Image = "fishing-rod",
+            })
+        else
+            warn("Error: RE/FishingRod.Cast not found. Stopping Full Auto Fishing.")
+            isFullAutoFishingEnabled = false
+            break
         end
+
+        task.wait(currentDelayAfterCast)
+
+        if not isFullAutoFishingEnabled then break end 
+
+        Rayfield:Notify({
+            Title = "⚡️ Auto Fishing Active",
+            Content = "Fishing minigame detected! Starting clicks.",
+            Duration = 2,
+            Image = "mouse-pointer",
+        })
+
+        -- 3. Start clicking in the minigame for the configured duration
+        local clickStartTime = os.time()
+        while isFullAutoFishingEnabled and RunService.Running and (os.time() - clickStartTime < currentClickDuration) do
+            if FishingMinigameClick then
+                FishingMinigameClick:FireServer()
+            else
+                warn("Error: RE/FishingRod.MinigameClick not found. Stopping Full Auto Fishing.")
+                isFullAutoFishingEnabled = false
+                break
+            end
+            task.wait(currentClickSpeedDelay)
+        end
+
+        if not isFullAutoFishingEnabled then break end
+        Rayfield:Notify({
+            Title = "✅ Auto Fishing Active",
+            Content = "Clicks completed. Waiting for next cast.",
+            Duration = 2,
+            Image = "check-circle",
+        })
+        task.wait(1.5)
     end
 
-    -- =========================
-    -- Player Tab
-    -- =========================
-    local PlayerTab = Window:CreateTab("Player", "person-standing") -- Using Lucide icon for movement/player
-
-    PlayerTab:CreateSection("Movement")
-
-    -- Slider Speed
-    PlayerTab:CreateSlider({
-        Name = "Speed Value",
-        Range = {0, 250},
-        Increment = 1,
-        CurrentValue = SPEED_VALUE,
-        Flag = "SpeedValue",
-        Callback = function(val)
-            SPEED_VALUE = val
-        end
+    if not RunService.Running then return end -- Avoid notification if game stopped
+    Rayfield:Notify({
+        Title = "❌ Auto Fishing Disabled",
+        Content = "The automatic fishing cycle has been stopped.",
+        Duration = 3,
+        Image = "x-circle",
     })
+end
 
-    -- Toggle Speed Hack
-    PlayerTab:CreateToggle({
-        Name = "Speed Hack (Uses BodyVelocity to move the character)",
-        CurrentValue = false,
-        Flag = "SpeedHackToggle",
-        Callback = function(state)
-            local character = player.Character or player.CharacterAdded:Wait()
-            local hrp = character:WaitForChild("HumanoidRootPart")
-
-            if state then
-                if not bv then
-                    bv = Instance.new("BodyVelocity")
-                    bv.MaxForce = Vector3.new(1e4, 0, 1e4)
-                    bv.Velocity = Vector3.zero
-                    bv.Parent = hrp
-                end
-                if speedLoop then speedLoop:Disconnect() end
-                speedLoop = RunService.Heartbeat:Connect(function()
-                    if not player.Character then return end
-                    local hrp2 = player.Character:FindFirstChild("HumanoidRootPart")
-                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                    if not hrp2 or not humanoid then return end
-                    local moveDir = humanoid.MoveDirection
-                    bv.Velocity = (moveDir.Magnitude > 0) and (moveDir * SPEED_VALUE) or Vector3.zero
-                end)
-            else
-                if speedLoop then speedLoop:Disconnect() speedLoop = nil end
-                if bv then bv:Destroy() bv = nil end
-            end
+-- Function for Anti-AFK (periodic jumping)
+local function antiAFKLoop()
+    while isAntiAFKEnabled and RunService.Running do
+        local Character = LocalPlayer.Character
+        local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+        
+        if Humanoid and (Humanoid.Health > 0) and (Humanoid.Sit == false) then
+            Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            task.wait(0.1)
+            Humanoid:ChangeState(Enum.HumanoidStateType.Running)
         end
-    })
+        task.wait(15)
+    end
+end
 
-    -- Toggle NoClip
-    PlayerTab:CreateToggle({
-        Name = "NoClip (Removes collision from character parts)",
-        CurrentValue = false,
-        Flag = "NoClipToggle",
-        Callback = function(state)
-            if state then
-                if noclipLoop then noclipLoop:Disconnect() end
-                noclipLoop = RunService.Stepped:Connect(function()
-                    if player.Character then
-                        for _, part in ipairs(player.Character:GetDescendants()) do
-                            if part:IsA("BasePart") and part.CanCollide then
-                                part.CanCollide = false
-                            end
-                        end
-                    end
-                end)
-            else
-                if noclipLoop then noclipLoop:Disconnect() noclipLoop = nil end
-            end
+-- Function for Anti-Kick (subtle camera movement)
+local function antiKickLoop()
+    while isAntiKickEnabled and RunService.Running do
+        local Camera = Workspace.CurrentCamera
+        if Camera then
+            Camera.CFrame = Camera.CFrame * CFrame.Angles(0, math.rad(0.0001), 0) 
         end
-    })
+        task.wait(5)
+    end
+end
 
-    -- Slider Fly Speed
-    PlayerTab:CreateSlider({
-        Name = "Fly Speed",
-        Range = {0, 250},
-        Increment = 1,
-        CurrentValue = FLY_SPEED,
-        Flag = "FlySpeed",
-        Callback = function(val)
-            FLY_SPEED = val
+-- Function for Auto Sell Brainhots
+local function performAutoSellCycle()
+    while isAutoSellEnabled and RunService.Running do
+        if PlotServiceSell then
+            PlotServiceSell:FireServer(selectedPlotId)
+            Rayfield:Notify({
+                Title = "💰 Auto Sell Active",
+                Content = "Attempting to sell brainhots from slot " .. selectedPlotId .. "...",
+                Duration = 1.5,
+                Image = "dollar-sign",
+            })
+        else
+            warn("Error: RE/PlotService/Sell not found. Stopping Auto Sell.")
+            isAutoSellEnabled = false
+            break
         end
+        task.wait(autoSellDelay)
+    end
+    if not RunService.Running then return end
+    Rayfield:Notify({
+        Title = "🚫 Auto Sell Deactivated",
+        Content = "Automatic selling has been stopped.",
+        Duration = 3,
+        Image = "x-circle",
     })
+end
 
-    -- Toggle Fly
-    PlayerTab:CreateToggle({
-        Name = "Fly (Horizontal: WASD/Joystick, Vertical PC: Space/Shift)",
-        CurrentValue = false,
-        Flag = "FlyToggle",
-        Callback = function(state)
-            local character = player.Character or player.CharacterAdded:Wait()
-            local hrp = character:WaitForChild("HumanoidRootPart")
-            local humanoid = character:WaitForChild("Humanoid")
+--//==============================[ RAYFIELD UI ]==============================//--
 
-            if state then
-                if not flyBV then
-                    flyBV = Instance.new("BodyVelocity")
-                    flyBV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                    flyBV.Velocity = Vector3.zero
-                    flyBV.Parent = hrp
-                end
-                if not flyBG then
-                    flyBG = Instance.new("BodyGyro")
-                    flyBG.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-                    flyBG.P = 10000
-                    flyBG.Parent = hrp
-                end
-                if flyLoop then flyLoop:Disconnect() end
-                flyLoop = RunService.Heartbeat:Connect(function()
-                    if not player.Character then return end
-                    local cam = workspace.CurrentCamera
-                    local horizontal = Vector3.new()
-                    local vertical = 0
-                    local moveDir = humanoid.MoveDirection
-                    if moveDir.Magnitude > 0 then
-                        horizontal = (cam.CFrame * moveDir - cam.CFrame.Position) * FLY_SPEED
-                    end
-                    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-                        vertical = FLY_SPEED
-                    end
-                    if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-                        vertical = -FLY_SPEED
-                    end
-                    flyBV.Velocity = horizontal + Vector3.new(0, vertical, 0)
-                    flyBG.CFrame = cam.CFrame
-                end)
-            else
-                if flyLoop then flyLoop:Disconnect() flyLoop = nil end
-                if flyBV then flyBV:Destroy() flyBV = nil end
-                if flyBG then flyBG:Destroy() flyBG = nil end
-            end
+-- Create the main Rayfield window (name dynamically changes based on access level)
+local Window = Rayfield:CreateWindow({
+   Name = "Slender Hub [" .. accessLevel .. " Access]", -- Dynamic window name
+   Icon = "activity",
+   LoadingTitle = "Fisherman Deluxe",
+   LoadingSubtitle = "by SlenderHub",
+   Theme = "Default",
+   ToggleUIKeybind = "K",
+   DisableRayfieldPrompts = false,
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "BrainrotFishingPro",
+      FileName = "Config"
+   },
+   Discord = {Enabled = false},
+   KeySystem = false
+})
+
+-- Initial notification based on access level
+Rayfield:Notify({
+    Title = "Slender Hub Loaded!",
+    Content = "Welcome! You have " .. accessLevel .. " access.",
+    Duration = 5,
+    Image = accessLevel == "Premium" and "star" or "key",
+})
+
+-- Create a tab for advanced fishing functions
+local Tab = Window:CreateTab("Advanced Fishing", "anchor")
+
+-- Section for full fishing cycle controls
+local FullCycleSection = Tab:CreateSection("Full Fishing Cycle Controls")
+
+-- Toggle to enable/disable the full fishing cycle
+Tab:CreateToggle({
+   Name = "Enable Full Auto Fish Cycle",
+   CurrentValue = false,
+   Flag = "FullAutoFishToggle",
+   Callback = function(Value)
+       isFullAutoFishingEnabled = Value
+       if isFullAutoFishingEnabled then
+           task.spawn(performFullAutoFishingCycle)
+           Rayfield:Notify({
+               Title = "Auto Fish Activated",
+               Content = "The full automatic fishing cycle has been started! Adjust times to optimize.",
+               Duration = 4,
+               Image = "bell",
+           })
+       else
+           -- When disabled, the 'while isFullAutoFishingEnabled' loop will terminate
+           Rayfield:Notify({
+                Title = "❌ Auto Fish Deactivated",
+                Content = "The automatic fishing cycle has been stopped.",
+                Duration = 3,
+                Image = "x-circle",
+            })
+       end
+   end,
+})
+
+-- Slider to adjust delay after casting (time for minigame to appear)
+Tab:CreateSlider({
+   Name = "Wait for Minigame (seconds)",
+   Range = {4.0, 10.0},
+   Increment = 0.5,
+   Suffix = "s",
+   CurrentValue = currentDelayAfterCast,
+   Flag = "DelayAfterCastSlider",
+   Callback = function(Value)
+       currentDelayAfterCast = Value
+   end,
+})
+
+-- Slider to adjust click duration in the minigame
+Tab:CreateSlider({
+   Name = "Click Duration (seconds)",
+   Range = {5.0, 20.0},
+   Increment = 0.5,
+   Suffix = "s",
+   CurrentValue = currentClickDuration,
+   Flag = "ClickDurationSlider",
+   Callback = function(Value)
+       currentClickDuration = Value
+   end,
+})
+
+-- Slider to adjust speed between individual clicks in the minigame
+Tab:CreateSlider({
+   Name = "Delay Between Clicks (seconds)",
+   Range = {0.05, 1.0},
+   Increment = 0.05,
+   Suffix = "s",
+   CurrentValue = currentClickSpeedDelay,
+   Flag = "ClickSpeedDelaySlider",
+   Callback = function(Value)
+       currentClickSpeedDelay = Value
+   end,
+})
+
+
+-- Create a new tab for Miscellaneous features
+local MiscTab = Window:CreateTab("MISC", "settings")
+
+-- Section for Anti-AFK and Anti-Kick features
+local AntiFeaturesSection = MiscTab:CreateSection("Anti-Features")
+
+-- Toggle for Anti-AFK
+MiscTab:CreateToggle({
+    Name = "Enable Anti-AFK (Periodic Jump)",
+    CurrentValue = false,
+    Flag = "AntiAFKToggle",
+    Callback = function(Value)
+        isAntiAFKEnabled = Value
+        if isAntiAFKEnabled then
+            task.spawn(antiAFKLoop)
+            Rayfield:Notify({
+                Title = "⚙️ Anti-AFK Activated",
+                Content = "Your character will jump periodically to prevent AFK.",
+                Duration = 3,
+                Image = "hourglass",
+            })
+        else
+            Rayfield:Notify({
+                Title = "🚫 Anti-AFK Deactivated",
+                Content = "Anti-AFK has been stopped.",
+                Duration = 2,
+                Image = "x-circle",
+            })
         end
-    })
+    end,
+})
 
-    -- Slider Jump Power
-    PlayerTab:CreateSlider({
-        Name = "Jump Power",
-        Range = {50, 500},
-        Increment = 10,
-        CurrentValue = JUMP_POWER,
-        Flag = "JumpPower",
-        Callback = function(val)
-            JUMP_POWER = val
-            if player.Character then
-                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                if humanoid then
-                    humanoid.JumpPower = JUMP_POWER
-                end
-            end
+-- Toggle for Anti-Kick (Subtle Camera Movement)
+MiscTab:CreateToggle({
+    Name = "Enable Anti-Kick (Input Activity)",
+    CurrentValue = false,
+    Flag = "AntiKickToggle",
+    Callback = function(Value)
+        isAntiKickEnabled = Value
+        if isAntiKickEnabled then
+            task.spawn(antiKickLoop)
+            Rayfield:Notify({
+                Title = "🛡️ Anti-Kick Activated",
+                Content = "Simulating input activity to prevent kicks due to inactivity.",
+                Duration = 3,
+                Image = "shield",
+            })
+        else
+            Rayfield:Notify({
+                Title = "⛔ Anti-Kick Deactivated",
+                Content = "Anti-Kick has been stopped.",
+                Duration = 2,
+                Image = "slash",
+            })
         end
-    })
+    end,
+})
 
-    -- Toggle JumpFly (Infinite Jump)
-    PlayerTab:CreateToggle({
-        Name = "JumpFly (Allows infinite jumping to fly, with high jump)",
-        CurrentValue = false,
-        Flag = "JumpFlyToggle",
-        Callback = function(state)
-            if state then
-                if player.Character then
-                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                    if humanoid then
-                        defaultJumpPower = humanoid.JumpPower
-                        humanoid.JumpPower = JUMP_POWER
-                    end
-                end
-                if infiniteJumpConn then infiniteJumpConn:Disconnect() end
-                infiniteJumpConn = UserInputService.JumpRequest:Connect(function()
-                    if player.Character then
-                        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                        if humanoid then
-                            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                        end
-                    end
-                end)
-            else
-                if infiniteJumpConn then infiniteJumpConn:Disconnect() infiniteJumpConn = nil end
-                if player.Character then
-                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                    if humanoid then
-                        humanoid.JumpPower = defaultJumpPower
-                    end
-                end
-            end
+-- New section for Auto Selling
+local AutoSellSection = MiscTab:CreateSection("Auto Selling")
+
+-- Prepare options for the dropdown (Slot 1 to Slot 30)
+local plotOptions = {}
+for i = 1, 30 do
+    table.insert(plotOptions, "Slot " .. i)
+end
+
+-- Dropdown for selecting the brainhot slot to sell from
+MiscTab:CreateDropdown({
+    Name = "Select Brainhot Slot",
+    Options = plotOptions,
+    CurrentOption = {"Slot 1"},
+    MultipleOptions = false,
+    Flag = "AutoSellSlotDropdown",
+    Callback = function(Options)
+        local selectedString = Options[1]
+        selectedPlotId = tonumber(string.match(selectedString, "Slot (%d+)")) or 1
+        Rayfield:Notify({
+            Title = "Slot Selected",
+            Content = "Auto sell target set to slot " .. selectedPlotId .. ".",
+            Duration = 2,
+            Image = "check-circle",
+        })
+    end,
+})
+
+-- Toggle for Auto Sell Brainhots
+MiscTab:CreateToggle({
+    Name = "Enable Auto Sell Brainhots",
+    CurrentValue = false,
+    Flag = "AutoSellToggle",
+    Callback = function(Value)
+        isAutoSellEnabled = Value
+        if isAutoSellEnabled then
+            task.spawn(performAutoSellCycle)
+            Rayfield:Notify({
+                Title = "💰 Auto Sell Activated",
+                Content = "Auto selling from slot " .. selectedPlotId .. " started with a " .. autoSellDelay .. "s delay.",
+                Duration = 3,
+                Image = "dollar-sign",
+            })
+        else
+            -- The 'while isAutoSellEnabled' loop will naturally terminate.
+            -- Its final notification is handled inside the 'performAutoSellCycle' function.
         end
-    })
+    end,
+})
 
-    -- Bind menu
-    PlayerTab:CreateKeybind({
-        Name = "Rayfield Interface Bind (Key to open/close the menu)",
-        CurrentKeybind = "K",
-        HoldToInteract = false,
-        Flag = "WindowMenuBind",
+--//==============================[ PREMIUM FEATURES (CONDITIONAL) ]==============================//--
+if accessLevel == "Premium" then
+    print("Activating Premium features for Slender Hub...")
+    local PremiumTab = Window:CreateTab("Premium", "star") -- New tab for Premium features
+
+    local ExclusiveFeaturesSection = PremiumTab:CreateSection("Exclusive Premium Features")
+
+    ExclusiveFeaturesSection:CreateButton({
+        Name = "Teleport to Safezone (Premium)",
         Callback = function()
-            -- Note: Rayfield does not natively support runtime changes to the UI toggle keybind.
-            -- The keybind is saved via flag, but UI toggle remains "K" unless set initially.
-        end
-    })
-
-    -- =========================
-    -- ESP Tab
-    -- =========================
-    local ESPTab = Window:CreateTab("ESP", "eye") -- Using Lucide icon for visibility
-
-    ESPTab:CreateSection("ESP Functions")
-
-    -- ESP Players
-    ESPTab:CreateToggle({
-        Name = "ESP Players (Yellow - Applies yellow Highlight to other players)",
-        CurrentValue = false,
-        Flag = "ESPPlayersToggle",
-        Callback = function(state)
-            if state then
-                if espLoop then espLoop:Disconnect() end
-                espLoop = RunService.Heartbeat:Connect(function()
-                    for _, plr in ipairs(Players:GetPlayers()) do
-                        if plr ~= player and plr.Character then
-                            createHighlight(plr.Character, Color3.fromRGB(255,255,0))
-                        end
-                    end
-                end)
+            -- Placeholder for a premium teleport function
+            local Character = LocalPlayer.Character
+            if Character and Character:FindFirstChild("HumanoidRootPart") then
+                Character.HumanoidRootPart.CFrame = CFrame.new(0, 100, 0) -- Example: Teleport to origin high up
+                Rayfield:Notify({Title = "✨ Premium Feature", Content = "Teleported to Safezone!", Duration = 3})
             else
-                if espLoop then espLoop:Disconnect() espLoop = nil end
-                for _, plr in ipairs(Players:GetPlayers()) do
-                    if plr.Character and plr.Character:FindFirstChild("SlenderESP") then
-                        plr.Character.SlenderESP:Destroy()
-                    end
-                end
+                Rayfield:Notify({Title = "⚠️ Error", Content = "Cannot teleport: Character not found.", Duration = 3})
             end
         end
     })
 
-    -- ESP LockBase
-    ESPTab:CreateToggle({
-        Name = "ESP LockBase (Red + Timer - Highlights the base and shows a timer)",
-        CurrentValue = false,
-        Flag = "ESPLockBaseToggle",
-        Callback = function(state)
-            local lockBaseName = "Base"
-            local base = workspace:FindFirstChild(lockBaseName)
-
-            local function cleanup()
-                if lockBaseLoop then lockBaseLoop:Disconnect() lockBaseLoop = nil end
-                if base then
-                    if base:FindFirstChild("SlenderESP") then base.SlenderESP:Destroy() end
-                    local bp = base:FindFirstChildWhichIsA("BasePart")
-                    if bp and bp:FindFirstChild("LockBaseTimer") then bp.LockBaseTimer:Destroy() end
-                end
+    ExclusiveFeaturesSection:CreateSlider({
+        Name = "Insane WalkSpeed (Premium)",
+        Range = {100, 500},
+        Increment = 10,
+        Suffix = " studs/s",
+        CurrentValue = 100,
+        Flag = "InsaneWalkSpeed",
+        Callback = function(value)
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+                LocalPlayer.Character.Humanoid.WalkSpeed = value
             end
+        end,
+    })
 
-            if state and base then
-                createHighlight(base, Color3.fromRGB(255,0,0))
-                local part = base:FindFirstChildWhichIsA("BasePart") or base
-                local billboard = Instance.new("BillboardGui")
-                billboard.Name = "LockBaseTimer"
-                billboard.Size = UDim2.new(0, 100, 0, 50)
-                billboard.StudsOffset = Vector3.new(0, 5, 0)
-                billboard.AlwaysOnTop = true
-                billboard.Parent = part
+    -- Add more premium-exclusive elements here as needed
+    PremiumTab:CreateParagraph({
+        Title = "Thank you for supporting Premium!",
+        Content = "Enjoy these exclusive features and more to come!"
+    })
 
-                local label = Instance.new("TextLabel")
-                label.Size = UDim2.new(1, 0, 1, 0)
-                label.BackgroundTransparency = 1
-                label.TextColor3 = Color3.fromRGB(255, 0, 0)
-                label.TextScaled = true
-                label.Font = Enum.Font.GothamBold
-                label.Parent = billboard
-
-                local timeLeft = 30
-                label.Text = tostring(timeLeft).."s"
-
-                if lockBaseLoop then lockBaseLoop:Disconnect() end
-                lockBaseLoop = RunService.Heartbeat:Connect(function(dt)
-                    timeLeft = timeLeft - dt
-                    if timeLeft > 0 then
-                        label.Text = string.format("%ds", math.ceil(timeLeft))
-                    else
-                        billboard:Destroy()
-                        if base:FindFirstChild("SlenderESP") then base.SlenderESP:Destroy() end
-                        lockBaseLoop:Disconnect()
-                    end
-                end)
-            else
-                cleanup()
-            end
+else
+    -- Optional: If not premium, you might want to show an upgrade tab/section
+    local UpgradeTab = Window:CreateTab("Upgrade", "arrow-up-circle")
+    UpgradeTab:CreateParagraph({
+        Title = "Unlock Premium Features!",
+        Content = "Get access to exclusive tools and support. Visit our Discord to learn more about Premium!"
+    })
+    UpgradeTab:CreateButton({
+        Name = "Go to Premium Discord",
+        Callback = function()
+            setclipboard("https://discord.gg/JeJTsFgc") -- Your Discord link
+            Rayfield:Notify({Title = "Link Copied!", Content = "Join our Discord for Premium!", Duration = 6})
         end
     })
 end
+
+print("✅ Slender Hub Unified Script Fully Initialized.")
