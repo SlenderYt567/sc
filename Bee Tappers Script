@@ -1,26 +1,26 @@
 --!strict
--- SlenderHub - Bee Tappers (Mobile & PC)
--- Features: Bypass V2 + Smart Merchant + Turbo Hatch + Webhook + Optimized Farm
+-- SlenderHub - Bee Tappers V18 (FINAL PREMIUM)
+-- Features: Key System Integration + Reset Key + Premium Logic + Bypass V3
 
+-- [ 1. VERIFICAÇÃO DE ACESSO ] --
+local AccessLevel = getgenv().SlenderHubAccessLevel or "Free"
+local isPremium = (AccessLevel == "Premium")
+
+print("🛡️ [SlenderHub]: Loaded as " .. AccessLevel .. " User")
+
+-- [ 2. SERVICES & VARIABLES ] --
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
-local RunService = game:GetService("RunService")
 local VirtualUser = game:GetService("VirtualUser")
 local Workspace = game:GetService("Workspace")
-local StarterGui = game:GetService("StarterGui")
-
 local LocalPlayer = Players.LocalPlayer
 
-print("🛡️ [SlenderHub]: Initializing System...")
-
--- [ 1. BYPASS & PROTECTION SYSTEM ] --
+-- [ 3. ANTI-BAN FORTRESS V3 ] --
 task.spawn(function()
     local badGlobals = {"syn", "secure_load", "KRNL_LOADED", "is_sirhurt_closure", "electron", "fluxus", "Arceus", "Exploit"}
-    for _, v in pairs(badGlobals) do
-        if rawget(_G, v) then rawset(_G, v, nil) end
-    end
+    for _, v in pairs(badGlobals) do if rawget(_G, v) then rawset(_G, v, nil) end end
 end)
 
 local mt = getrawmetatable(game)
@@ -31,10 +31,8 @@ setreadonly(mt, false)
 mt.__namecall = newcclosure(function(self, ...)
     local method = getnamecallmethod():lower()
     local args = {...}
-    -- Anti-Kick & Anti-Ban Hooks
     if self == LocalPlayer and (method == "kick" or method == "destroy") then return nil end
     if method == "fireserver" and tostring(self) == "AntiCheatEvent" then return nil end
-    -- Anti-Scan (Protects UI)
     if method == "preloadasync" and tostring(self) == "ContentProvider" then return nil end
     return old_namecall(self, unpack(args))
 end)
@@ -45,33 +43,34 @@ mt.__newindex = newcclosure(function(self, key, value)
 end)
 setreadonly(mt, true)
 
--- [ 2. UI LIBRARY: RAYFIELD ] --
+-- [ 4. UI LIBRARY ] --
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
+local WindowName = isPremium and "Bee Tappers | 💎 PREMIUM" or "Bee Tappers | FREE Version"
+
 local Window = Rayfield:CreateWindow({
-    Name = "Bee Tappers | SlenderHub",
-    Icon = "moon", -- Changed to Moon icon for Slender theme
-    LoadingTitle = "SlenderHub",
-    LoadingSubtitle = "Loading Scripts...",
-    Theme = "Default", -- You can change to 'DarkBlue' or 'Serenity' if preferred
-    ToggleUIKeybind = Enum.KeyCode.RightControl, -- Mobile Support
-    ConfigurationSaving = {Enabled = true, FolderName = "SlenderHub_Bee", FileName = "Config"}
+    Name = WindowName,
+    Icon = isPremium and "crown" or "moon",
+    LoadingTitle = "SlenderHub " .. AccessLevel,
+    LoadingSubtitle = isPremium and "God Mode Active" or "Upgrade to Premium for 0 Delay",
+    Theme = isPremium and "Amethyst" or "Default",
+    ToggleUIKeybind = Enum.KeyCode.RightControl,
+    ConfigurationSaving = {Enabled = true, FolderName = "SlenderHub_Bee_"..AccessLevel, FileName = "Config"}
 })
 
 local FarmTab = Window:CreateTab("Farm", "hammer")
 local EggTab = Window:CreateTab("Eggs", "egg")
 local MiscTab = Window:CreateTab("Misc", "settings")
+local PremiumTab = Window:CreateTab("💎 Premium", "diamond")
 
--- [ 3. VARIABLES & CONNECTIONS ] --
+-- [ 5. GAME DATA ] --
 local Flags = {
     AutoClick = false, AutoHatch = false, AutoTicket = false, 
     AutoOrb = false, AutoMerchant = false, AntiAFK = false,
-    ClickDelay = 0.1, HatchDelay = 0.05,
-    
-    -- Merchant Filters
-    BuyTier1 = false, -- Trash (Fruits)
-    BuyTier2 = true,  -- Mid (Royal Jelly)
-    BuyTier3 = true   -- Rare (Moon Orb/Mythic Jelly)
+    AutoSpin = false, AutoReward = false,
+    ClickDelay = isPremium and 0 or 0.8,
+    HatchDelay = isPremium and 0 or 0.8,
+    BuyTier1 = false, BuyTier2 = true, BuyTier3 = true
 }
 local SelectedEggCode: string? = nil
 
@@ -79,7 +78,6 @@ local Events = ReplicatedStorage:WaitForChild("Events", 5)
 local ShareHatchesEvent = Events and Events:WaitForChild("ShareHatches", 5)
 local RemoteFunctionEvent = Events and Events:WaitForChild("RemoteFunction", 5)
 
--- Data Dumper (For Webhook)
 local EggDataFuncs = nil
 task.spawn(function()
     local Modules = ReplicatedStorage:WaitForChild("Modules", 5)
@@ -87,8 +85,9 @@ task.spawn(function()
     if EggsMod then pcall(function() EggDataFuncs = require(EggsMod) end) end
 end)
 
--- Webhook Configuration
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1441172911145750731/1f8e3lY7YUs8h9ERatyvJ6Of92Qby825Cz-AKwSCuoobCVmxPgygeki9dx8gDFB6yP4P"
+local RAW_WEBHOOK = "https://discord.com/api/webhooks/1441172911145750731/1f8e3lY7YUs8h9ERatyvJ6Of92Qby825Cz-AKwSCuoobCVmxPgygeki9dx8gDFB6yP4P"
+local function GetProxyUrl(url) return url:gsub("discord.com", "webhook.lewisakura.moe") end
+local FINAL_URL = GetProxyUrl(RAW_WEBHOOK)
 local MIN_RARITY_TO_PING = 6 
 
 local function SendDiscordMessage(petName, rarityId, petImageId)
@@ -104,161 +103,39 @@ local function SendDiscordMessage(petName, rarityId, petImageId)
         [10] = {Name = "Exclusive",Color = 13500622}
     }
     local rInfo = RarityData[rarityId] or {Name = "Rarity " .. tostring(rarityId), Color = 16777215}
+    local userType = isPremium and "💎 PREMIUM User" or "Free User"
 
     local embed = {
         ["title"] = "👑 SLENDERHUB DROP: " .. string.upper(rInfo.Name) .. "!",
-        ["description"] = "**Pet:** " .. tostring(petName) .. "\n**Rarity:** " .. tostring(rInfo.Name) .. " (" .. tostring(rarityId) .. ")",
+        ["description"] = "**User:** " .. userType .. "\n**Pet:** " .. tostring(petName) .. "\n**Rarity:** " .. tostring(rInfo.Name) .. " (" .. tostring(rarityId) .. ")",
         ["color"] = rInfo.Color,
         ["thumbnail"] = { ["url"] = "https://www.roblox.com/asset-thumbnail/image?assetId=" .. tostring(petImageId) .. "&width=420&height=420&format=png" },
-        ["footer"] = { ["text"] = "SlenderHub Premium" }
+        ["footer"] = { ["text"] = "SlenderHub" }
     }
     local content = ""
     if rarityId >= 8 then content = "@everyone GODLIKE DROP!" end
 
     request({
-        Url = WEBHOOK_URL, Method = "POST", Headers = {["Content-Type"] = "application/json"},
+        Url = FINAL_URL, Method = "POST", Headers = {["Content-Type"] = "application/json"},
         Body = HttpService:JSONEncode({["content"] = content, ["embeds"] = {embed}, ["username"] = "SlenderHub Bot"})
     })
 end
 
--- [ 4. TAB: FARM ] --
-
+-- [ 6. FARM TAB ] --
 FarmTab:CreateSection("Main Farming")
-
-FarmTab:CreateToggle({
-    Name = "Auto Click",
-    CurrentValue = false,
-    Flag = "AutoClick",
-    Callback = function(Value)
-        Flags.AutoClick = Value
-        if Value and ShareHatchesEvent then
-            task.spawn(function()
-                while Flags.AutoClick do
-                    pcall(function() ShareHatchesEvent:FireServer("Click", "") end)
-                    task.wait(Flags.ClickDelay)
-                end
-            end)
-        end
-    end,
-})
-
-FarmTab:CreateSlider({
-    Name = "Click Speed (Seconds)", Range = {0, 1}, Increment = 0.01, Suffix = "s", CurrentValue = 0.1, Flag = "ClickSpeed",
-    Callback = function(Value) Flags.ClickDelay = Value end
-})
-
-FarmTab:CreateToggle({
-    Name = "Auto Collect Orbs (Optimized)",
-    CurrentValue = false,
-    Flag = "AutoOrb",
-    Callback = function(Value)
-        Flags.AutoOrb = Value
-        if Value and ShareHatchesEvent then
-            task.spawn(function()
-                while Flags.AutoOrb do
-                    local orbIds, parts = {}, {}
-                    local OrbsFolder = Workspace:FindFirstChild("Orbs")
-                    if OrbsFolder then
-                        for _, obj in ipairs(OrbsFolder:GetChildren()) do
-                            if obj:GetAttribute("CanCollect") == true then
-                                table.insert(orbIds, obj.Name); table.insert(parts, obj)
-                            end
-                        end
-                    end
-                    if #orbIds > 0 then
-                        local s, json = pcall(HttpService.JSONEncode, HttpService, orbIds)
-                        if s then
-                            local prefix = (#orbIds == 1) and "(" or "O"
-                            pcall(function() ShareHatchesEvent:FireServer("ClaimOrb", "j\000\000\000" .. prefix .. json) end)
-                            for _, p in ipairs(parts) do pcall(function() p:Destroy() end) end
-                        end
-                    end
-                    task.wait(0.5)
-                end
-            end)
-        end
-    end,
-})
-
-FarmTab:CreateToggle({
-    Name = "Auto Ticket (Wealth Clock)",
-    CurrentValue = false,
-    Flag = "AutoTicket",
-    Callback = function(Value)
-        Flags.AutoTicket = Value
-        if Value then
-            task.spawn(function()
-                local interactCallback = nil
-                local part = nil
-                pcall(function()
-                    local t = Workspace:WaitForChild("Scripted", 5):WaitForChild("WealthClock", 5):WaitForChild("Touch", 5)
-                    interactCallback = t:WaitForChild("InteractCallback", 5); part = t
-                end)
-                if not interactCallback then return end
-                while Flags.AutoTicket do
-                    if interactCallback and part then pcall(function() interactCallback:FireServer(part) end) end
-                    task.wait(1.1)
-                end
-            end)
-        end
-    end,
-})
+local clickTitle = isPremium and "Auto Click (INSANE SPEED ⚡)" or "Auto Click (0.8s Delay)"
+FarmTab:CreateToggle({Name = clickTitle, CurrentValue = false, Flag = "AutoClick", Callback = function(Value) Flags.AutoClick = Value; if Value and ShareHatchesEvent then task.spawn(function() while Flags.AutoClick do pcall(function() ShareHatchesEvent:FireServer("Click", "") end); if isPremium then game:GetService("RunService").Heartbeat:Wait() else task.wait(0.8) end end end) end end})
+if isPremium then FarmTab:CreateSlider({Name = "Click Speed (0 = Max)", Range = {0, 1}, Increment = 0.01, Suffix = "s", CurrentValue = 0, Flag = "ClickSpeed", Callback = function(Value) Flags.ClickDelay = Value end}) end
+FarmTab:CreateToggle({Name = "Auto Collect Orbs", CurrentValue = false, Flag = "AutoOrb", Callback = function(Value) Flags.AutoOrb = Value; if Value and ShareHatchesEvent then task.spawn(function() while Flags.AutoOrb do local ids,p={},{} for _,o in ipairs(Workspace.Orbs:GetChildren()) do if o:GetAttribute("CanCollect") then table.insert(ids,o.Name); table.insert(p,o) end end; if #ids>0 then pcall(function() ShareHatchesEvent:FireServer("ClaimOrb", "j\000\000\000" .. (#ids==1 and "(" or "O") .. HttpService:JSONEncode(ids)) end); for _,v in ipairs(p) do pcall(function() v:Destroy() end) end end; task.wait(isPremium and 0.1 or 0.5) end end) end end})
+FarmTab:CreateToggle({Name = "Auto Ticket", CurrentValue = false, Flag = "AutoTicket", Callback = function(Value) Flags.AutoTicket = Value; if Value then task.spawn(function() local t=Workspace:WaitForChild("Scripted"):WaitForChild("WealthClock"):WaitForChild("Touch"); local ic=t:WaitForChild("InteractCallback"); while Flags.AutoTicket do pcall(function() ic:FireServer(t) end); task.wait(1.1) end end) end end})
 
 FarmTab:CreateSection("Smart Merchant")
+FarmTab:CreateToggle({Name = "Auto Buy Merchant", CurrentValue = false, Flag = "AutoMerchant", Callback = function(Value) Flags.AutoMerchant = Value; if Value and RemoteFunctionEvent then task.spawn(function() while Flags.AutoMerchant do local s,st=pcall(function() return RemoteFunctionEvent:InvokeServer("Merchant_GetState") end); if s and st and st.Active then for i=1,3 do local sl=st.Slots[i]; if sl and (sl.Left or 0)>0 then local b=false; if i==1 and Flags.BuyTier1 then b=true end; if i==2 and Flags.BuyTier2 then b=true end; if i==3 and Flags.BuyTier3 then b=true end; if b then pcall(function() RemoteFunctionEvent:InvokeServer("Merchant_Buy", i) end) end end end end; task.wait(2) end end) end end})
+FarmTab:CreateToggle({Name = "Buy Tier 1 (Low)", CurrentValue = false, Callback = function(Val) Flags.BuyTier1 = Val end})
+FarmTab:CreateToggle({Name = "Buy Tier 2 (Mid)", CurrentValue = true, Callback = function(Val) Flags.BuyTier2 = Val end})
+FarmTab:CreateToggle({Name = "Buy Tier 3 (High)", CurrentValue = true, Callback = function(Val) Flags.BuyTier3 = Val end})
 
-FarmTab:CreateToggle({
-    Name = "Auto Buy (Enable Logic)",
-    CurrentValue = false,
-    Flag = "AutoMerchant",
-    Callback = function(Value)
-        Flags.AutoMerchant = Value
-        if Value and RemoteFunctionEvent then
-            task.spawn(function()
-                while Flags.AutoMerchant do
-                    local s, state = pcall(function() return RemoteFunctionEvent:InvokeServer("Merchant_GetState") end)
-                    if s and state and state.Active then
-                        for i = 1, 3 do
-                            local slot = state.Slots[i]
-                            if slot and (slot.Left or 0) > 0 then
-                                -- SlenderHub Logic
-                                local shouldBuy = false
-                                if i == 1 and Flags.BuyTier1 then shouldBuy = true end 
-                                if i == 2 and Flags.BuyTier2 then shouldBuy = true end 
-                                if i == 3 and Flags.BuyTier3 then shouldBuy = true end 
-                                
-                                if shouldBuy then
-                                    pcall(function() RemoteFunctionEvent:InvokeServer("Merchant_Buy", i) end)
-                                end
-                            end
-                        end
-                    end
-                    task.wait(2)
-                end
-            end)
-        end
-    end,
-})
-
-FarmTab:CreateToggle({
-    Name = "Buy Tier 1 (Fruits/Potions)",
-    CurrentValue = false,
-    Callback = function(Val) Flags.BuyTier1 = Val end
-})
-
-FarmTab:CreateToggle({
-    Name = "Buy Tier 2 (Royal Jelly)",
-    CurrentValue = true,
-    Callback = function(Val) Flags.BuyTier2 = Val end
-})
-
-FarmTab:CreateToggle({
-    Name = "Buy Tier 3 (Moon Orb/Mythic Jelly)",
-    CurrentValue = true,
-    Callback = function(Val) Flags.BuyTier3 = Val end
-})
-
--- [ 5. TAB: EGGS ] --
-
+-- [ 7. EGGS TAB ] --
 local EGG_CODES = {
     ["Basics Triple"]   = "s\000\000\000\005Basics\000\000\000\006Triple",
     ["Twinkles Triple"] = "s\000\000\000\aTwinkles\000\000\000\006Triple",
@@ -270,73 +147,46 @@ local EGG_CODES = {
     ["Brainrots Triple"]= "s\000\000\000\bBrainrots\000\000\000\006Triple",
     ["100ks Triple"]    = "s\000\000\000\004100ks\000\000\000\006Triple"
 }
+local options = {} for k,_ in pairs(EGG_CODES) do table.insert(options, k) end; table.sort(options); SelectedEggCode = EGG_CODES[options[1]]
+EggTab:CreateDropdown({Name = "Select Egg", Options = options, CurrentOption = {options[1]}, Callback = function(opt) SelectedEggCode = EGG_CODES[opt[1]] end})
+local hatchTitle = isPremium and "Auto Hatch (TURBO MODE 🔥)" or "Auto Hatch (0.8s Delay)"
+EggTab:CreateToggle({Name = hatchTitle, CurrentValue = false, Flag = "AutoHatch", Callback = function(Value) Flags.AutoHatch = Value; if Value then task.spawn(function() while Flags.AutoHatch do if SelectedEggCode then task.spawn(function() local s,r=pcall(function() return RemoteFunctionEvent:InvokeServer("Hatch", SelectedEggCode) end); if s and r and EggDataFuncs then local l={}; if r.petId then table.insert(l,r) else for _,v in pairs(r) do if type(v)=="table" and v.petId then table.insert(l,v) end end end; for _,i in ipairs(l) do local d=EggDataFuncs.getIDData(i.petId); if d and tonumber(d.rarity)>=MIN_RARITY_TO_PING then SendDiscordMessage(d.name, tonumber(d.rarity), d.imageId) end end end end) end; task.wait(isPremium and Flags.HatchDelay or 0.8) end end) end end})
+if isPremium then EggTab:CreateSlider({Name = "Hatch Delay (0 = Max)", Range = {0, 1}, Increment = 0.01, Suffix = "s", CurrentValue = 0, Flag = "HatchSpeed", Callback = function(Value) Flags.HatchDelay = Value end}) end
 
-local options = {}
-for k,_ in pairs(EGG_CODES) do table.insert(options, k) end
-table.sort(options)
-SelectedEggCode = EGG_CODES[options[1]]
+-- [ 8. PREMIUM TAB ] --
+if isPremium then
+    PremiumTab:CreateSection("Premium Activated")
+    PremiumTab:CreateLabel("✅ Lifetime/Monthly Access")
+    PremiumTab:CreateParagraph({Title = "Benefits", Content = "- 0 Delay Auto Click\n- 0 Delay Auto Hatch\n- Faster Farm"})
+else
+    PremiumTab:CreateSection("Access Locked")
+    PremiumTab:CreateParagraph({Title = "Premium Only", Content = "Unlock INSANE speeds and remove limits!"})
+    PremiumTab:CreateButton({Name = "Copy Store Link", Callback = function() setclipboard("https://discord.gg/JeJTsFgc") end})
+end
 
-EggTab:CreateDropdown({
-    Name = "Select Egg (Triple Hatch)",
-    Options = options,
-    CurrentOption = {options[1]},
-    Callback = function(opt) SelectedEggCode = EGG_CODES[opt[1]] end
-})
+-- [ 9. MISC TAB ] --
+MiscTab:CreateSection("Free Rewards")
+MiscTab:CreateToggle({Name = "Auto Spin Wheel", CurrentValue = false, Flag = "AutoSpin", Callback = function(Value) Flags.AutoSpin = Value; if Value then task.spawn(function() while Flags.AutoSpin do pcall(function() RemoteFunctionEvent:InvokeServer("SpinRequest", "n?\240\000\000\000\000\000\000") end); task.wait(5) end end) end end})
+MiscTab:CreateToggle({Name = "Auto Daily Rewards", CurrentValue = false, Flag = "AutoReward", Callback = function(Value) Flags.AutoReward = Value; if Value then task.spawn(function() while Flags.AutoReward do for i=1,12 do local p=(i<10) and "\a" or "\b"; pcall(function() ShareHatchesEvent:FireServer("CollectDailyReward", "s\000\000\000"..p.."Reward"..i) end); task.wait(0.5) end; task.wait(60) end end) end end})
 
-EggTab:CreateToggle({
-    Name = "Auto Hatch (Turbo)",
-    CurrentValue = false,
-    Flag = "AutoHatch",
-    Callback = function(Value)
-        Flags.AutoHatch = Value
-        if Value and RemoteFunctionEvent then
-            task.spawn(function()
-                while Flags.AutoHatch do
-                    if SelectedEggCode then
-                        task.spawn(function()
-                            local s, r = pcall(function() return RemoteFunctionEvent:InvokeServer("Hatch", SelectedEggCode) end)
-                            if s and r and EggDataFuncs then
-                                local list = {}
-                                if r.petId then table.insert(list, r) end
-                                for _,v in pairs(r) do if type(v)=="table" and v.petId then table.insert(list, v) end end
-                                for _, item in ipairs(list) do
-                                    local data = EggDataFuncs.getIDData(item.petId)
-                                    if data and data.rarity and tonumber(data.rarity) >= MIN_RARITY_TO_PING then
-                                        SendDiscordMessage(data.name, tonumber(data.rarity), data.imageId)
-                                    end
-                                end
-                            end
-                        end)
-                    end
-                    task.wait(Flags.HatchDelay)
-                end
-            end)
+MiscTab:CreateSection("Key System")
+MiscTab:CreateButton({
+    Name = "🔑 Reset Key / Logout",
+    Callback = function()
+        -- Deleta o arquivo de chave local
+        local fileName = "KeyData_" .. LocalPlayer.UserId .. ".json"
+        local fullPath = "SlenderHub_Universal/" .. fileName
+        
+        if isfile(fullPath) then
+            delfile(fullPath)
+            Rayfield:Notify({Title = "Success", Content = "Key reset! Rejoin game.", Duration = 5})
+        else
+            Rayfield:Notify({Title = "Info", Content = "No key found to reset.", Duration = 3})
         end
     end,
 })
 
-EggTab:CreateSlider({
-    Name = "Hatch Delay (Seconds)", Range = {0, 2}, Increment = 0.01, Suffix = "s", CurrentValue = 0.05, Flag = "HatchSpeed",
-    Callback = function(Value) Flags.HatchDelay = Value end
-})
+MiscTab:CreateSection("Util")
+MiscTab:CreateToggle({Name = "Anti AFK", CurrentValue = false, Flag = "AntiAFK", Callback = function(Value) Flags.AntiAFK = Value; if Value then task.spawn(function() while Flags.AntiAFK do VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()); task.wait(60) end end) end end})
 
--- [ 6. TAB: MISC ] --
-MiscTab:CreateToggle({
-    Name = "Anti AFK",
-    CurrentValue = false,
-    Flag = "AntiAFK",
-    Callback = function(Value)
-        Flags.AntiAFK = Value
-        if Value then
-            task.spawn(function()
-                while Flags.AntiAFK do
-                    VirtualUser:CaptureController()
-                    VirtualUser:ClickButton2(Vector2.new())
-                    task.wait(60)
-                end
-            end)
-        end
-    end,
-})
-
-Rayfield:Notify({Title = "SlenderHub Loaded", Content = "Welcome back, User!", Duration = 3})
+Rayfield:Notify({Title = "SlenderHub", Content = "Welcome " .. AccessLevel .. " User!", Duration = 5})
