@@ -1,6 +1,6 @@
 --!strict
--- SlenderHub - Bee Tappers V18 (FINAL PREMIUM)
--- Features: Key System Integration + Reset Key + Premium Logic + Bypass V3
+-- SlenderHub - Bee Tappers V19 (OFFICIAL RELEASE)
+-- Features: Universal Key System + Premium Shop + Bypass V3 + Smart Features
 
 -- [ 1. VERIFICAÇÃO DE ACESSO ] --
 local AccessLevel = getgenv().SlenderHubAccessLevel or "Free"
@@ -161,7 +161,13 @@ if isPremium then
 else
     PremiumTab:CreateSection("Access Locked")
     PremiumTab:CreateParagraph({Title = "Premium Only", Content = "Unlock INSANE speeds and remove limits!"})
-    PremiumTab:CreateButton({Name = "Copy Store Link", Callback = function() setclipboard("https://discord.gg/JeJTsFgc") end})
+    PremiumTab:CreateButton({
+        Name = "Copy Store Link",
+        Callback = function() 
+            setclipboard("https://www.slenderhub.shop/") 
+            Rayfield:Notify({Title = "Copied", Content = "Link copied to clipboard", Duration = 2})
+        end
+    })
 end
 
 -- [ 9. MISC TAB ] --
@@ -173,10 +179,8 @@ MiscTab:CreateSection("Key System")
 MiscTab:CreateButton({
     Name = "🔑 Reset Key / Logout",
     Callback = function()
-        -- Deleta o arquivo de chave local
         local fileName = "KeyData_" .. LocalPlayer.UserId .. ".json"
         local fullPath = "SlenderHub_Universal/" .. fileName
-        
         if isfile(fullPath) then
             delfile(fullPath)
             Rayfield:Notify({Title = "Success", Content = "Key reset! Rejoin game.", Duration = 5})
