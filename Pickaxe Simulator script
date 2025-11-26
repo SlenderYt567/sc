@@ -1,258 +1,277 @@
---!strict
 --[[
-    SlenderHub - Pickaxe Simulator Global (FULL VERSION)
-    Version: 15.0
-    Security: Tier System Ready (Free/Premium)
-    All Tabs Restored: Farming, Eggs, Pets, Upgrades
+    SlenderHub - Pickaxe Simulator [Integrated Edition]
+    Version: 22.0
+    Type: Logic based on getgenv().SlenderHubAccessLevel
+    Credits: SlenderHub Team
 ]]
 
---//==============================[ 1. SISTEMA DE TIER ]==============================//--
-local UserTier = "Free" -- Padrão
-
--- Verifica se o Loader enviou o nível de acesso
-if getgenv and getgenv().SlenderHubAccessLevel then
-    UserTier = getgenv().SlenderHubAccessLevel
-elseif _G.SlenderHubAccessLevel then
-    UserTier = _G.SlenderHubAccessLevel
-end
-
-print("👑 SlenderHub: Usuário carregado como " .. UserTier)
-
---//==============================[ 2. SERVIÇOS E VARIÁVEIS ]==============================//--
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
-local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 local RemotesFolder = ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes")
 local RemoteEvent = RemotesFolder:WaitForChild("__remoteevent")
 local RemoteFunction = RemotesFolder:WaitForChild("__remotefunction")
 
---//==============================[ 3. FLAGS (CONFIGURAÇÕES) ]==============================//--
-local Flags = {
-    AutoMine = false,
-    AutoTrain = false,
-    AutoEgg = false,
-    SelectedEgg = "Basic Egg",
-    AutoCraftGold = false,
-    AutoCraftRainbow = false,
-    AutoUpgrade = false,
-    SelectedUpgrade = "More Damage",
-    AutoRebirth = false,
-    RebirthAmount = 1
+-- [ 1. VERIFICAÇÃO DE ACESSO (INTEGRADO AO SEU LOADER) ] --
+-- O script apenas lê a variável global definida pelo seu Key System anterior
+local AccessLevel = getgenv().SlenderHubAccessLevel or "Free"
+local isPremium = (AccessLevel == "Premium")
+
+-- [ 2. CONFIGURAÇÃO DE VELOCIDADE (Delays) ] --
+local Delays = {
+    Mine = isPremium and 0.0 or 0.25,      -- Premium: Instantâneo | Free: 0.25s
+    Train = isPremium and 0.5 or 2.5,      -- Premium: 0.5s | Free: 2.5s
+    Egg = isPremium and 0.05 or 1.5,       -- Premium: Turbo | Free: 1.5s
+    Craft = isPremium and 0.1 or 1.0       -- Premium: Rápido | Free: Normal
 }
 
--- Listas de Itens do Jogo
-local UpgradeList = {
-    "More Gems", "More Rebirths", "More Coins", "More Damage",
-    "Egg Luck", "Hatch Speed", "Pets Equipped", "Inventory Space",
-    "Golden Chance", "Rainbow Chance", "Walk Speed"
+-- [ 3. VARIÁVEIS GERAIS ] --
+local Flags = {
+    AutoMine = false, TPMine = false, AutoSell = false,
+    AutoEgg = false, AutoTrain = false, AutoUpgrade = false,
+    AutoCraftGold = false, AutoCraftRainbow = false, AutoRebirth = false,
+    TargetUpgrade = "More Damage", RebirthAmount = "1"
 }
+
+local EggSettings = { SelectedEgg = "Basic Egg", Amount = "Max" }
 
 local EggList = {
-    "Basic Egg", "Rare Egg", "Forest Egg", "Black Hole Egg", "UFO Egg", 
-    "Garden Egg", "Sand Egg", "Snow Egg", "Lava Egg", "Sunny Egg", 
-    "Cave Egg", "Sakura Egg", "Beach Egg", "Aqua Egg", "Music Egg", 
-    "Rocket Egg", "Aura Egg"
+    "Basic Egg", "Rare Egg", "Forest Egg", "Black Hole Egg", "UFO Egg", "Garden Egg",
+    "Sand Egg", "Snow Egg", "Lava Egg", "Sunny Egg", "Cave Egg", "Sakura Egg",
+    "Beach Egg", "Aqua Egg", "Music Egg", "Rocket Egg", "Aura Egg"
 }
 
-local RebirthTable = {
-    1, 5, 20, 50, 100, 250, 500, 1000, 2500, 5000, 
-    10000, 25000, 50000, 100000, 250000, 500000, "Max"
-}
-local RebirthDropdown = {}
-for _, v in pairs(RebirthTable) do table.insert(RebirthDropdown, tostring(v)) end
-
---//==============================[ 4. UI LIBRARY ]==============================//--
+-- [ 4. UI LIBRARY (SAFE LOAD) ] --
 local Success, Rayfield = pcall(function()
     return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 end)
+if not Success then
+    Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Rayfield/main/source'))()
+end
+
+local WindowName = isPremium and "SlenderHub | 💎 PREMIUM" or "SlenderHub | Free Version"
 
 local Window = Rayfield:CreateWindow({
-    Name = "SlenderHub | Pickaxe Sim [" .. UserTier .. "]", 
-    LoadingTitle = "Slender Hub V15",
-    LoadingSubtitle = "Full Version Loaded",
-    ConfigurationSaving = { Enabled = true, FolderName = "SlenderHubV15", FileName = "ConfigFull" },
-    KeySystem = false, -- Key System é externo (Loader)
+    Name = WindowName,
+    LoadingTitle = "SlenderHub V22",
+    LoadingSubtitle = "Access Level: " .. AccessLevel,
+    ConfigurationSaving = { Enabled = true, FolderName = "SlenderHubV22", FileName = "PickaxeConfig" },
+    KeySystem = false -- Desativado pois seu Loader já fez isso
 })
 
---//==============================[ 5. FUNÇÕES DE LÓGICA ]==============================//--
--- Função para verificar se a feature é Premium (Use no futuro)
-local function IsPremium()
-    if UserTier == "Premium" then return true end
-    Rayfield:Notify({Title = "Premium Only", Content = "Esta função será exclusiva Premium em breve!", Duration = 3})
-    return true -- Por enquanto retorna TRUE para deixar todos usarem
-end
+-- ==================== TAB: FARM ====================
+local TabFarm = Window:CreateTab("Farm", 4483362458)
 
--- Lógica de Crafting (Simplificada para funcionar)
-local function CraftPets(action)
-    local args = {"Pet", {["Action"] = action}}
-    -- Tenta disparar o evento, se existir
-    pcall(function() RemoteFunction:InvokeServer(unpack(args)) end)
-end
+TabFarm:CreateSection("Mining")
 
---//==============================[ 6. CRIAÇÃO DAS ABAS ]==============================//--
-
--- ========== ABA 1: FARMING ========== --
-local FarmTab = Window:CreateTab("Farming", 4483345998)
-
-FarmTab:CreateSection("Auto Farm")
-
-FarmTab:CreateToggle({
-    Name = "Auto Mine",
+local MineTitle = isPremium and "Auto Mine (TURBO ⚡)" or "Auto Mine (Normal)"
+TabFarm:CreateToggle({
+    Name = MineTitle,
     CurrentValue = false,
     Flag = "AutoMine",
     Callback = function(Value)
         Flags.AutoMine = Value
-        task.spawn(function()
-            while Flags.AutoMine do
-                task.wait(0.1)
-                pcall(function() RemoteEvent:FireServer("Mine", {}) end)
-            end
-        end)
+        pcall(function() RemoteEvent:FireServer("Toggle Setting", "AutoMine") end)
+        if Value then
+            task.spawn(function()
+                while Flags.AutoMine do
+                    local vp = Workspace.CurrentCamera.ViewportSize
+                    VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, true, game, 1)
+                    VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, false, game, 1)
+                    task.wait(Delays.Mine) -- Usa o delay baseado no acesso
+                end
+            end)
+        end
     end,
 })
 
-FarmTab:CreateToggle({
-    Name = "Auto Train (Click)",
+TabFarm:CreateToggle({
+    Name = "TP Mine (Void Mode)",
+    CurrentValue = false,
+    Flag = "TPMine",
+    Callback = function(Value)
+        Flags.TPMine = Value
+        if Value then
+            task.spawn(function()
+                while Flags.TPMine do
+                    pcall(function()
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            local hrp = LocalPlayer.Character.HumanoidRootPart
+                            local closestOre, minDist = nil, 999
+                            for _, ore in pairs(Workspace.Mine:GetChildren()) do
+                                if ore:IsA("Model") then
+                                    local orePos = ore:GetPivot().Position
+                                    local dist = (orePos - hrp.Position).Magnitude
+                                    if dist < 50 and orePos.Y < hrp.Position.Y then
+                                        if dist < minDist then minDist = dist; closestOre = ore end
+                                    end
+                                end
+                            end
+                            if closestOre then hrp.CFrame = closestOre:GetPivot() + Vector3.new(0, 6, 0) end
+                        end
+                    end)
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end,
+})
+
+TabFarm:CreateSection("Training")
+local TrainTitle = isPremium and "Auto Train (TURBO 🔥)" or "Auto Train (Normal)"
+TabFarm:CreateToggle({
+    Name = TrainTitle,
     CurrentValue = false,
     Flag = "AutoTrain",
     Callback = function(Value)
         Flags.AutoTrain = Value
-        task.spawn(function()
-            while Flags.AutoTrain do
-                task.wait()
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton1(Vector2.new(9999,9999))
-            end
-        end)
+        if Value then
+            task.spawn(function()
+                while Flags.AutoTrain do
+                    pcall(function() RemoteEvent:FireServer("Toggle Setting", "AutoTrain") end)
+                    task.wait(Delays.Train)
+                end
+            end)
+        end
     end,
 })
 
-FarmTab:CreateSection("Rebirth")
+-- ==================== TAB: EGGS ====================
+local TabEgg = Window:CreateTab("Eggs", 4483362458)
 
-FarmTab:CreateDropdown({
-    Name = "Select Rebirth Amount",
-    Options = RebirthDropdown,
-    CurrentOption = {"1"},
-    Callback = function(Option)
-        if Option[1] == "Max" then Flags.RebirthAmount = "Max" 
-        else Flags.RebirthAmount = tonumber(Option[1]) end
-    end,
-})
-
-FarmTab:CreateToggle({
-    Name = "Auto Rebirth",
-    CurrentValue = false,
-    Flag = "AutoRebirth",
-    Callback = function(Value)
-        Flags.AutoRebirth = Value
-        task.spawn(function()
-            while Flags.AutoRebirth do
-                task.wait(2)
-                pcall(function() RemoteEvent:FireServer("Rebirth", {Amount = Flags.RebirthAmount}) end)
-            end
-        end)
-    end,
-})
-
--- ========== ABA 2: EGGS ========== --
-local EggTab = Window:CreateTab("Eggs", 4483345998)
-
-EggTab:CreateSection("Hatching")
-
-EggTab:CreateDropdown({
+TabEgg:CreateSection("Settings")
+TabEgg:CreateDropdown({
     Name = "Select Egg",
     Options = EggList,
     CurrentOption = {"Basic Egg"},
-    Callback = function(Option)
-        Flags.SelectedEgg = Option[1]
-    end,
+    Callback = function(Option) EggSettings.SelectedEgg = Option[1] end,
 })
 
-EggTab:CreateToggle({
-    Name = "Auto Hatch Egg",
+TabEgg:CreateDropdown({
+    Name = "Amount",
+    Options = {"1", "3", "6", "12", "Max"},
+    CurrentOption = {"Max"},
+    Callback = function(Option) EggSettings.Amount = Option[1] end,
+})
+
+local EggTitle = isPremium and "Auto Open (INSTANT 🥚)" or "Auto Open (Slow)"
+TabEgg:CreateToggle({
+    Name = EggTitle,
     CurrentValue = false,
     Flag = "AutoEgg",
     Callback = function(Value)
         Flags.AutoEgg = Value
-        task.spawn(function()
-            while Flags.AutoEgg do
-                task.wait(0.1)
-                pcall(function() RemoteEvent:FireServer("Egg", {["Action"] = "Open", ["Egg"] = Flags.SelectedEgg, ["Amount"] = 1}) end)
-            end
-        end)
+        if Value then
+            task.spawn(function()
+                while Flags.AutoEgg do
+                    local args = {"Hatch Egg", EggSettings.SelectedEgg, EggSettings.Amount}
+                    pcall(function() RemoteFunction:InvokeServer(unpack(args)) end)
+                    task.wait(Delays.Egg)
+                end
+            end)
+        end
     end,
 })
 
--- ========== ABA 3: PETS ========== --
-local PetTab = Window:CreateTab("Pets", 4483345998)
+TabEgg:CreateButton({
+    Name = "Delete Egg Models (FPS Boost)",
+    Callback = function()
+        if Workspace:FindFirstChild("Eggs") then
+            for _, egg in pairs(Workspace.Eggs:GetChildren()) do egg:Destroy() end
+            Rayfield:Notify({Title = "Success", Content = "Egg Models Removed", Duration = 3})
+        end
+    end,
+})
 
-PetTab:CreateSection("Crafting")
+-- ==================== TAB: PETS ====================
+local TabPets = Window:CreateTab("Pets", 4483362458)
+TabPets:CreateSection("Auto Craft (100% Success)")
 
-PetTab:CreateToggle({
-    Name = "Auto Craft Gold",
+local function CraftPets(action, targetTier)
+    local petsFolder = LocalPlayer:FindFirstChild("Stats") and LocalPlayer.Stats:FindFirstChild("Pets")
+    if not petsFolder then return end
+
+    local groupedPets = {}
+    for _, pet in pairs(petsFolder:GetChildren()) do
+        local pName = pet:GetAttribute("PetName")
+        local pTier = pet:GetAttribute("Tier")
+        if pName and pTier == targetTier and not pet:GetAttribute("Locked") then
+            if not groupedPets[pName] then groupedPets[pName] = {} end
+            table.insert(groupedPets[pName], pet.Name)
+        end
+    end
+
+    for petName, uuidList in pairs(groupedPets) do
+        while #uuidList >= 8 do
+            local batch = {}
+            for i = 1, 8 do table.insert(batch, table.remove(uuidList)) end
+            local args = {"Pet", {Action = action, Pets = batch}}
+            pcall(function() RemoteFunction:InvokeServer(unpack(args)) end)
+            task.wait(Delays.Craft)
+        end
+    end
+end
+
+TabPets:CreateToggle({
+    Name = "Auto Craft Golden",
     CurrentValue = false,
     Callback = function(Value)
         Flags.AutoCraftGold = Value
-        task.spawn(function()
-            while Flags.AutoCraftGold do
-                task.wait(1)
-                CraftPets("Gold") -- Chama a função lógica
-            end
-        end)
+        if Value then
+            task.spawn(function()
+                while Flags.AutoCraftGold do CraftPets("CraftGolden", 1); task.wait(2) end
+            end)
+        end
     end,
 })
 
-PetTab:CreateToggle({
+TabPets:CreateToggle({
     Name = "Auto Craft Rainbow",
     CurrentValue = false,
     Callback = function(Value)
         Flags.AutoCraftRainbow = Value
-        task.spawn(function()
-            while Flags.AutoCraftRainbow do
-                task.wait(1)
-                CraftPets("Rainbow")
-            end
-        end)
+        if Value then
+            task.spawn(function()
+                while Flags.AutoCraftRainbow do CraftPets("CraftRainbow", 2); task.wait(2) end
+            end)
+        end
     end,
 })
 
--- ========== ABA 4: UPGRADES ========== --
-local UpgTab = Window:CreateTab("Upgrades", 4483345998)
+-- ==================== TAB: PREMIUM INFO ====================
+local TabPremium = Window:CreateTab("Info", 4483362458)
 
-UpgTab:CreateDropdown({
-    Name = "Select Upgrade",
-    Options = UpgradeList,
-    CurrentOption = {"More Damage"},
-    Callback = function(Option)
-        Flags.SelectedUpgrade = Option[1]
+if isPremium then
+    TabPremium:CreateSection("Account Status: PREMIUM ✅")
+    TabPremium:CreateParagraph({Title = "Active Benefits", Content = "• 0 Delay Mining\n• 0 Delay Hatching\n• Turbo Train"})
+else
+    TabPremium:CreateSection("Account Status: FREE ❌")
+    TabPremium:CreateParagraph({Title = "Limited Version", Content = "You are experiencing limited speeds.\nUpgrade to Premium for Instant actions."})
+end
+
+-- ==================== TAB: MISC ====================
+local TabMisc = Window:CreateTab("Misc", 4483362458)
+TabMisc:CreateButton({
+    Name = "Clean Map (FPS Boost)",
+    Callback = function()
+        local folders = {"ExclusiveStands", "Passes", "Confetti"}
+        for _, f in pairs(folders) do if Workspace:FindFirstChild(f) then Workspace[f]:Destroy() end end
+        Rayfield:Notify({Title = "Cleaned", Content = "Map objects removed.", Duration = 3})
     end,
 })
+TabMisc:CreateButton({Name = "Destroy UI", Callback = function() Rayfield:Destroy() end})
 
-UpgTab:CreateToggle({
-    Name = "Auto Buy Upgrade",
-    CurrentValue = false,
-    Callback = function(Value)
-        Flags.AutoUpgrade = Value
-        task.spawn(function()
-            while Flags.AutoUpgrade do
-                task.wait(0.5)
-                pcall(function() RemoteEvent:FireServer("Upgrade", {["Action"] = "Buy", ["Name"] = Flags.SelectedUpgrade}) end)
-            end
-        end)
-    end,
-})
-
--- ========== ABA 5: CREDITS ========== --
-local CreditTab = Window:CreateTab("Info", 4483345998)
-CreditTab:CreateLabel("Dev: SlenderHub Team")
-CreditTab:CreateLabel("Your Tier: " .. UserTier)
+-- Anti-AFK
+LocalPlayer.Idled:Connect(function() VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end)
 
 Rayfield:Notify({
-    Title = "Script Loaded",
-    Content = "All functions loaded successfully!",
+    Title = "SlenderHub Loaded",
+    Content = "Access Level: " .. AccessLevel,
     Duration = 5,
+    Image = 4483362458,
 })
