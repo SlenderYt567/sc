@@ -21,6 +21,7 @@ local Lighting = game:GetService("Lighting")
 local LocalPlayer = Players.LocalPlayer
 
 -- // 2. KNIT FRAMEWORK & REMOTES //
+-- Tries to locate Knit. If the game updates paths, script won't crash immediately.
 local KnitPackage = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Packages"):WaitForChild("Knit")
 local Knit = require(KnitPackage)
 local CharacterService = Knit.GetService("CharacterService")
@@ -65,10 +66,10 @@ local RareOres = {
 
 -- // 5. SLENDERHUB USER INTERFACE //
 local Window = Rayfield:CreateWindow({
-   Name = "The Force | SlenderHub Ultimate",
+   Name = "The Forge | SlenderHub Ultimate", -- Name Updated
    LoadingTitle = "SlenderHub",
    LoadingSubtitle = "Injecting Systems...",
-   ConfigurationSaving = { Enabled = true, FileName = "SlenderHub_TheForce" },
+   ConfigurationSaving = { Enabled = true, FileName = "SlenderHub_TheForge" },
    KeySystem = false,
 })
 
@@ -162,32 +163,31 @@ task.spawn(function()
                 -- 1. Equip Pickaxe
                 local pick = char:FindFirstChild("Pickaxe")
                 if not pick then
-                    local bp = LocalPlayer.Backpack:FindFirstChild("Pickaxe")
-                    if bp then bp.Parent = char pick = bp end
+                    local bpPick = LocalPlayer.Backpack:FindFirstChild("Pickaxe")
+                    if bpPick then bpPick.Parent = char pick = bpPick end
                 end
 
                 if pick then
-                    -- 2. Find Rock
+                    -- 2. Find Target
                     local target = GetTarget(Workspace, Flags.MineRange, false)
 
                     if target then
                         local root = target.PrimaryPart or target:FindFirstChild("Part") or target:FindFirstChild("HumanoidRootPart")
-                        
-                        -- 3. Look at Target (Server Check)
-                        char.HumanoidRootPart.CFrame = CFrame.lookAt(
-                            char.HumanoidRootPart.Position, 
-                            Vector3.new(root.Position.X, char.HumanoidRootPart.Position.Y, root.Position.Z)
-                        )
-                        
-                        -- 4. Action (Hybrid Method)
-                        pick:Activate() -- Simulates real click (Animation + Client Logic)
-                        
-                        -- Backup: Direct Remote
-                        task.spawn(function()
-                            ToolRemote:InvokeServer("Pickaxe")
-                        end)
-                        
-                        task.wait(0.4) -- Delay to fix animation glitch
+                        if root then
+                            -- 3. Look At (Server Validation Fix)
+                            char.HumanoidRootPart.CFrame = CFrame.lookAt(
+                                char.HumanoidRootPart.Position, 
+                                Vector3.new(root.Position.X, char.HumanoidRootPart.Position.Y, root.Position.Z)
+                            )
+                            
+                            -- 4. Activate Tool (Simulate Click)
+                            pick:Activate()
+                            
+                            -- 5. Invoke Server (Backup)
+                            task.spawn(function()
+                                ToolRemote:InvokeServer("Pickaxe")
+                            end)
+                        end
                     end
                 end
             end)
@@ -195,81 +195,76 @@ task.spawn(function()
     end
 end)
 
--- Auto Loot Loop
-task.spawn(function()
-    while true do
-        task.wait(0.5)
-        if Flags.AutoLoot and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            pcall(function()
-                -- Find drops in Workspace and Debris
-                local targets = {}
-                for _,v in pairs(Workspace:GetChildren()) do table.insert(targets, v) end
-                if Workspace:FindFirstChild("Debris") then
-                    for _,v in pairs(Workspace.Debris:GetChildren()) do table.insert(targets, v) end
-                end
-
-                for _, v in pairs(targets) do
-                    -- Check TouchInterest (Drop characteristic)
-                    if v:IsA("BasePart") and v:FindFirstChild("TouchInterest") and v.Name ~= "Baseplate" and v.Name ~= "Terrain" then
-                        v.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
-                    elseif v:IsA("Model") and v.PrimaryPart and v.Name == "Drop" then
-                        v.PrimaryPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
-                    end
-                end
-            end)
-        end
-    end
-end)
-
--- // --- COMBAT TAB (KILL AURA) --- //
+-- // --- COMBAT TAB --- //
 
 CombatTab:CreateSection("Combat Automation")
 
 CombatTab:CreateToggle({
-   Name = "Kill Aura",
+   Name = "Auto Kill Aura",
    CurrentValue = false,
    Callback = function(Value)
         Flags.AutoKill = Value
    end,
 })
 
-CombatTab:CreateDropdown({
-   Name = "Attack Type",
-   Options = {"Light (Fast)", "Heavy (Strong)"},
-   CurrentOption = {"Light (Fast)"},
-   Callback = function(Option)
-        Flags.AttackMode = Option
+CombatTab:CreateSlider({
+   Name = "Kill Range",
+   Range = {5, 30},
+   Increment = 1,
+   CurrentValue = 20,
+   Callback = function(Value)
+        Flags.KillRange = Value
    end,
 })
+
+CombatTab:CreateDropdown({
+    Name = "Attack Mode",
+    Options = {"Light", "Heavy"},
+    CurrentOption = {"Light"},
+    Callback = function(Option)
+         Flags.AttackMode = Option
+    end,
+ })
 
 -- Combat Loop
 task.spawn(function()
     while true do
-        task.wait(0.12)
+        task.wait()
         if Flags.AutoKill then
             pcall(function()
                 local char = LocalPlayer.Character
                 if not char then return end
-                
+
+                -- Equip Weapon
                 local weapon = char:FindFirstChild("Weapon")
                 if not weapon then
-                    local bp = LocalPlayer.Backpack:FindFirstChild("Weapon")
-                    if bp then bp.Parent = char weapon = bp end
+                    local bpWeapon = LocalPlayer.Backpack:FindFirstChild("Weapon")
+                    if bpWeapon then bpWeapon.Parent = char weapon = bpWeapon end
                 end
 
                 if weapon then
-                    local folder = Workspace:FindFirstChild("Living") or Workspace
-                    local target = GetTarget(folder, Flags.KillRange, true)
+                    -- Find Mob
+                    local mobsFolder = Workspace:FindFirstChild("Living") or Workspace -- Adjust folder if needed
+                    local target = GetTarget(mobsFolder, Flags.KillRange, true)
 
                     if target then
-                        char.HumanoidRootPart.CFrame = CFrame.lookAt(char.HumanoidRootPart.Position, Vector3.new(target.HumanoidRootPart.Position.X, char.HumanoidRootPart.Position.Y, target.HumanoidRootPart.Position.Z))
-                        
-                        weapon:Activate() -- Client Action
-                        
-                        task.spawn(function() -- Server Action
-                            local isHeavy = (Flags.AttackMode == "Heavy (Strong)")
-                            ToolRemote:InvokeServer("Weapon", isHeavy)
-                        end)
+                        local root = target:FindFirstChild("HumanoidRootPart")
+                        if root then
+                            -- Look At
+                            char.HumanoidRootPart.CFrame = CFrame.lookAt(
+                                char.HumanoidRootPart.Position, 
+                                Vector3.new(root.Position.X, char.HumanoidRootPart.Position.Y, root.Position.Z)
+                            )
+                            
+                            -- Attack
+                            weapon:Activate()
+                            
+                            -- Server Backup
+                            task.spawn(function()
+                                local arg = (Flags.AttackMode == "Heavy")
+                                ToolRemote:InvokeServer("Weapon", arg)
+                            end)
+                        end
                     end
                 end
             end)
@@ -279,10 +274,10 @@ end)
 
 -- // --- QUEST TAB --- //
 
-QuestTab:CreateSection("Teleport & Interaction")
+QuestTab:CreateSection("Story Automation")
 
 QuestTab:CreateDropdown({
-   Name = "Select NPC",
+   Name = "Select Quest NPC",
    Options = QuestNPCs,
    CurrentOption = {"Sensei Moro"},
    Callback = function(Option)
@@ -291,13 +286,14 @@ QuestTab:CreateDropdown({
 })
 
 QuestTab:CreateToggle({
-   Name = "Auto Interact (TP)",
+   Name = "Auto Interact (TP & Talk)",
    CurrentValue = false,
    Callback = function(Value)
         Flags.AutoQuest = Value
    end,
 })
 
+-- Quest Loop
 task.spawn(function()
     while true do
         task.wait(0.5)
@@ -305,15 +301,16 @@ task.spawn(function()
             pcall(function()
                 local npcFolder = Workspace:FindFirstChild("Proximity")
                 if npcFolder then
-                    local npc = npcFolder:FindFirstChild(Flags.QuestNPC)
-                    if npc then
-                        local root = npc.PrimaryPart or npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Head")
-                        if root and LocalPlayer.Character then
-                            -- TP to front of NPC
-                            LocalPlayer.Character:SetPrimaryPartCFrame(root.CFrame * CFrame.new(0, 0, -3.5))
+                    local targetNPC = npcFolder:FindFirstChild(Flags.QuestNPC)
+                    if targetNPC then
+                        local root = targetNPC.PrimaryPart or targetNPC:FindFirstChild("HumanoidRootPart") or targetNPC:FindFirstChild("Head")
+                        if root and LocalPlayer.Character and LocalPlayer.Character.PrimaryPart then
+                            -- TP
+                            LocalPlayer.Character:SetPrimaryPartCFrame(root.CFrame * CFrame.new(0, 0, -4))
                             
-                            -- Trigger Prompt
-                            local prompt = npc:FindFirstChildWhichIsA("ProximityPrompt", true)
+                            -- Interact
+                            task.wait(0.2)
+                            local prompt = targetNPC:FindFirstChildWhichIsA("ProximityPrompt", true)
                             if prompt and prompt.Enabled then
                                 fireproximityprompt(prompt)
                             end
@@ -325,150 +322,86 @@ task.spawn(function()
     end
 end)
 
--- // --- PLAYER TAB (GOD MODES) --- //
+-- // --- PLAYER TAB --- //
 
-PlayerTab:CreateSection("Advantages")
-
-PlayerTab:CreateToggle({
-    Name = "Anti-Stun / Anti-Slow",
-    CurrentValue = false,
-    Callback = function(Value)
-        Flags.AntiStun = Value
-    end
-})
+PlayerTab:CreateSection("Character Mods")
 
 PlayerTab:CreateToggle({
-    Name = "Infinite Dash (Knit)",
-    CurrentValue = false,
-    Callback = function(Value)
+   Name = "Infinite Dash (Knit Hook)",
+   CurrentValue = false,
+   Callback = function(Value)
         Flags.InfDash = Value
         if Value then
             task.spawn(function()
                 while Flags.InfDash do
-                    pcall(function() CharacterService:Dash("LookVector", '+') end)
-                    task.wait(0.2)
+                    pcall(function()
+                        CharacterService:Dash("LookVector", '+')
+                    end)
+                    task.wait(0.1)
                 end
             end)
         end
-    end
+   end,
 })
 
-PlayerTab:CreateButton({
-    Name = "TP to Roof (Lucky Blocks)",
-    Callback = function()
-        LocalPlayer.Character:SetPrimaryPartCFrame(CFrame.new(0, 650, 0))
-    end
-})
+PlayerTab:CreateToggle({
+    Name = "Anti-Stun / Anti-Slow (God Mode)",
+    CurrentValue = false,
+    Callback = function(Value)
+         Flags.AntiStun = Value
+         if Value then
+             local char = LocalPlayer.Character
+             if char then
+                 local status = char:FindFirstChild("statusFolder") or char:FindFirstChild("Status")
+                 if status then
+                     status.ChildAdded:Connect(function(child)
+                         if Flags.AntiStun and (child.Name == "Stun" or child.Name == "Slow") then
+                             task.wait()
+                             child:Destroy()
+                         end
+                     end)
+                 end
+             end
+         end
+    end,
+ })
 
--- Status Monitor (Anti-Stun)
-RunService.Stepped:Connect(function()
-    if Flags.AntiStun and LocalPlayer.Character then
-        local status = LocalPlayer.Character:FindFirstChild("Status")
-        if status then
-            for _, v in pairs(status:GetChildren()) do
-                -- Remove any movement debuffs
-                if v.Name == "Stun" or v.Name == "Slow" or v.Name == "NoMovement" or v.Name == "StaminaExhausted" then
-                    v:Destroy()
+-- Auto Loot Loop
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        if Flags.AutoLoot and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            pcall(function()
+                -- Assuming drops are BaseParts in a "Drops" folder or Workspace
+                for _, v in pairs(Workspace:GetChildren()) do
+                    if v.Name == "Drop" or v:FindFirstChild("TouchInterest") then -- Common drop patterns
+                         if v:IsA("BasePart") and (v.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude < 40 then
+                             v.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
+                         end
+                    end
                 end
-            end
+            end)
         end
     end
 end)
 
 -- // --- VISUALS TAB --- //
 
-VisualsTab:CreateSection("ESP")
+VisualsTab:CreateSection("ESP Options")
 
 VisualsTab:CreateToggle({
-    Name = "Rare Mobs ESP",
+    Name = "Fullbright (See in Dark)",
     CurrentValue = false,
     Callback = function(Value)
-        Flags.RareESP = Value
-        if not Value then
-            for _,v in pairs(Workspace:GetDescendants()) do if v.Name == "MobESP" then v:Destroy() end end
-        end
-    end
-})
-
-VisualsTab:CreateToggle({
-    Name = "Rare Ores ESP",
-    CurrentValue = false,
-    Callback = function(Value)
-        Flags.OreESP = Value
-        if not Value then
-            for _,v in pairs(Workspace:GetDescendants()) do if v.Name == "OreESP" then v:Destroy() end end
-        end
-    end
-})
-
-task.spawn(function()
-    while true do
-        task.wait(1)
-        
-        -- ESP Mobs
-        if Flags.RareESP then
-            local folder = Workspace:FindFirstChild("Living") or Workspace
-            for _, v in pairs(folder:GetChildren()) do
-                if v:FindFirstChild("Humanoid") and not v:FindFirstChild("MobESP") and v ~= LocalPlayer.Character then
-                    local isRare = false
-                    for _, r in pairs(RareMobs) do if v.Name:find(r) then isRare = true break end end
-                    
-                    if isRare then
-                        local bg = Instance.new("BillboardGui", v.Head or v.PrimaryPart)
-                        bg.Name = "MobESP"; bg.Size = UDim2.new(0,100,0,50); bg.AlwaysOnTop = true
-                        local txt = Instance.new("TextLabel", bg)
-                        txt.Size = UDim2.new(1,0,1,0); txt.BackgroundTransparency = 1; txt.TextColor3 = Color3.fromRGB(255,50,50)
-                        txt.Text = "★ " .. v.Name
-                    end
-                end
-            end
-        end
-
-        -- ESP Ores
-        if Flags.OreESP then
-            for _, v in pairs(Workspace:GetDescendants()) do
-                if v:IsA("Model") and not v:FindFirstChild("OreESP") then
-                    local isRareOre = false
-                    for _, r in pairs(RareOres) do if v.Name:find(r) then isRareOre = true break end end
-                    
-                    if isRareOre then
-                        local part = v.PrimaryPart or v:FindFirstChild("Part")
-                        if part then
-                            local bg = Instance.new("BillboardGui", part)
-                            bg.Name = "OreESP"; bg.Size = UDim2.new(0,100,0,50); bg.AlwaysOnTop = true
-                            local txt = Instance.new("TextLabel", bg)
-                            txt.Size = UDim2.new(1,0,1,0); txt.BackgroundTransparency = 1; txt.TextColor3 = Color3.fromRGB(255,215,0)
-                            txt.Text = "💎 " .. v.Name
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-
--- // --- MISC --- //
-
-VisualsTab:CreateSection("Environment")
-VisualsTab:CreateToggle({
-    Name = "Fullbright",
-    CurrentValue = false,
-    Callback = function(Value)
-        if Value then
-            Lighting.Brightness = 2; Lighting.ClockTime = 14; Lighting.GlobalShadows = false
-        else
-            Lighting.Brightness = 1; Lighting.GlobalShadows = true
-        end
-    end
-})
-
--- Admin Button
-VisualsTab:CreateButton({
-    Name = "Enable CMDR (F2)",
-    Callback = function()
-        local Cmdr = require(ReplicatedStorage.CmdrClient)
-        if Cmdr then Cmdr:SetEnabled(true) end
-    end
-})
+         if Value then
+             Lighting.Ambient = Color3.new(1, 1, 1)
+             Lighting.Brightness = 2
+             Lighting.ClockTime = 14
+         else
+             Lighting.Ambient = Color3.new(0.5, 0.5, 0.5) -- Default(ish)
+             Lighting.Brightness = 1
+         end
+    end,
+ })
 
 Rayfield:LoadConfiguration()
