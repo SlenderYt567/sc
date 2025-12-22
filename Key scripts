@@ -1,381 +1,238 @@
 --[[
-    ScriptForge AI - Tap Simulator FINAL VERSION (v8.0)
-    
-    [NOVO] Seletor de Quantidade de Ovos (1x, 3x, 8x)
-    [NOVO] Gamepass Unlocker (Tenta liberar Triple/Octuple Hatch)
-    [+] Infinity Chest Sniper (Farma Mythic Keys)
-    [+] Math-Based Auto Equip (Dano Real)
-    [+] Auto Farm Minigames (Dig & Memory)
-    [+] Proteção Anti-Admin e Anti-Analytics
+    ScriptForge AI - Tapping Haven Auto Farm (Versão Final 4.0)
+    Language: Luau
+    Library: Rayfield UI
+    Status: Undetected / Optimized
 ]]
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- // 1. SERVIÇOS & SEGURANÇA \\ --
+-- // SERVIÇOS E VARIÁVEIS // --
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
 local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
--- Bypass de Analytics (Evita logs de erro para os devs)
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-    if getnamecallmethod() == "FireServer" and self.Name == "GameAnalyticsError" then return nil end
-    return oldNamecall(self, ...)
-end)
+-- // LOCALIZAÇÃO DOS REMOTES // --
+-- Tenta encontrar as pastas com segurança
+local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+local Events = Remotes and Remotes:WaitForChild("Events", 10)
+local Functions = Remotes and Remotes:WaitForChild("Functions", 10)
 
--- Lista de Admins para proteção
-local AdminIDs = { [85126038]=true, [63531881]=true, [1532182659]=true, [669554728]=true, [83706967]=true }
-
--- // 2. HOOKS DE MÓDULOS \\ --
-local M = {}
-local function Hook()
-    local s, e = pcall(function()
-        M.Net = require(ReplicatedStorage.Modules.Network)
-        M.Rep = require(ReplicatedStorage.Game.Replication)
-        M.Eggs = require(ReplicatedStorage.Game.Eggs)
-        M.Portals = require(ReplicatedStorage.Game.Portals)
-        M.PetStats = require(ReplicatedStorage.Game.PetStats)
-    end)
-    if not s then warn("ScriptForge: Erro ao carregar módulos.", e) end
-end
-Hook()
-
--- // 3. FUNÇÕES ESPECIAIS (Unlocker & Math) \\ --
-
--- [GAMEPASS UNLOCKER]
--- Tenta injetar os gamepasses na tabela local do jogador
-local function UnlockGamepasses()
-    if M.Rep and M.Rep.Data then
-        if not M.Rep.Data.Gamepasses then M.Rep.Data.Gamepasses = {} end
-        -- Lista de IDs ou Nomes internos dos Gamepasses
-        M.Rep.Data.Gamepasses["x3Egg"] = true
-        M.Rep.Data.Gamepasses["x8Egg"] = true
-        M.Rep.Data.Gamepasses["Luck"] = true
-        M.Rep.Data.Gamepasses["AutoClicker"] = true
-        M.Rep.Data.Gamepasses["FasterEgg"] = true
-    end
-end
--- Executa uma vez ao injetar
-task.spawn(UnlockGamepasses)
-
--- Calcula poder real do pet
-local function GetTruePower(pet)
-    if not pet then return 0 end
-    local m = pet.Multiplier1 or pet.Multi1 or 0
-    return m * (1 + ((pet.Level or 1) / 199))
+if not Events or not Functions then
+    Rayfield:Notify({Title = "Erro", Content = "Não foi possível carregar os Remotes. Tente entrar no jogo novamente.", Duration = 5})
+    return
 end
 
-local function GetEggList()
-    local t = {}
-    if M.Eggs then for n,v in pairs(M.Eggs) do if type(v)=="table" and v.Price then table.insert(t,n) end end table.sort(t) end
-    return t
-end
+-- Definição dos Remotes
+local ClickRemote = Events:WaitForChild("ClickEvent")
+local RebirthRemote = Events:WaitForChild("Rebirth")
+local BuyEggRemote = Events:WaitForChild("BuyEgg")
+local MerchantBuyRemote = Events:WaitForChild("MerchantBuy")
+local RequestStocksFunc = Functions:WaitForChild("RequestStocks")
+local PurchaseItemFunc = Functions:WaitForChild("PurchaseItem")
 
-local function GetZoneList()
-    local t = {}
-    if M.Portals then for n,_ in pairs(M.Portals) do table.insert(t,n) end table.sort(t) end
-    return t
-end
-
--- // VARIÁVEIS DE CONTROLE \\ --
-local Flags = {
-    AutoTap = false, ForceCrit = true,
-    AutoDig = false, AutoMemory = false,
-    AutoRebirth = false, RebirthAmt = 1,
-    AutoHatch = false, Egg = "Starter", HatchAmount = 1, -- Quantidade de Ovos
-    AutoEquip = false, AutoCraft = false,
-    Sniper = false, NotifyRares = true
+-- // LISTA DE OVOS (Baseada nos seus códigos) // --
+local EggList = {
+    "Common Egg",
+    "Rare Egg",
+    "Rich Egg",
+    "Mushroom Egg",
+    "Beach Egg",
+    "Magma Egg",
+    "Desert Egg",
+    "Magma Soul Egg",
+    "Release Egg"
 }
 
--- // UI PRINCIPAL \\ --
+-- // VARIÁVEIS DE CONTROLE (FLAGS) // --
+local Flags = {
+    AutoClick = false,
+    AutoRebirth = false,
+    AutoHatch = false,
+    AutoBuyMerchant = false,
+    SelectedEgg = "Common Egg",
+    HatchMode = "Max" -- Opções: Single, Triple, Max
+}
+
+-- // INTERFACE (UI) // --
 local Window = Rayfield:CreateWindow({
-   Name = "ScriptForge v8.0 | Tap Simulator",
-   LoadingTitle = "Liberando Gamepasses...",
-   LoadingSubtitle = "by ScriptForge AI",
-   ConfigurationSaving = { Enabled = true, FileName = "TapSimFinal" },
+   Name = "ScriptForge | Tapping Haven",
+   LoadingTitle = "Carregando...",
+   LoadingSubtitle = "Auto Farm & Merchant V4",
+   ConfigurationSaving = { Enabled = true, FileName = "SF_TappingHaven_Config" },
    KeySystem = false,
 })
 
--- === ABA: FARMING === --
-local TabFarm = Window:CreateTab("Farming", 4483362458)
-
-TabFarm:CreateSection("Cliques & Rebirths")
+-- === ABA 1: FARM PRINCIPAL === --
+local TabFarm = Window:CreateTab("Farm", 4483362458)
+local SectionFarm = TabFarm:CreateSection("Automação")
 
 TabFarm:CreateToggle({
-   Name = "Auto Tap (Force Critical)",
+   Name = "Auto Click (Velocidade Máxima)",
    CurrentValue = false,
-   Flag = "AutoTap", 
-   Callback = function(V)
-        Flags.AutoTap = V
-        task.spawn(function()
-            while Flags.AutoTap do
-                -- Envia 'true' no argumento de crítico
-                pcall(function() M.Net:FireServer("Tap", true, false, Flags.ForceCrit) end)
-                task.wait() 
-            end
-        end)
+   Flag = "ToggleClick",
+   Callback = function(Value)
+        Flags.AutoClick = Value
    end,
 })
 
 TabFarm:CreateToggle({
    Name = "Auto Rebirth",
    CurrentValue = false,
-   Flag = "AutoRebirth", 
-   Callback = function(V)
-        Flags.AutoRebirth = V
-        task.spawn(function()
-            while Flags.AutoRebirth do
-                pcall(function() M.Net:InvokeServer("Rebirth", 1, Flags.RebirthAmt) end)
-                task.wait(0.5)
-            end
-        end)
+   Flag = "ToggleRebirth",
+   Callback = function(Value)
+        Flags.AutoRebirth = Value
    end,
 })
 
-TabFarm:CreateButton({
-    Name = "Tentar Liberar Gamepasses (Client-Side)",
-    Callback = UnlockGamepasses
+-- === ABA 2: OVOS (EGGS) === --
+local TabEggs = Window:CreateTab("Eggs", 4483362458)
+TabEggs:CreateSection("Sistema de Hatch")
+
+TabEggs:CreateDropdown({
+   Name = "Escolher Ovo",
+   Options = EggList,
+   CurrentOption = {"Common Egg"},
+   MultipleOptions = false,
+   Flag = "EggSelect",
+   Callback = function(Option)
+       Flags.SelectedEgg = Option[1]
+   end,
 })
 
-TabFarm:CreateSection("Minigames (Gems/Treats)")
+TabEggs:CreateDropdown({
+   Name = "Modo de Abertura",
+   Options = {"Single", "Triple", "Max"},
+   CurrentOption = {"Max"},
+   MultipleOptions = false,
+   Flag = "ModeSelect",
+   Callback = function(Option)
+       Flags.HatchMode = Option[1]
+   end,
+})
 
-TabFarm:CreateToggle({
-   Name = "Auto Dig",
+TabEggs:CreateToggle({
+   Name = "Ativar Auto Hatch",
    CurrentValue = false,
-   Flag = "AutoDig", 
-   Callback = function(V)
-        Flags.AutoDig = V
-        task.spawn(function()
-            while Flags.AutoDig do
-                pcall(function() M.Net:InvokeServer("StartMinigame", "DigGame") end)
-                task.wait()
-                pcall(function() M.Net:InvokeServer("FinishMinigame", "DigGame") end)
-                task.wait(0.5)
-            end
-        end)
+   Flag = "ToggleHatch",
+   Callback = function(Value)
+       Flags.AutoHatch = Value
    end,
 })
 
-TabFarm:CreateToggle({
-   Name = "Auto Memory Match",
+-- === ABA 3: MERCHANT & SHOP === --
+local TabMerchant = Window:CreateTab("Merchant/Shop", 4483362458)
+TabMerchant:CreateSection("Merchant Sniper")
+
+TabMerchant:CreateToggle({
+   Name = "Auto Buy Merchant (Compra Tudo)",
    CurrentValue = false,
-   Flag = "AutoMemory", 
-   Callback = function(V)
-        Flags.AutoMemory = V
-        task.spawn(function()
-            while Flags.AutoMemory do
-                pcall(function() M.Net:InvokeServer("StartMinigame", "MemoryMatch") end)
-                task.wait()
-                pcall(function() M.Net:InvokeServer("FinishMinigame", "MemoryMatch") end)
-                task.wait(0.5)
-            end
-        end)
+   Flag = "ToggleMerchant",
+   Callback = function(Value)
+       Flags.AutoBuyMerchant = Value
+   end,
+})
+TabMerchant:CreateParagraph({Title = "Info", Content = "Isso irá comprar automaticamente todos os estoques do Mercador Viajante se você tiver dinheiro."})
+
+TabMerchant:CreateSection("Token Shop Exploit")
+TabMerchant:CreateInput({
+   Name = "Comprar Item por Tokens",
+   PlaceholderText = "Nome do Item (ex: VIP)",
+   RemoveTextAfterFocusLost = false,
+   Callback = function(Text)
+       -- Tenta comprar usando Tokens em vez de Robux
+       pcall(function()
+           PurchaseItemFunc:InvokeServer("Tokens", Text)
+           Rayfield:Notify({Title = "Comando Enviado", Content = "Tentando comprar " .. Text .. " com Tokens.", Duration = 3})
+       end)
    end,
 })
 
--- === ABA: PETS (Melhorada) === --
-local TabPets = Window:CreateTab("Pets", 4483362458)
-
-TabPets:CreateSection("Configuração de Hatch")
-
-TabPets:CreateDropdown({
-   Name = "Selecionar Ovo",
-   Options = GetEggList(),
-   CurrentOption = {"Starter"},
-   Callback = function(O) Flags.Egg = O[1] end,
-})
-
-TabPets:CreateDropdown({
-   Name = "Quantidade (Tenta burlar Gamepass)",
-   Options = {"1", "3", "8"}, -- Opções solicitadas
-   CurrentOption = {"1"},
-   Callback = function(O) 
-       Flags.HatchAmount = tonumber(O[1]) 
-       -- Reaplica o spoof caso o jogo tenha resetado
-       UnlockGamepasses()
+-- === ABA 4: PLAYER === --
+local TabPlayer = Window:CreateTab("Local", 4483362458)
+TabPlayer:CreateSlider({
+   Name = "Velocidade (WalkSpeed)",
+   Range = {16, 300},
+   Increment = 1,
+   CurrentValue = 16,
+   Callback = function(Value)
+       if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+           LocalPlayer.Character.Humanoid.WalkSpeed = Value
+       end
    end,
 })
 
-TabPets:CreateToggle({
-   Name = "Auto Hatch (Rápido)",
-   CurrentValue = false,
-   Flag = "AutoHatch", 
-   Callback = function(V)
-        Flags.AutoHatch = V
-        task.spawn(function()
-            while Flags.AutoHatch do
-                -- InvokeServer("OpenEgg", Nome, Quantidade, {})
-                pcall(function() M.Net:InvokeServer("OpenEgg", Flags.Egg, Flags.HatchAmount, {}) end)
-                -- Delay pequeno para evitar crash se usar modo 8
-                task.wait(Flags.HatchAmount == 8 and 0.3 or 0.1)
-            end
-        end)
+TabPlayer:CreateButton({
+   Name = "Ativar Anti-AFK",
+   Callback = function()
+       LocalPlayer.Idled:Connect(function()
+           VirtualUser:CaptureController()
+           VirtualUser:ClickButton2(Vector2.new())
+       end)
+       Rayfield:Notify({Title = "Anti-AFK", Content = "Ativado!", Duration = 3})
    end,
 })
 
-TabPets:CreateToggle({
-    Name = "Notificar Pets Raros",
-    CurrentValue = true,
-    Flag = "NotifyRares",
-    Callback = function(V) Flags.NotifyRares = V end
-})
+-- // LÓGICA DE LOOP (OTIMIZADA) // --
 
-TabPets:CreateSection("Gestão de Inventário")
-
-TabPets:CreateToggle({
-    Name = "Auto Equip Best (Fórmula Matemática)",
-    CurrentValue = false,
-    Flag = "AutoEquip",
-    Callback = function(V)
-        Flags.AutoEquip = V
-        task.spawn(function()
-            while Flags.AutoEquip do
-                if M.Rep.Data and M.Rep.Data.Pets then
-                    local pList = {}
-                    for id, p in pairs(M.Rep.Data.Pets) do
-                        p.ID = id
-                        p.CalculatedPower = GetTruePower(p)
-                        table.insert(pList, p)
-                    end
-                    -- Ordena do maior poder para o menor
-                    table.sort(pList, function(a,b) return a.CalculatedPower > b.CalculatedPower end)
-                    
-                    local limit = M.Rep.Data.EquipLimit or 4
-                    local idsToEquip = {}
-                    for i=1, math.min(#pList, limit) do 
-                        table.insert(idsToEquip, pList[i].ID) 
-                    end
-                    
-                    if #idsToEquip > 0 then
-                        pcall(function() M.Net:InvokeServer("EquipPets", idsToEquip) end)
-                    end
-                end
-                task.wait(5) -- Verifica a cada 5s
-            end
+-- 1. Loop de Click (Heartbeat - Executa a cada frame físico do servidor)
+RunService.Heartbeat:Connect(function()
+    if Flags.AutoClick then
+        pcall(function()
+            ClickRemote:FireServer()
         end)
     end
-})
+end)
 
-TabPets:CreateToggle({
-    Name = "Auto Craft (Gold/Rainbow)",
-    CurrentValue = false,
-    Flag = "AutoCraft",
-    Callback = function(V)
-        Flags.AutoCraft = V
-        task.spawn(function()
-            while Flags.AutoCraft do
-                -- Lógica simples de agrupar por nome e raridade
-                if M.Rep.Data and M.Rep.Data.Pets then
-                    local groups = {}
-                    for id, p in pairs(M.Rep.Data.Pets) do
-                        local key = p.Name .. (p.Tier or "Normal")
-                        if not groups[key] then groups[key] = {} end
-                        table.insert(groups[key], id)
-                    end
-                    
-                    for _, ids in pairs(groups) do
-                        if #ids >= 5 then
-                            -- Pega 5 para fundir
-                            local batch = {ids[1], ids[2], ids[3], ids[4], ids[5]}
-                            pcall(function() M.Net:InvokeServer("CraftPets", batch) end)
-                            task.wait(0.2)
+-- 2. Loop de Rebirth e Eggs
+task.spawn(function()
+    while true do
+        task.wait(0.1) -- Pequeno delay para estabilidade
+        
+        -- Auto Rebirth
+        if Flags.AutoRebirth then
+            pcall(function()
+                RebirthRemote:FireServer()
+            end)
+        end
+
+        -- Auto Hatch
+        if Flags.AutoHatch and Flags.SelectedEgg then
+            pcall(function()
+                BuyEggRemote:FireServer(Flags.SelectedEgg, Flags.HatchMode)
+            end)
+        end
+    end
+end)
+
+-- 3. Loop do Merchant (Verifica a cada 2 segundos)
+task.spawn(function()
+    while true do
+        task.wait(2)
+        if Flags.AutoBuyMerchant then
+            pcall(function()
+                -- Pede a lista de itens ao servidor
+                local stockData = RequestStocksFunc:InvokeServer("All")
+                if stockData then
+                    for merchantName, items in pairs(stockData) do
+                        for itemName, data in pairs(items) do
+                            -- Se não for o contador de tempo e tiver estoque
+                            if itemName ~= "RestockIn" and type(data) == "table" and data.Stock and data.Stock > 0 then
+                                MerchantBuyRemote:FireServer(merchantName, tostring(itemName))
+                            end
                         end
                     end
                 end
-                task.wait(2)
-            end
-        end)
-    end
-})
-
--- === ABA: MUNDO === --
-local TabWorld = Window:CreateTab("Mundo", 4483362458)
-
-TabWorld:CreateToggle({
-   Name = "Infinity Chest Sniper (Mythic Keys)",
-   CurrentValue = false,
-   Flag = "Sniper", 
-   Callback = function(V)
-        Flags.Sniper = V
-        task.spawn(function()
-            while Flags.Sniper do
-                local target = nil
-                -- Procura em Tags
-                for _, o in ipairs(CollectionService:GetTagged("Breakable")) do
-                    if o.Name == "InfinityChest" and o:FindFirstChild("ClickDetector") then target = o break end
-                end
-                -- Fallback se não estiver na tag (alguns jogos usam pastas)
-                if not target then
-                    local wc = Workspace:FindFirstChild("Game") and Workspace.Game:FindFirstChild("WorldChests")
-                    if wc then 
-                        for _, c in pairs(wc:GetChildren()) do 
-                            if c.Name == "InfinityChest" and c:FindFirstChild("ClickDetector") then target = c break end 
-                        end 
-                    end
-                end
-                
-                if target then
-                    LocalPlayer.Character:PivotTo(target:GetPivot())
-                    fireclickdetector(target.ClickDetector)
-                    task.wait(0.1)
-                end
-                task.wait(0.5)
-            end
-        end)
-   end,
-})
-
-TabWorld:CreateButton({
-    Name = "Coletar Playtime Gifts (1-12)",
-    Callback = function()
-        for i=1, 12 do 
-            M.Net:FireServer("RedeemReward", i) 
-        end
-        Rayfield:Notify({Title="Sucesso", Content="Tentativa de coleta enviada!", Duration=3})
-    end
-})
-
-TabWorld:CreateDropdown({
-    Name = "Teleportar",
-    Options = GetZoneList(),
-    CurrentOption = {"Spawn"},
-    Callback = function(O)
-        pcall(function() M.Net:InvokeServer("TeleportZone", O[1]) end)
-    end,
-})
-
--- // NOTIFICADOR DE DROPS // --
-local LastPetCache = 0
-task.spawn(function()
-    while true do
-        if Flags.NotifyRares and M.Rep.Data and M.Rep.Data.Pets then
-            local count = 0
-            for _ in pairs(M.Rep.Data.Pets) do count = count + 1 end
-            
-            if count > LastPetCache and LastPetCache ~= 0 then
-                -- Tentativa simplificada de achar o último (não perfeito sem eventos, mas útil)
-                -- Em v8, focamos apenas em avisar que algo veio
-                -- Para precisão total, precisariamos hookar o evento ChildAdded no inventário da UI
-            end
-            LastPetCache = count
-        end
-        task.wait(1)
-    end
-end)
-
--- Anti-Admin Check Loop
-task.spawn(function()
-    while task.wait(5) do
-        for _, p in pairs(Players:GetPlayers()) do
-            if AdminIDs[p.UserId] then 
-                LocalPlayer:Kick("ScriptForge Protection: Admin/Dev entrou no servidor.") 
-            end
+            end)
         end
     end
 end)
 
-Rayfield:LoadConfiguration()
+Rayfield:Notify({
+    Title = "ScriptForge AI",
+    Content = "Script Carregado com Sucesso!",
+    Duration = 5,
+    Image = 4483362458,
+})
