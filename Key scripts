@@ -1,13 +1,15 @@
 --[[
-    ScriptForge AI - Tapping Haven Auto Farm (Versão Final 4.0)
-    Language: Luau
-    Library: Rayfield UI
-    Status: Undetected / Optimized
+    ScriptForge AI - Tapping Haven Auto Farm (Versão 5.0 - Merchant Fix)
+    Status: WORKING
+    Updates:
+    - Auto Click (Heartbeat Speed)
+    - Auto Eggs (Nomes Reais)
+    - Merchant Auto Buy (Baseado no snippet "Boosts1", "1")
 ]]
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- // SERVIÇOS E VARIÁVEIS // --
+-- // SERVIÇOS // --
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -15,17 +17,16 @@ local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
 -- // LOCALIZAÇÃO DOS REMOTES // --
--- Tenta encontrar as pastas com segurança
 local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
 local Events = Remotes and Remotes:WaitForChild("Events", 10)
 local Functions = Remotes and Remotes:WaitForChild("Functions", 10)
 
 if not Events or not Functions then
-    Rayfield:Notify({Title = "Erro", Content = "Não foi possível carregar os Remotes. Tente entrar no jogo novamente.", Duration = 5})
+    Rayfield:Notify({Title = "Erro", Content = "Remotes não encontrados!", Duration = 5})
     return
 end
 
--- Definição dos Remotes
+-- Remotes
 local ClickRemote = Events:WaitForChild("ClickEvent")
 local RebirthRemote = Events:WaitForChild("Rebirth")
 local BuyEggRemote = Events:WaitForChild("BuyEgg")
@@ -33,194 +34,141 @@ local MerchantBuyRemote = Events:WaitForChild("MerchantBuy")
 local RequestStocksFunc = Functions:WaitForChild("RequestStocks")
 local PurchaseItemFunc = Functions:WaitForChild("PurchaseItem")
 
--- // LISTA DE OVOS (Baseada nos seus códigos) // --
+-- // DADOS // --
 local EggList = {
-    "Common Egg",
-    "Rare Egg",
-    "Rich Egg",
-    "Mushroom Egg",
-    "Beach Egg",
-    "Magma Egg",
-    "Desert Egg",
-    "Magma Soul Egg",
-    "Release Egg"
+    "Common Egg", "Rare Egg", "Rich Egg", "Mushroom Egg", 
+    "Beach Egg", "Magma Egg", "Desert Egg", "Magma Soul Egg", "Release Egg"
 }
 
--- // VARIÁVEIS DE CONTROLE (FLAGS) // --
 local Flags = {
     AutoClick = false,
     AutoRebirth = false,
     AutoHatch = false,
     AutoBuyMerchant = false,
     SelectedEgg = "Common Egg",
-    HatchMode = "Max" -- Opções: Single, Triple, Max
+    HatchMode = "Max"
 }
 
--- // INTERFACE (UI) // --
+-- // INTERFACE // --
 local Window = Rayfield:CreateWindow({
    Name = "ScriptForge | Tapping Haven",
-   LoadingTitle = "Carregando...",
-   LoadingSubtitle = "Auto Farm & Merchant V4",
-   ConfigurationSaving = { Enabled = true, FileName = "SF_TappingHaven_Config" },
+   LoadingTitle = "Versão 5.0",
+   LoadingSubtitle = "Merchant Fix & Speed",
+   ConfigurationSaving = { Enabled = true, FileName = "SF_Haven_V5" },
    KeySystem = false,
 })
 
--- === ABA 1: FARM PRINCIPAL === --
+-- === ABA FARM === --
 local TabFarm = Window:CreateTab("Farm", 4483362458)
-local SectionFarm = TabFarm:CreateSection("Automação")
 
 TabFarm:CreateToggle({
-   Name = "Auto Click (Velocidade Máxima)",
+   Name = "Auto Click (Extremo)",
    CurrentValue = false,
-   Flag = "ToggleClick",
-   Callback = function(Value)
-        Flags.AutoClick = Value
-   end,
+   Flag = "AutoClick",
+   Callback = function(v) Flags.AutoClick = v end,
 })
 
 TabFarm:CreateToggle({
    Name = "Auto Rebirth",
    CurrentValue = false,
-   Flag = "ToggleRebirth",
-   Callback = function(Value)
-        Flags.AutoRebirth = Value
-   end,
+   Flag = "AutoRebirth",
+   Callback = function(v) Flags.AutoRebirth = v end,
 })
 
--- === ABA 2: OVOS (EGGS) === --
+-- === ABA EGGS === --
 local TabEggs = Window:CreateTab("Eggs", 4483362458)
-TabEggs:CreateSection("Sistema de Hatch")
 
 TabEggs:CreateDropdown({
-   Name = "Escolher Ovo",
-   Options = EggList,
-   CurrentOption = {"Common Egg"},
-   MultipleOptions = false,
-   Flag = "EggSelect",
-   Callback = function(Option)
-       Flags.SelectedEgg = Option[1]
-   end,
+   Name = "Ovo", Options = EggList, CurrentOption = {"Common Egg"},
+   Callback = function(v) Flags.SelectedEgg = v[1] end,
 })
 
 TabEggs:CreateDropdown({
-   Name = "Modo de Abertura",
-   Options = {"Single", "Triple", "Max"},
-   CurrentOption = {"Max"},
-   MultipleOptions = false,
-   Flag = "ModeSelect",
-   Callback = function(Option)
-       Flags.HatchMode = Option[1]
-   end,
+   Name = "Modo", Options = {"Single", "Triple", "Max"}, CurrentOption = {"Max"},
+   Callback = function(v) Flags.HatchMode = v[1] end,
 })
 
 TabEggs:CreateToggle({
-   Name = "Ativar Auto Hatch",
-   CurrentValue = false,
-   Flag = "ToggleHatch",
-   Callback = function(Value)
-       Flags.AutoHatch = Value
-   end,
+   Name = "Auto Hatch", CurrentValue = false,
+   Callback = function(v) Flags.AutoHatch = v end,
 })
 
--- === ABA 3: MERCHANT & SHOP === --
-local TabMerchant = Window:CreateTab("Merchant/Shop", 4483362458)
+-- === ABA MERCHANT (ATUALIZADA) === --
+local TabMerchant = Window:CreateTab("Merchant", 4483362458)
 TabMerchant:CreateSection("Merchant Sniper")
 
 TabMerchant:CreateToggle({
    Name = "Auto Buy Merchant (Compra Tudo)",
    CurrentValue = false,
-   Flag = "ToggleMerchant",
-   Callback = function(Value)
-       Flags.AutoBuyMerchant = Value
-   end,
-})
-TabMerchant:CreateParagraph({Title = "Info", Content = "Isso irá comprar automaticamente todos os estoques do Mercador Viajante se você tiver dinheiro."})
-
-TabMerchant:CreateSection("Token Shop Exploit")
-TabMerchant:CreateInput({
-   Name = "Comprar Item por Tokens",
-   PlaceholderText = "Nome do Item (ex: VIP)",
-   RemoveTextAfterFocusLost = false,
-   Callback = function(Text)
-       -- Tenta comprar usando Tokens em vez de Robux
-       pcall(function()
-           PurchaseItemFunc:InvokeServer("Tokens", Text)
-           Rayfield:Notify({Title = "Comando Enviado", Content = "Tentando comprar " .. Text .. " com Tokens.", Duration = 3})
-       end)
-   end,
+   Flag = "AutoBuyMerch",
+   Callback = function(v) Flags.AutoBuyMerchant = v end,
 })
 
--- === ABA 4: PLAYER === --
-local TabPlayer = Window:CreateTab("Local", 4483362458)
+TabMerchant:CreateParagraph({
+    Title = "Como funciona?", 
+    Content = "O script detecta o Mercador atual (ex: Boosts1) e varre os itens 1, 2, 3... comprando automaticamente se tiver estoque."
+})
+
+TabMerchant:CreateButton({
+    Name = "Forçar Compra Item 1 (Boosts1)",
+    Callback = function()
+        -- Código exato fornecido por você como fallback
+        local args = {"Boosts1", "1"}
+        MerchantBuyRemote:FireServer(unpack(args))
+        Rayfield:Notify({Title = "Comando Enviado", Content = "Comprou Item 1 de Boosts1", Duration = 2})
+    end
+})
+
+-- === PLAYER & AFK === --
+local TabPlayer = Window:CreateTab("Misc", 4483362458)
 TabPlayer:CreateSlider({
-   Name = "Velocidade (WalkSpeed)",
-   Range = {16, 300},
-   Increment = 1,
-   CurrentValue = 16,
-   Callback = function(Value)
-       if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-           LocalPlayer.Character.Humanoid.WalkSpeed = Value
-       end
+   Name = "Speed", Range = {16, 300}, Increment = 1, CurrentValue = 16,
+   Callback = function(v) 
+       if LocalPlayer.Character then LocalPlayer.Character.Humanoid.WalkSpeed = v end 
    end,
 })
 
-TabPlayer:CreateButton({
-   Name = "Ativar Anti-AFK",
-   Callback = function()
-       LocalPlayer.Idled:Connect(function()
-           VirtualUser:CaptureController()
-           VirtualUser:ClickButton2(Vector2.new())
-       end)
-       Rayfield:Notify({Title = "Anti-AFK", Content = "Ativado!", Duration = 3})
-   end,
-})
+-- // LOOP PRINCIPAL // --
 
--- // LÓGICA DE LOOP (OTIMIZADA) // --
-
--- 1. Loop de Click (Heartbeat - Executa a cada frame físico do servidor)
+-- 1. Click Loop (Máxima Velocidade - Heartbeat)
 RunService.Heartbeat:Connect(function()
     if Flags.AutoClick then
-        pcall(function()
-            ClickRemote:FireServer()
-        end)
+        pcall(function() ClickRemote:FireServer() end)
     end
 end)
 
--- 2. Loop de Rebirth e Eggs
+-- 2. Hatch e Rebirth Loop
 task.spawn(function()
     while true do
-        task.wait(0.1) -- Pequeno delay para estabilidade
-        
-        -- Auto Rebirth
-        if Flags.AutoRebirth then
-            pcall(function()
-                RebirthRemote:FireServer()
-            end)
-        end
-
-        -- Auto Hatch
-        if Flags.AutoHatch and Flags.SelectedEgg then
-            pcall(function()
-                BuyEggRemote:FireServer(Flags.SelectedEgg, Flags.HatchMode)
-            end)
-        end
+        task.wait(0.1)
+        if Flags.AutoRebirth then pcall(function() RebirthRemote:FireServer() end) end
+        if Flags.AutoHatch then pcall(function() BuyEggRemote:FireServer(Flags.SelectedEgg, Flags.HatchMode) end) end
     end
 end)
 
--- 3. Loop do Merchant (Verifica a cada 2 segundos)
+-- 3. MERCHANT LOGIC (Inteligente)
 task.spawn(function()
     while true do
-        task.wait(2)
+        task.wait(1.5) -- Verifica a cada 1.5s para não lagar
         if Flags.AutoBuyMerchant then
             pcall(function()
-                -- Pede a lista de itens ao servidor
-                local stockData = RequestStocksFunc:InvokeServer("All")
-                if stockData then
-                    for merchantName, items in pairs(stockData) do
-                        for itemName, data in pairs(items) do
-                            -- Se não for o contador de tempo e tiver estoque
-                            if itemName ~= "RestockIn" and type(data) == "table" and data.Stock and data.Stock > 0 then
-                                MerchantBuyRemote:FireServer(merchantName, tostring(itemName))
+                -- Pede os dados de todos os merchants
+                local allStocks = RequestStocksFunc:InvokeServer("All")
+                
+                if allStocks then
+                    -- Itera sobre os merchants (ex: "Boosts1", "PetShop", etc)
+                    for merchantName, items in pairs(allStocks) do
+                        if type(items) == "table" then
+                            -- Itera sobre os itens dentro do merchant (1, 2, 3...)
+                            for itemId, itemData in pairs(items) do
+                                -- Verifica se não é dado de tempo ("RestockIn") e se tem estoque
+                                if itemId ~= "RestockIn" and type(itemData) == "table" then
+                                    if itemData.Stock and itemData.Stock > 0 then
+                                        -- Dispara o evento: NomeDoMerchant, ID (String)
+                                        -- Ex: FireServer("Boosts1", "1")
+                                        MerchantBuyRemote:FireServer(merchantName, tostring(itemId))
+                                    end
+                                end
                             end
                         end
                     end
@@ -230,9 +178,10 @@ task.spawn(function()
     end
 end)
 
-Rayfield:Notify({
-    Title = "ScriptForge AI",
-    Content = "Script Carregado com Sucesso!",
-    Duration = 5,
-    Image = 4483362458,
-})
+-- Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+Rayfield:Notify({Title = "ScriptForge", Content = "Merchant System Atualizado!", Duration = 3})
