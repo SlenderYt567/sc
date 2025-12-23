@@ -1,344 +1,418 @@
 --[[
-    SlenderHub - Pickaxe Simulator [Premium Edition]
-    Version: 30.0
-    Release Type: Commercial (Freemium System Active)
-    Features: Auto Farm, Gamepass Unlocker, Ticket Exploit, Premium Speed
-    Developed by: SlenderHub Team & ScriptForge AI
+    SlenderHub - Pickaxe Simulator [V44.0 HYBRID]
+    Developed by: ScriptForge AI
+    
+    UPDATES:
+    - FREE MODE: Restored Original Clicker Logic (VirtualInputManager).
+    - PREMIUM MODE: Kept God Mode (MineClient Direct Call).
+    - ALL FEATURES: Smart Craft, Auto Hatch, Event, Rebirth included.
 ]]
 
--- [ 0. SINGLETON CHECK ] --
-if getgenv().SlenderHubLoaded then
-    warn("SlenderHub is already running!")
-    return
+-- [ 0. SAFETY SINGLETON ] --
+if getgenv().SlenderHubLoaded then 
+    warn("SlenderHub já está rodando!")
+    return 
 end
 getgenv().SlenderHubLoaded = true
 
--- [ 1. PREMIUM SYSTEM CHECK ] --
--- O Loader deve definir isso antes de carregar o script. Ex: getgenv().SlenderHubAccessLevel = "Premium"
-local AccessLevel = getgenv().SlenderHubAccessLevel or "Free"
-local isPremium = (AccessLevel == "Premium")
-
--- Configuração de Velocidade baseada no Nível
-local Delays = {
-    Mine = isPremium and 0.05 or 0.25,   -- Premium: Quase Instantâneo
-    Egg = isPremium and 0.05 or 0.6,     -- Premium: Spam de Ovos
-    Train = isPremium and 1.0 or 2.5,    -- Premium: Treino Rápido
-    Action = isPremium and 0.1 or 0.5    -- Compras/Upgrades
-}
-
--- [ 2. SERVICES & VARIABLES ] --
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
--- [ 3. SYSTEM: PAPER HOOK ] --
+-- [ 1. SISTEMA DE ACESSO ] --
+local AccessLevel = getgenv().SlenderHubAccessLevel or "Free" 
+local isPremium = (AccessLevel == "Premium")
+
+-- Configuração de Velocidade Premium
+local GodSpeedDelay = 0.03 -- 30ms
+
+-- [ 2. CARREGAMENTO DE MÓDULOS (PREMIUM ONLY) ] --
 local Paper, PaperSuccess = nil, false
+local MineClientModule = nil 
+local EggsTbl, PickaxesTbl, EventUpgradesTbl = nil, nil, nil
+
+-- 2.1 Carregar Paper Framework
 pcall(function()
     Paper = require(ReplicatedStorage:WaitForChild("Paper", 5))
     if Paper then PaperSuccess = true end
+    
+    local Tables = ReplicatedStorage:WaitForChild("Tables")
+    EggsTbl = require(Tables:WaitForChild("Eggs"))
+    PickaxesTbl = require(Tables:WaitForChild("Pickaxes"))
+    EventUpgradesTbl = require(Tables:WaitForChild("EventUpgrades"))
 end)
 
-if not PaperSuccess then warn("SlenderHub Warning: Paper Module not found.") end
+-- 2.2 Encontrar MineClient (Apenas para o God Mode)
+for _, v in pairs(getgc(true)) do
+    if type(v) == "table" then
+        if rawget(v, "MineCurrentOre") and rawget(v, "RequestCurrentChunk") then
+            MineClientModule = v
+            break
+        end
+    end
+end
 
--- [ 4. NETWORK WRAPPER ] --
-local RemotesFolder = ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes")
-local RemoteEvent = RemotesFolder:WaitForChild("__remoteevent")
-local RemoteFunction = RemotesFolder:WaitForChild("__remotefunction")
+-- [ 3. REDE (NETWORKING) ] --
+local Remotes = ReplicatedStorage:FindFirstChild("Paper") and ReplicatedStorage.Paper:FindFirstChild("Remotes")
+local RF = Remotes and Remotes:FindFirstChild("__remotefunction")
+local RE = Remotes and Remotes:FindFirstChild("__remoteevent")
 
 local function NetworkInvoke(method, ...)
-    local args = {...}
-    if PaperSuccess and Paper.Network then
-        return Paper.Network.InvokeServer(method, unpack(args))
-    else
-        return RemoteFunction:InvokeServer(method, unpack(args))
-    end
+    if PaperSuccess and Paper.Network then return Paper.Network.InvokeServer(method, ...)
+    elseif RF then return RF:InvokeServer(method, ...) end
 end
 
 local function NetworkFire(method, ...)
-    local args = {...}
-    if PaperSuccess and Paper.Network then
-        if Paper.Network.FireServer then
-            Paper.Network.FireServer(method, unpack(args))
-        else
-            task.spawn(function() pcall(function() Paper.Network.InvokeServer(method, unpack(args)) end) end)
-        end
-    else
-        RemoteEvent:FireServer(method, unpack(args))
-    end
+    if PaperSuccess and Paper.Network and Paper.Network.FireServer then Paper.Network.FireServer(method, ...)
+    elseif RE then RE:FireServer(method, ...) end
 end
 
--- [ 5. EXPLOIT LOGIC ] --
-local function ForceDexGamepasses()
-    local count = 0
-    local searchLocations = {
-        Workspace:FindFirstChild(LocalPlayer.Name),
-        LocalPlayer:FindFirstChild("Gamepasses"),
-        ReplicatedStorage:FindFirstChild("Gamepasses")
-    }
-    for _, loc in pairs(searchLocations) do
-        if loc then
-            local gpFolder = loc:FindFirstChild("Gamepasses") or loc:FindFirstChild("Analytics")
-            if gpFolder then
-                for _, val in pairs(gpFolder:GetChildren()) do
-                    if val:IsA("BoolValue") then
-                        val.Value = true
-                        val.Changed:Connect(function() if not val.Value then val.Value = true end end)
-                        count = count + 1
-                    end
-                end
+-- [ 4. SMART CRAFTING ] --
+local function AttemptSmartCraft(actionType, requiredCount)
+    if not PaperSuccess then return end
+    local myPetsData = Paper.Stats.Get("Pets").Value
+    local grouped = {}
+    
+    for uuid, pet in pairs(myPetsData) do
+        if not pet.Equipped and not pet.Locked then
+            local pName = pet.Name or pet.Id
+            local isGolden = (pet.Tier == 2)
+            local isRainbow = (pet.Tier == 3)
+            if actionType == "CraftGolden" and not isGolden and not isRainbow then
+                if not grouped[pName] then grouped[pName] = {} end
+                table.insert(grouped[pName], uuid)
+            elseif actionType == "CraftRainbow" and isGolden then
+                if not grouped[pName] then grouped[pName] = {} end
+                table.insert(grouped[pName], uuid)
             end
         end
     end
-    return count
+    
+    for name, uuids in pairs(grouped) do
+        if #uuids >= requiredCount then
+            local petsToConsume = {}
+            for i = 1, requiredCount do table.insert(petsToConsume, uuids[i]) end
+            NetworkInvoke("Pet", {Action = actionType, Pets = petsToConsume})
+            task.wait(0.2)
+        end
+    end
 end
 
-local function CalculateRealPetPower(petInstance)
-    if not PaperSuccess then return 0 end
-    local pName = petInstance:GetAttribute("PetName")
-    if not pName then return 0 end
-    local petModule = ReplicatedStorage.Pets:FindFirstChild(pName)
-    if not petModule then return 0 end
-    local petSettings = require(petModule)
-    local basePower = petSettings.Power or 0
-    local tier = petInstance:GetAttribute("Tier") or 1
-    local size = petInstance:GetAttribute("Size") or 1
-    local finalPower = basePower * (2 ^ (tier - 1))
-    if size == 2 then finalPower = finalPower * 1.25
-    elseif size == 3 then finalPower = finalPower * 1.5
-    elseif size == 4 then finalPower = finalPower * 2 end
-    return finalPower
+-- [ 5. DADOS E LISTAS ] --
+local AllUpgrades = {
+    "More Gems", "More Rebirths", "More Coins", "More Damage", 
+    "Egg Luck", "Hatch Speed", "Pets Equipped", "Inventory Space", 
+    "Golden Chance", "Rainbow Chance", "Walk Speed"
+}
+local MerchantItems = {"Luck Potion", "Speed Potion", "Damage Potion", "Coin Potion"}
+local EggList = {}
+if EggsTbl then
+    for name, data in pairs(EggsTbl) do 
+        if not data.Exclusive then table.insert(EggList, name) end 
+    end
+    table.sort(EggList)
 end
 
--- [ 6. CONFIGURATION ] --
-local Flags = {
-    AutoMine = false, AutoSell = false, AutoTrain = false,
-    AutoUpgrade = false, TargetUpgrade = "More Damage",
-    AutoRebirth = false, RebirthAmount = "1",
-    AutoEgg = false, SelectedEgg = "Basic Egg",
-    AutoCraftGold = false, AutoCraftRainbow = false,
-    AutoBuyPickaxe = false, AutoBuyPotion = false, TargetPotion = "Luck Potion",
-    PartyMode = false
+-- [ 6. FLAGS ] --
+getgenv().Flags = {
+    AutoMineLegit = false,
+    AutoMineGod = false,
+    AutoTrain = false,
+    AutoRebirth = false,
+    RebirthMode = "1",
+    AutoUpgrade = false,
+    SelectedUpgrades = {},
+    AutoMerchant = false,
+    MerchantTargets = {"Luck Potion"},
+    AutoHatch = false,
+    HatchMode = 1,
+    TargetEgg = nil,
+    AutoGolden = false,
+    AutoRainbow = false
 }
 
-local UpgradeList = { "More Gems", "More Rebirths", "More Coins", "More Damage", "Egg Luck", "Hatch Speed", "Pets Equipped", "Inventory Space", "Golden Chance", "Rainbow Chance", "Walk Speed" }
-local PotionList = {"Luck Potion", "Speed Potion", "Damage Potion", "Coin Potion"}
-local RebirthTable = {1,5,20,50,100,250,500,1000,2500,5000,10000,25000,50000,100000,250000,500000,1000000}
-local RebirthDropdown = {}; for i,v in ipairs(RebirthTable) do table.insert(RebirthDropdown, tostring(v)) end; table.insert(RebirthDropdown, "Max")
-local EggList = { "Basic Egg", "Rare Egg", "Forest Egg", "Black Hole Egg", "UFO Egg", "Garden Egg", "Sand Egg", "Snow Egg", "Lava Egg", "Sunny Egg", "Cave Egg", "Sakura Egg", "Beach Egg", "Aqua Egg", "Music Egg", "Rocket Egg", "Aura Egg" }
-
--- [ 7. UI SETUP ] --
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local WindowTitle = isPremium and "SlenderHub | 💎 PREMIUM" or "SlenderHub | Free Version"
-
+-- [ 7. INTERFACE ] --
 local Window = Rayfield:CreateWindow({
-    Name = WindowTitle,
-    LoadingTitle = "SlenderHub V30",
-    LoadingSubtitle = "Status: " .. AccessLevel,
-    ConfigurationSaving = { Enabled = true, FolderName = "SlenderHubV30", FileName = "Config" },
-    KeySystem = false
+   Name = "SlenderHub | V44.0 Hybrid ⚔️",
+   LoadingTitle = isPremium and "Premium Access 💎" or "Free Access",
+   ConfigurationSaving = { Enabled = true, FileName = "SlenderHubV44" },
+   KeySystem = false,
 })
 
--- === TAB: FARM ===
-local TabFarm = Window:CreateTab("Farm", 4483362458)
+-- ==== TAB: FARM ==== --
+local TabFarm = Window:CreateTab("Farm ⛏️", 4483345998)
 
-local MineTitle = isPremium and "Auto Mine (TURBO ⚡)" or "Auto Mine (Slow)"
+TabFarm:CreateSection("Mining Modes")
+
+-- [ OPÇÃO 1: CLASSIC LEGIT CLICKER (Original Script Logic) ] --
 TabFarm:CreateToggle({
-    Name = MineTitle,
+    Name = "Auto Mine (Legit Clicker)",
     CurrentValue = false,
-    Flag = "AutoMine",
+    Flag = "AutoMineLegit",
     Callback = function(Value)
-        Flags.AutoMine = Value
+        getgenv().Flags.AutoMineLegit = Value
+        
+        -- Desativa Premium se ativar este
+        if Value and getgenv().Flags.AutoMineGod then getgenv().Flags.AutoMineGod = false end
+
         if Value then
-            NetworkFire("Toggle Setting", "AutoMine")
             task.spawn(function()
-                while Flags.AutoMine do
+                while getgenv().Flags.AutoMineLegit do
+                    -- Lógica Original: VirtualInputManager no centro da tela
                     if Workspace.CurrentCamera then
                         local vp = Workspace.CurrentCamera.ViewportSize
-                        VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, true, game, 1)
-                        VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, false, game, 1)
+                        local x, y = vp.X / 2, vp.Y / 2
+                        
+                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+                        task.wait(0.05) -- Segura o clique um pouco (Simulação Humana)
+                        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
                     end
-                    task.wait(Delays.Mine) -- Usa Delay Dinâmico
+                    
+                    -- Delay Original (0.2s a 0.25s)
+                    task.wait(0.2) 
                 end
             end)
         end
-    end,
+    end
 })
 
+-- [ OPÇÃO 2: GOD MODE (Direct Function Call) ] --
 TabFarm:CreateToggle({
-    Name = "Auto Sell Ores",
+    Name = "Auto Mine (God Mode) [Premium]",
     CurrentValue = false,
-    Flag = "AutoSell",
+    Flag = "AutoMineGod",
     Callback = function(Value)
-        Flags.AutoSell = Value
+        if Value and not isPremium then
+            Rayfield:Notify({Title = "Acesso Negado", Content = "Função exclusiva Premium!", Duration = 3})
+            getgenv().Flags.AutoMineGod = false
+            return
+        end
+
+        getgenv().Flags.AutoMineGod = Value
+        if Value and getgenv().Flags.AutoMineLegit then getgenv().Flags.AutoMineLegit = false end
+
         if Value then
+            if not MineClientModule then
+                Rayfield:Notify({Title = "Erro", Content = "Módulo de mineração não encontrado.", Duration = 4})
+                return
+            end
+
             task.spawn(function()
-                while Flags.AutoSell do NetworkInvoke("Sell All Ores"); task.wait(1.5); end
+                while getgenv().Flags.AutoMineGod do
+                    -- Chama a função interna 3x por loop (Velocidade Extrema)
+                    for i = 1, 3 do 
+                        MineClientModule.MineCurrentOre() 
+                    end
+                    task.wait(GodSpeedDelay)
+                end
             end)
         end
-    end,
+    end
 })
 
+TabFarm:CreateSection("Training")
+
 TabFarm:CreateToggle({
-    Name = "Auto Train",
+    Name = "Auto Train (Server-Side)",
     CurrentValue = false,
     Flag = "AutoTrain",
     Callback = function(Value)
-        Flags.AutoTrain = Value
+        getgenv().Flags.AutoTrain = Value
         if Value then
             NetworkFire("Toggle Setting", "AutoTrain")
             task.spawn(function()
-                while Flags.AutoTrain do NetworkFire("Train"); task.wait(Delays.Train); end
+                while getgenv().Flags.AutoTrain do
+                    NetworkInvoke("Train")
+                    task.wait(2)
+                end
             end)
         end
-    end,
+    end
 })
 
--- === TAB: GAMEPASS ===
-local TabGP = Window:CreateTab("Gamepass", 4483362458)
-TabGP:CreateButton({
-    Name = "Unlock All Gamepasses (Client)",
-    Callback = function()
-        local count = ForceDexGamepasses()
-        Rayfield:Notify({Title = "Unlocked", Content = "Spoofed " .. count .. " visual gamepasses.", Duration = 3})
-    end,
-})
-TabGP:CreateButton({
-    Name = "Exploit: Switch Shop to Tickets",
-    Callback = function()
-        if PaperSuccess then
-            Paper.Settings.Currency = "Tickets"
-            pcall(function() require(LocalPlayer.PlayerGui.Menus.Shop.Tickets).UpdateCurrency() end)
-            Rayfield:Notify({Title = "Success", Content = "Shop currency set to Tickets.", Duration = 3})
-        end
-    end,
+-- ==== TAB: EGGS & PETS ==== --
+local TabPets = Window:CreateTab("Pets 🐾", 4483362458)
+
+TabPets:CreateSection("Hatching")
+
+TabPets:CreateDropdown({
+    Name = "Select Egg",
+    Options = EggList,
+    CurrentOption = {EggList[1] or "Basic Egg"},
+    Flag = "TargetEgg",
+    Callback = function(Option) getgenv().Flags.TargetEgg = Option[1] end
 })
 
--- === TAB: ITEMS ===
-local TabItems = Window:CreateTab("Items", 4483362458)
-TabItems:CreateDropdown({Name = "Select Upgrade", Options = UpgradeList, CurrentOption = {"More Damage"}, MultipleOptions = false, Flag = "TargetUpgrade", Callback = function(O) Flags.TargetUpgrade = O[1] end})
-TabItems:CreateToggle({
-    Name = "Auto Buy Upgrade",
+TabPets:CreateDropdown({
+    Name = "Hatch Amount",
+    Options = {"1", "3", "Max"},
+    CurrentOption = {"1"},
+    Flag = "HatchMode",
+    Callback = function(Option) 
+        local val = Option[1]
+        getgenv().Flags.HatchMode = (val == "Max") and "Max" or tonumber(val)
+    end
+})
+
+TabPets:CreateToggle({
+    Name = "Auto Hatch",
     CurrentValue = false,
-    Flag = "AutoUpgrade",
+    Flag = "AutoHatch",
     Callback = function(Value)
-        Flags.AutoUpgrade = Value
-        if Value then
-            task.spawn(function()
-                while Flags.AutoUpgrade do NetworkFire("Upgrade", Flags.TargetUpgrade); task.wait(Delays.Action); end
-            end)
-        end
-    end,
-})
-TabItems:CreateDropdown({Name = "Select Potion", Options = PotionList, CurrentOption = {"Luck Potion"}, MultipleOptions = false, Flag = "TargetPotion", Callback = function(O) Flags.TargetPotion = O[1] end})
-TabItems:CreateToggle({
-    Name = "Auto Buy Potion (5k Coins)",
-    CurrentValue = false,
-    Flag = "AutoBuyPotion",
-    Callback = function(Value)
-        Flags.AutoBuyPotion = Value
-        if Value then
-            task.spawn(function()
-                while Flags.AutoBuyPotion do NetworkInvoke("Buy Item", Flags.TargetPotion, 1); task.wait(Delays.Action); end
-            end)
-        end
-    end,
+        getgenv().Flags.AutoHatch = Value
+        task.spawn(function()
+            while getgenv().Flags.AutoHatch do
+                if getgenv().Flags.TargetEgg then
+                    NetworkInvoke("Hatch Egg", getgenv().Flags.TargetEgg, getgenv().Flags.HatchMode)
+                end
+                task.wait(0.2)
+            end
+        end)
+    end
 })
 
--- === TAB: STATS/EGG ===
-local TabStats = Window:CreateTab("Egg/Stats", 4483362458)
+TabPets:CreateSection("Crafting")
+
+TabPets:CreateToggle({
+    Name = "Auto Craft Golden",
+    CurrentValue = false,
+    Flag = "AutoGolden",
+    Callback = function(Value)
+        getgenv().Flags.AutoGolden = Value
+        task.spawn(function()
+            while getgenv().Flags.AutoGolden do
+                AttemptSmartCraft("CraftGolden", 5)
+                task.wait(1.5)
+            end
+        end)
+    end
+})
+
+TabPets:CreateToggle({
+    Name = "Auto Craft Rainbow",
+    CurrentValue = false,
+    Flag = "AutoRainbow",
+    Callback = function(Value)
+        getgenv().Flags.AutoRainbow = Value
+        task.spawn(function()
+            while getgenv().Flags.AutoRainbow do
+                AttemptSmartCraft("CraftRainbow", 5)
+                task.wait(1.5)
+            end
+        end)
+    end
+})
+
+-- ==== TAB: UPGRADES ==== --
+local TabStats = Window:CreateTab("Stats ⬆️", 4483362458)
+
+TabStats:CreateSection("Rebirth")
+
+TabStats:CreateDropdown({
+    Name = "Rebirth Mode",
+    Options = {"1", "5", "20", "50", "100", "Max"},
+    CurrentOption = {"1"},
+    Flag = "RebirthMode",
+    Callback = function(Option) getgenv().Flags.RebirthMode = Option[1] end
+})
+
 TabStats:CreateToggle({
     Name = "Auto Rebirth",
     CurrentValue = false,
     Flag = "AutoRebirth",
     Callback = function(Value)
-        Flags.AutoRebirth = Value
-        if Value then
-            task.spawn(function()
-                while Flags.AutoRebirth do
-                    local index = nil
-                    if Flags.RebirthAmount == "Max" then index = "Max"
-                    else for i, v in ipairs(RebirthTable) do if tostring(v) == Flags.RebirthAmount then index = i; break end end end
-                    if index then NetworkInvoke("Rebirth", index) end
-                    task.wait(Delays.Action)
-                end
-            end)
-        end
-    end,
+        getgenv().Flags.AutoRebirth = Value
+        task.spawn(function()
+            while getgenv().Flags.AutoRebirth do
+                local mode = getgenv().Flags.RebirthMode
+                local arg = (mode == "Max") and "Max" or tonumber(mode)
+                NetworkInvoke("Rebirth", arg)
+                task.wait(1)
+            end
+        end)
+    end
 })
-TabStats:CreateDropdown({Name = "Rebirth Amount", Options = RebirthDropdown, CurrentOption = {"1"}, MultipleOptions = false, Flag = "RebirthAmount", Callback = function(O) Flags.RebirthAmount = O[1] end})
-TabStats:CreateDropdown({Name = "Select Egg", Options = EggList, CurrentOption = {"Basic Egg"}, MultipleOptions = false, Flag = "SelectedEgg", Callback = function(O) Flags.SelectedEgg = O[1] end})
+
+TabStats:CreateSection("Upgrades")
+
+TabStats:CreateDropdown({
+    Name = "Select Upgrades",
+    Options = AllUpgrades,
+    CurrentOption = {"More Gems"},
+    MultipleOptions = true,
+    Flag = "SelectedUpgrades",
+    Callback = function(Options) getgenv().Flags.SelectedUpgrades = Options end
+})
+
 TabStats:CreateToggle({
-    Name = "Auto Open Egg",
+    Name = "Auto Buy Upgrades",
     CurrentValue = false,
-    Flag = "AutoEgg",
+    Flag = "AutoUpgrade",
     Callback = function(Value)
-        Flags.AutoEgg = Value
-        if Value then
-            task.spawn(function()
-                while Flags.AutoEgg do
-                    NetworkInvoke("Hatch Egg", Flags.SelectedEgg, "Max")
-                    NetworkInvoke("Hatch Egg", Flags.SelectedEgg, 1)
-                    task.wait(Delays.Egg) -- Delay Dinâmico
+        getgenv().Flags.AutoUpgrade = Value
+        task.spawn(function()
+            while getgenv().Flags.AutoUpgrade do
+                for _, upg in pairs(getgenv().Flags.SelectedUpgrades) do
+                    NetworkInvoke("Upgrade", upg)
                 end
-            end)
-        end
-    end,
-})
-
--- === TAB: PETS ===
-local TabPets = Window:CreateTab("Pets", 4483362458)
-local function CraftPets(action, targetTier)
-    local petsFolder = LocalPlayer:FindFirstChild("Stats") and LocalPlayer.Stats:FindFirstChild("Pets")
-    if not petsFolder then return end
-    local groupedPets = {}
-    for _, pet in pairs(petsFolder:GetChildren()) do
-        local pName, pTier, pLocked = pet:GetAttribute("PetName"), pet:GetAttribute("Tier"), pet:GetAttribute("Locked")
-        if pName and pTier == targetTier and not pLocked then
-            if not groupedPets[pName] then groupedPets[pName] = {} end
-            table.insert(groupedPets[pName], pet.Name)
-        end
+                task.wait(1)
+            end
+        end)
     end
-    for petName, uuidList in pairs(groupedPets) do
-        while #uuidList >= 5 do 
-            local batch = {}
-            for i = 1, 5 do table.insert(batch, table.remove(uuidList)) end
-            NetworkInvoke("Pet", {Action = action, Pets = batch})
-            task.wait(0.1)
-        end
+})
+
+-- ==== TAB: SHOP ==== --
+local TabShop = Window:CreateTab("Shop 🛒", 4483362458)
+
+TabShop:CreateDropdown({
+    Name = "Merchant Targets",
+    Options = MerchantItems,
+    CurrentOption = {"Luck Potion"},
+    MultipleOptions = true,
+    Flag = "MerchantTargets",
+    Callback = function(Options) getgenv().Flags.MerchantTargets = Options end
+})
+
+TabShop:CreateToggle({
+    Name = "Auto Buy Merchant",
+    CurrentValue = false,
+    Flag = "AutoMerchant",
+    Callback = function(Value)
+        getgenv().Flags.AutoMerchant = Value
+        task.spawn(function()
+            while getgenv().Flags.AutoMerchant do
+                if getgenv().Flags.MerchantTargets then
+                    for _, item in pairs(getgenv().Flags.MerchantTargets) do
+                        NetworkInvoke("Merchant Buy", item)
+                    end
+                end
+                for i = 1, 3 do NetworkInvoke("Merchant Buy", i) end
+                task.wait(2)
+            end
+        end)
     end
-end
-TabPets:CreateToggle({Name = "Auto Craft Golden", CurrentValue = false, Flag = "AutoCraftGold", Callback = function(V) Flags.AutoCraftGold = V; if V then task.spawn(function() while Flags.AutoCraftGold do CraftPets("CraftGolden", 1); task.wait(2) end end) end end})
-TabPets:CreateToggle({Name = "Auto Craft Rainbow", CurrentValue = false, Flag = "AutoCraftRainbow", Callback = function(V) Flags.AutoCraftRainbow = V; if V then task.spawn(function() while Flags.AutoCraftRainbow do CraftPets("CraftRainbow", 2); task.wait(2) end end) end end})
-TabPets:CreateButton({
-    Name = "Smart Equip Best (Math)",
-    Callback = function()
-        local MyPets = {}
-        local PetsFolder = LocalPlayer.Stats.Pets
-        for _, pet in pairs(PetsFolder:GetChildren()) do
-            local power = CalculateRealPetPower(pet)
-            if power > 0 then table.insert(MyPets, { UUID = pet.Name, Power = power }) end
-        end
-        table.sort(MyPets, function(a, b) return a.Power > b.Power end)
-        local EquipList = {}
-        local MaxEquip = Paper.Stats.Get("PetsEquipped").Value or 4 
-        for i = 1, math.min(#MyPets, MaxEquip) do table.insert(EquipList, MyPets[i].UUID) end
-        if #EquipList > 0 then
-            NetworkInvoke("Pet", {Action = "Equip", Pets = EquipList})
-            Rayfield:Notify({Title = "Equipped", Content = "Equipped top " .. #EquipList .. " pets.", Duration = 3})
-        end
-    end,
 })
 
--- === TAB: MISC ===
-local TabMisc = Window:CreateTab("Misc", 4483362458)
-TabMisc:CreateToggle({Name = "Auto Buy Pickaxe", CurrentValue = false, Flag = "AutoBuyPickaxe", Callback = function(V) Flags.AutoBuyPickaxe = V; if V then task.spawn(function() while Flags.AutoBuyPickaxe do NetworkInvoke("Buy Pickaxe"); task.wait(Delays.Action) end end) end end})
-TabMisc:CreateButton({Name = "FPS Boost", Callback = function() for _, f in pairs({"Eggs", "Passes", "ExclusiveStands", "Particles"}) do if Workspace:FindFirstChild(f) then Workspace[f]:Destroy() end end Rayfield:Notify({Title = "Cleaned", Content = "Map optimized.", Duration = 3}) end})
+-- ==== TAB: EVENT ==== --
+local TabEvent = Window:CreateTab("Event 🎄", 4483362458)
 
-Rayfield:Notify({
-    Title = "SlenderHub Loaded",
-    Content = "Version 30.0 (" .. AccessLevel .. ")",
-    Duration = 5,
-    Image = 4483362458,
+TabEvent:CreateToggle({
+    Name = "Auto Buy Event Pickaxe",
+    CurrentValue = false,
+    Flag = "AutoEventPick",
+    Callback = function(Value)
+        getgenv().Flags.AutoEventPick = Value
+        task.spawn(function()
+            while getgenv().Flags.AutoEventPick do
+                NetworkInvoke("Buy Christmas Pickaxe")
+                task.wait(1)
+            end
+        end)
+    end
 })
+
+Rayfield:LoadConfiguration()
