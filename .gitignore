@@ -1,29 +1,1628 @@
+EventMerchant
 -- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
--- Decompiled on 2026-01-10 15:37:44
+-- Decompiled on 2026-01-10 18:38:32
 -- Luau version 6, Types version 3
--- Time taken: 0.003525 seconds
+-- Time taken: 0.006816 seconds
 
 return {
-	["Lucky I"] = {1, 3, 0.05, "Gives an additional 5% luck", "Luck"};
-	["Lucky II"] = {1, 10, 0.075, "Gives an additional 7.5% luck", "Luck"};
-	["Lucky III"] = {1, 25, 0.1, "Gives an additional 10% luck", "Luck"};
-	["Lucky IV"] = {1, 65, 0.125, "Gives an additional 12.5% luck", "Luck"};
-	["Lucky V"] = {1, 99, 0.15, "Gives an additional 15% luck", "Luck"};
-	["Clicks I"] = {1, 3, 0.05, "Gives an additional 5% clicks", "Clicks"};
-	["Clicks II"] = {1, 10, 0.075, "Gives an additional 7.5% clicks", "Clicks"};
-	["Clicks III"] = {1, 25, 0.1, "Gives an additional 10% clicks", "Clicks"};
-	["Clicks IV"] = {1, 65, 0.15, "Gives an additional 15% clicks", "Clicks"};
-	["Clicks V"] = {1, 99, 0.2, "Gives an additional 20% clicks", "Clicks"};
-	["Rebirths I"] = {1, 3, 0.05, "Gives an additional 5% rebirths", "Rebirths"};
-	["Rebirths II"] = {1, 10, 0.075, "Gives an additional 7.5% rebirths", "Rebirths"};
-	["Rebirths III"] = {1, 25, 0.1, "Gives an additional 10% rebirths", "Rebirths"};
-	["Rebirths IV"] = {1, 65, 0.15, "Gives an additional 15% rebirths", "Rebirths"};
-	["Rebirths V"] = {1, 99, 0.2, "Gives an additional 20% rebirths", "Rebirths"};
-	["Gems I"] = {1, 5, 0.02, "Gives an additional 2% gems", "Gems"};
-	["Gems II"] = {1, 15, 0.04, "Gives an additional 4% gems", "Gems"};
-	["Gems III"] = {1, 40, 0.1, "Gives an additional 10% gems", "Gems"};
-	["Gems IV"] = {1, 99, 0.135, "Gives an additional 13.5% gems", "Gems"};
-	["Gems V"] = {1, 150, 0.165, "Gives an additional 16.5% gems", "Gems"};
+	["Luck Potion"] = {
+		Type = "Item";
+		Price = 150;
+		Weight = 16;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Speed Potion"] = {
+		Type = "Item";
+		Price = 150;
+		Weight = 17;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Damage Potion"] = {
+		Type = "Item";
+		Price = 150;
+		Weight = 17;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Coin Potion"] = {
+		Type = "Item";
+		Price = 150;
+		Weight = 17;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Gold Potion"] = {
+		Type = "Item";
+		Price = 150;
+		Weight = 17;
+		MinStock = 1;
+		MaxStock = 2;
+	};
+	["Royal Crown"] = {
+		Type = "Item";
+		Price = 2000;
+		Weight = 4;
+		MinStock = 1;
+		MaxStock = 3;
+	};
+	["Royal Gem"] = {
+		Type = "Item";
+		Price = 2000;
+		Weight = 4;
+		MinStock = 1;
+		MaxStock = 3;
+	};
+	["Royal Ring"] = {
+		Type = "Item";
+		Price = 2000;
+		Weight = 4;
+		MinStock = 1;
+		MaxStock = 3;
+	};
+	["Hatch Booster"] = {
+		Type = "Item";
+		Price = 15000;
+		Weight = 2;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Holy Clover"] = {
+		Type = "Item";
+		Price = 5000;
+		Weight = 1.5;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Lucky Rainbow"] = {
+		Type = "Item";
+		Price = 3500;
+		Weight = 3;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Large Star"] = {
+		Type = "Item";
+		Price = 10000;
+		Weight = 4;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Huge Star"] = {
+		Type = "Item";
+		Price = 15000;
+		Weight = 3;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Giga Star"] = {
+		Type = "Item";
+		Price = 20000;
+		Weight = 2;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Luck Charm I"] = {
+		Type = "Item";
+		Price = 2500;
+		Weight = 3;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Coin Charm I"] = {
+		Type = "Item";
+		Price = 2500;
+		Weight = 3;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Mining Speed Charm I"] = {
+		Type = "Item";
+		Price = 2500;
+		Weight = 3;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Hatch Charm I"] = {
+		Type = "Item";
+		Price = 2500;
+		Weight = 3;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Luck Charm II"] = {
+		Type = "Item";
+		Price = 5000;
+		Weight = 1;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Coin Charm II"] = {
+		Type = "Item";
+		Price = 5000;
+		Weight = 1;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Mining Speed Charm II"] = {
+		Type = "Item";
+		Price = 5000;
+		Weight = 1;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Hatch Charm II"] = {
+		Type = "Item";
+		Price = 5000;
+		Weight = 1;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Luck Charm III"] = {
+		Type = "Item";
+		Price = 25000;
+		Weight = 0.3;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Coin Charm III"] = {
+		Type = "Item";
+		Price = 25000;
+		Weight = 0.3;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Mining Speed Charm III"] = {
+		Type = "Item";
+		Price = 25000;
+		Weight = 0.3;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Hatch Charm III"] = {
+		Type = "Item";
+		Price = 25000;
+		Weight = 0.3;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Luck Charm IV"] = {
+		Type = "Item";
+		Price = 1500000;
+		Weight = 0.1;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Coin Charm IV"] = {
+		Type = "Item";
+		Price = 1500000;
+		Weight = 0.1;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Mining Speed Charm IV"] = {
+		Type = "Item";
+		Price = 1500000;
+		Weight = 0.1;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Hatch Charm IV"] = {
+		Type = "Item";
+		Price = 1500000;
+		Weight = 0.1;
+		MinStock = 1;
+		MaxStock = 1;
+	};
+	["Coconut Seed"] = {
+		Type = "Item";
+		Price = 50000;
+		Weight = 2.5;
+		MinStock = 1;
+		MaxStock = 2;
+	};
 }
 
 
+EventUpgrades
+
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-01-10 18:39:22
+-- Luau version 6, Types version 3
+-- Time taken: 0.005090 seconds
+
+local module = {
+	["More Event Damage"] = {
+		Order = 0;
+		Icon = "rbxassetid://83160600274817";
+		Color = Color3.fromRGB(255, 255, 0);
+		StatName = "More35MEventDamage";
+		Suffix = '%';
+		Boost = 10;
+		UpgradeCosts = {1, 15, 75, 100, 150, 200, 250, 350, 450, 500, 600, 700, 850, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3250, 3500, 3750, 4000, 4500, 4750, 5000, 6000, 10000, 20000, 30000, 40000, 50000};
+	};
+	["More Crowns"] = {
+		Order = 1;
+		Icon = "rbxassetid://131675585319687";
+		Color = Color3.fromRGB(245, 59, 77);
+		StatName = "More35MCrowns";
+		Suffix = 'x';
+		Boost = 1;
+		UpgradeCosts = {50, 100, 200, 350, 500, 650, 800, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 15000, 25000, 35000, 45000, 50000};
+	};
+}
+local tbl = {
+	Order = 2;
+	Icon = "rbxassetid://71322381074531";
+	Color = Color3.fromRGB(239, 239, 0);
+	StatName = "More35MGold";
+	Suffix = '%';
+	Boost = 10;
+	Max = 200;
+}
+local function UpgradeCosts(arg1) -- Line 101
+	return math.floor(2 * (arg1 + 1) ^ 1.4 + 3 * (arg1 + 1))
+end
+tbl.UpgradeCosts = UpgradeCosts
+module["More Gold"] = tbl
+module["Chest Luck"] = {
+	Order = 3;
+	Icon = "rbxassetid://71311207125316";
+	Color = Color3.fromRGB(215, 38, 35);
+	StatName = "More35MChestLuck";
+	Suffix = '%';
+	Boost = 5;
+	UpgradeCosts = {100, 350, 500, 750, 1000, 2000, 5000, 10000, 15000, 50000};
+}
+module["Crowns Boost"] = {
+	Order = 31;
+	Icon = "rbxassetid://80639061789023";
+	Color = Color3.fromRGB(245, 59, 77);
+	StatName = "35MCrownsBoost";
+	Suffix = '%';
+	Boost = 10;
+	UpgradeCosts = {50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000, 450000, 500000};
+}
+module["Egg Luck"] = {
+	Order = 32;
+	Icon = "rbxassetid://98424797282893";
+	Color = Color3.fromRGB(3, 255, 3);
+	StatName = "35MEventEggLuckUpgrade";
+	Max = 25;
+	Suffix = '%';
+	Boost = 1;
+	UpgradeCosts = function(arg1) -- Line 166, Named "UpgradeCosts"
+		return 1000 + 100 * arg1 * arg1 ^ 2
+	end;
+}
+module["Hatch Speed"] = {
+	Order = 33;
+	Icon = "rbxassetid://131186631223943";
+	Color = Color3.fromRGB(255, 255, 255);
+	StatName = "35MEventHatchSpeedUpgrade";
+	Prefix = '+';
+	Suffix = 'x';
+	Boost = 0.05;
+	UpgradeCosts = {10000, 50000, 150000, 250000, 500000, 1000000};
+}
+module["Faster Event Merchant"] = {
+	Order = 34;
+	Icon = "rbxassetid://99323521348774";
+	Color = Color3.fromRGB(208, 119, 67);
+	StatName = "Faster35MEventMerchant";
+	Suffix = "min";
+	Boost = 1;
+	UpgradeCosts = {100000, 500000, 1000000, 2500000, 5000000};
+}
+return modul
+
+Events
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-01-10 18:40:44
+-- Luau version 6, Types version 3
+-- Time taken: 0.001265 seconds
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local module = {}
+local Events_upvr = require(ReplicatedStorage.Tables.Events)
+local ActiveEvent_upvr = ReplicatedStorage.Values:WaitForChild("ActiveEvent")
+function module.GetBoostAmount(arg1) -- Line 13
+	--[[ Upvalues[2]:
+		[1]: Events_upvr (readonly)
+		[2]: ActiveEvent_upvr (readonly)
+	]]
+	local var5 = Events_upvr[ActiveEvent_upvr.Value]
+	if var5 == nil then
+		return 0
+	end
+	return var5.Boost[arg1] or 0
+end
+return module
+
+
+Eggs 
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-01-10 18:42:30
+-- Luau version 6, Types version 3
+-- Time taken: 0.054533 seconds
+
+return {
+	["Basic Egg"] = {
+		WorldNumber = 1;
+		Cost = 10;
+		Currency = "Coins";
+		Exclusive = false;
+		Pets = {{
+			Pet = "Cat";
+			Chance = 40;
+		}, {
+			Pet = "Dog";
+			Chance = 30;
+		}, {
+			Pet = "Bunny";
+			Chance = 20;
+		}, {
+			Pet = "Bear";
+			Chance = 10;
+		}};
+	};
+	["Rare Egg"] = {
+		WorldNumber = 1;
+		Cost = 100;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Hampter";
+			Chance = 45;
+		}, {
+			Pet = "Duck";
+			Chance = 30;
+		}, {
+			Pet = "Frog";
+			Chance = 15;
+		}, {
+			Pet = "Clown Fish";
+			Chance = 8;
+		}, {
+			Pet = "Cuckatoo";
+			Chance = 2;
+		}};
+	};
+	["Forest Egg"] = {
+		WorldNumber = 1;
+		Cost = 2500;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Raccoon";
+			Chance = 43.5;
+		}, {
+			Pet = "Squirrel";
+			Chance = 30;
+		}, {
+			Pet = "Fox";
+			Chance = 15;
+		}, {
+			Pet = "Deer";
+			Chance = 8;
+		}, {
+			Pet = "Hedgehog";
+			Chance = 3;
+		}, {
+			Pet = "Owl";
+			Chance = 0.5;
+		}};
+	};
+	["Black Hole Egg"] = {
+		WorldNumber = 2;
+		Cost = 100000;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Alien";
+			Chance = 63.265;
+		}, {
+			Pet = "Cyclopup";
+			Chance = 30;
+		}, {
+			Pet = "Dragonfly";
+			Chance = 6;
+		}, {
+			Pet = "Alien Hydra";
+			Chance = 0.7;
+		}, {
+			Pet = "Ghost Dominus";
+			Chance = 0.035;
+		}};
+	};
+	["UFO Egg"] = {
+		WorldNumber = 2;
+		Cost = 10000000;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Astroid Golem";
+			Chance = 64.268;
+		}, {
+			Pet = "Giggly";
+			Chance = 30;
+		}, {
+			Pet = "Ufo";
+			Chance = 5;
+		}, {
+			Pet = "Blazebite";
+			Chance = 0.7;
+		}, {
+			Pet = "Neonbyte";
+			Chance = 0.03;
+		}, {
+			Pet = "Crimson Voidcore";
+			Chance = 0.002;
+		}};
+	};
+	["Garden Egg"] = {
+		WorldNumber = 2;
+		Cost = 250000000;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Astronaut";
+			Chance = 70.4469;
+		}, {
+			Pet = "Tri Bite";
+			Chance = 25;
+		}, {
+			Pet = "Rock Gargoyle";
+			Chance = 4;
+		}, {
+			Pet = "Crazy Scientist";
+			Chance = 0.5;
+		}, {
+			Pet = "Microwave";
+			Chance = 0.05;
+		}, {
+			Pet = "Phone";
+			Chance = 0.003;
+		}, {
+			Pet = "Mechanical Core";
+			Chance = 0.0001;
+		}};
+	};
+	["Sand Egg"] = {
+		WorldNumber = 3;
+		Cost = 25000000000;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Meerkat";
+			Chance = 40;
+		}, {
+			Pet = "Camel";
+			Chance = 32;
+		}, {
+			Pet = "Rattlesnake";
+			Chance = 15;
+		}, {
+			Pet = "Scorpion";
+			Chance = 8;
+		}, {
+			Pet = "Sphinx Cat";
+			Chance = 4;
+		}, {
+			Pet = "Desert King";
+			Chance = 1;
+		}};
+	};
+	["Snow Egg"] = {
+		WorldNumber = 3;
+		Cost = 1000000000000;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Snow Doggy";
+			Chance = 50;
+		}, {
+			Pet = "Polar Bear";
+			Chance = 24;
+		}, {
+			Pet = "Penguin";
+			Chance = 15;
+		}, {
+			Pet = "Walrus";
+			Chance = 7.5;
+		}, {
+			Pet = "Breezy Fox";
+			Chance = 3;
+		}, {
+			Pet = "Frost Dragon";
+			Chance = 0.5;
+		}};
+	};
+	["Lava Egg"] = {
+		WorldNumber = 3;
+		Cost = 100000000000000;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Sliced Magma";
+			Chance = 50;
+		}, {
+			Pet = "Lava Deer";
+			Chance = 38.9999;
+		}, {
+			Pet = "Flame Horse";
+			Chance = 7.67;
+		}, {
+			Pet = "Fiery Monkey";
+			Chance = 3;
+		}, {
+			Pet = "Phoenix";
+			Chance = 0.3;
+		}, {
+			Pet = "Scorching Magma";
+			Chance = 0.03;
+		}, {
+			Pet = "Fiery Guardian";
+			Chance = 0.0001;
+		}};
+	};
+	["Sunny Egg"] = {
+		WorldNumber = 4;
+		Cost = 50000000000000000;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Beach Capybara";
+			Chance = 43.8779;
+		}, {
+			Pet = "Beach Dominus";
+			Chance = 30;
+		}, {
+			Pet = "Tiki Cat";
+			Chance = 20;
+		}, {
+			Pet = "Beach Ball Worm";
+			Chance = 6;
+		}, {
+			Pet = "Inflated Unicorn";
+			Chance = 0.1;
+		}, {
+			Pet = "Sun Majesty";
+			Chance = 0.02;
+		}, {
+			Pet = "Crab Adventurer";
+			Chance = 0.002;
+		}, {
+			Pet = "Sunfeather Griffin";
+			Chance = 0.0001;
+		}};
+	};
+	["Cave Egg"] = {
+		WorldNumber = 4;
+		Cost = 1000000000000000000;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Miner Dog";
+			Chance = 28.0174;
+		}, {
+			Pet = "Miner Cat";
+			Chance = 25;
+		}, {
+			Pet = "Mouse Miner";
+			Chance = 23;
+		}, {
+			Pet = "Loot Minecart";
+			Chance = 18;
+		}, {
+			Pet = "Cave Bat";
+			Chance = 5.6;
+		}, {
+			Pet = "Geode Rock";
+			Chance = 0.25;
+		}, {
+			Pet = "Big Drill Spider";
+			Chance = 0.1;
+		}, {
+			Pet = "Drill Ant";
+			Chance = 0.03;
+		}, {
+			Pet = "Mines Trio";
+			Chance = 0.0025;
+		}, {
+			Pet = "Miner Mole";
+			Chance = 0.0001;
+		}};
+	};
+	["Sakura Egg"] = {
+		WorldNumber = 4;
+		Cost = 15000000000000000000;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Shiba";
+			Chance = 28.676976;
+		}, {
+			Pet = "Dwarf Squirrel";
+			Chance = 25;
+		}, {
+			Pet = "Macaque Monkey";
+			Chance = 23;
+		}, {
+			Pet = "Panda";
+			Chance = 18;
+		}, {
+			Pet = "Sakura Cardinal";
+			Chance = 5;
+		}, {
+			Pet = "Koi Fish";
+			Chance = 0.2;
+		}, {
+			Pet = "Tiger";
+			Chance = 0.1;
+		}, {
+			Pet = "Komodo Dragon";
+			Chance = 0.02;
+		}, {
+			Pet = "Kuro Bunny";
+			Chance = 0.003;
+		}, {
+			Pet = "Sakura Dragon";
+			Chance = 0.00002;
+		}, {
+			Pet = "Shark Cat";
+			Chance = 0.000004;
+		}};
+	};
+	["Beach Egg"] = {
+		WorldNumber = 5;
+		Cost = 1e+21;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Pirate Dog";
+			Chance = 34.68;
+		}, {
+			Pet = "Pirate Parrot";
+			Chance = 28;
+		}, {
+			Pet = "Beach Monkey";
+			Chance = 20;
+		}, {
+			Pet = "Beach Rock";
+			Chance = 12;
+		}, {
+			Pet = "Kraken";
+			Chance = 5;
+		}, {
+			Pet = "Solstice Lord";
+			Chance = 0.2;
+		}, {
+			Pet = "Ultimate Beach Ball";
+			Chance = 0.1;
+		}, {
+			Pet = "Five Swag Suns";
+			Chance = 0.02;
+		}};
+	};
+	["Aqua Egg"] = {
+		WorldNumber = 5;
+		Cost = 2.5e+23;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Blue Fish";
+			Chance = 34.37696742857143;
+		}, {
+			Pet = "Striped Fish";
+			Chance = 25;
+		}, {
+			Pet = "Seahorse";
+			Chance = 20;
+		}, {
+			Pet = "Shark";
+			Chance = 15;
+		}, {
+			Pet = "Turtle";
+			Chance = 5;
+		}, {
+			Pet = "Whale";
+			Chance = 0.5;
+		}, {
+			Pet = "Anglerfish";
+			Chance = 0.1;
+		}, {
+			Pet = "Pufferfish";
+			Chance = 0.02;
+		}, {
+			Pet = "Aqua Lobster";
+			Chance = 0.003;
+		}, {
+			Pet = "Aqua Monster";
+			Chance = 0.00002857142857142857;
+		}, {
+			Pet = "Ice Cream Kitty";
+			Chance = 0.000004;
+		}};
+	};
+	["Pixel Egg"] = {
+		WorldNumber = 6;
+		Cost = 5e+26;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Retro Cat";
+			Chance = 39.716989999999996;
+		}, {
+			Pet = "Retro Dog";
+			Chance = 35;
+		}, {
+			Pet = "Virtual Cubes";
+			Chance = 20;
+		}, {
+			Pet = "Retro DJ";
+			Chance = 5;
+		}, {
+			Pet = "Retro Camera";
+			Chance = 0.2;
+		}, {
+			Pet = "Untitled Object";
+			Chance = 0.08;
+		}, {
+			Pet = "Retro TV";
+			Chance = 0.003;
+		}, {
+			Pet = "Big Boombox";
+			Chance = 0.00001;
+		}};
+	};
+	["Farm Egg"] = {
+		WorldNumber = 6;
+		Cost = 7.5e+28;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Farmer Cat";
+			Chance = 28.696967428571426;
+		}, {
+			Pet = "Farmer Dog";
+			Chance = 25;
+		}, {
+			Pet = "Piggy";
+			Chance = 23;
+		}, {
+			Pet = "Chicken";
+			Chance = 18;
+		}, {
+			Pet = "Cow";
+			Chance = 5;
+		}, {
+			Pet = "Farmer";
+			Chance = 0.2;
+		}, {
+			Pet = "Tomato Basket";
+			Chance = 0.08;
+		}, {
+			Pet = "Windmill";
+			Chance = 0.02;
+		}, {
+			Pet = "Scarecrow";
+			Chance = 0.003;
+		}, {
+			Pet = "Pumpkin Farmer";
+			Chance = 0.00002857142857142857;
+		}, {
+			Pet = "Apple Warrior";
+			Chance = 0.000004;
+		}};
+	};
+	["Galaxy Egg"] = {
+		WorldNumber = 7;
+		Cost = 2.5e+32;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Space Rock";
+			Chance = 44.869;
+		}, {
+			Pet = "Crazy Ufo";
+			Chance = 30;
+		}, {
+			Pet = "Galaxy Fiend";
+			Chance = 20;
+		}, {
+			Pet = "Space DJ";
+			Chance = 5;
+		}, {
+			Pet = "Scorching Sun";
+			Chance = 0.1;
+		}, {
+			Pet = "Space Vast";
+			Chance = 0.03;
+		}, {
+			Pet = "Galactical Beauty";
+			Chance = 0.001;
+		}};
+	};
+	["Angelic Egg"] = {
+		WorldNumber = 7;
+		Cost = 1e+34;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Angelic Cat";
+			Chance = 28.69697166666667;
+		}, {
+			Pet = "Angelic Dog";
+			Chance = 25;
+		}, {
+			Pet = "Peaceful Dove";
+			Chance = 23;
+		}, {
+			Pet = "Angelic Cloud";
+			Chance = 18;
+		}, {
+			Pet = "Heavenly Cub";
+			Chance = 5;
+		}, {
+			Pet = "Angelic Minion";
+			Chance = 0.2;
+		}, {
+			Pet = "Divinity Fish";
+			Chance = 0.08;
+		}, {
+			Pet = "Heavenly Spirit";
+			Chance = 0.02;
+		}, {
+			Pet = "Celestial Lion";
+			Chance = 0.003;
+		}, {
+			Pet = "Divine Bull";
+			Chance = 0.000025;
+		}, {
+			Pet = "Opranhim Trio";
+			Chance = 0.0000033333333333333333;
+		}};
+	};
+	["Fantasy Egg"] = {
+		WorldNumber = 8;
+		Cost = 2.5e+37;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Kitty Spirit";
+			Chance = 28.742999999999995;
+		}, {
+			Pet = "Spiritual Dog";
+			Chance = 25;
+		}, {
+			Pet = "Spiritual Fox";
+			Chance = 23;
+		}, {
+			Pet = "Gargoyle";
+			Chance = 18;
+		}, {
+			Pet = "Mad Hatter Bunny";
+			Chance = 5;
+		}, {
+			Pet = "Fantasy Soul";
+			Chance = 0.2;
+		}, {
+			Pet = "Divine Valkyrae";
+			Chance = 0.05;
+		}, {
+			Pet = "Charmed Spirit";
+			Chance = 0.007;
+		}};
+	};
+	["Swamp Egg"] = {
+		WorldNumber = 8;
+		Cost = 2.5e+39;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Swamp Dog";
+			Chance = 28.757977979999993;
+		}, {
+			Pet = "Swamp Cat";
+			Chance = 25;
+		}, {
+			Pet = "Swamp Snail";
+			Chance = 23;
+		}, {
+			Pet = "Swamp Dragonfly";
+			Chance = 18;
+		}, {
+			Pet = "Grumpy Mushroom";
+			Chance = 5;
+		}, {
+			Pet = "Swamp Spirit";
+			Chance = 0.2;
+		}, {
+			Pet = "Swamp Mistress";
+			Chance = 0.04;
+		}, {
+			Pet = "Swamp Toxicity";
+			Chance = 0.002;
+		}, {
+			Pet = "Swamp Platypus";
+			Chance = 0.00002;
+		}, {
+			Pet = "Swamp Creature";
+			Chance = 0.000002;
+		}, {
+			Pet = "Turtle Fighter";
+			Chance = 2e-08;
+		}};
+	};
+	["Magic Egg"] = {
+		WorldNumber = 9;
+		Cost = 1e+42;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Wizard Cat";
+			Chance = 35.818;
+		}, {
+			Pet = "Wizard Dog";
+			Chance = 25;
+		}, {
+			Pet = "Magical Unicorn";
+			Chance = 20;
+		}, {
+			Pet = "Witch Pot";
+			Chance = 15;
+		}, {
+			Pet = "Bunny Magician";
+			Chance = 4;
+		}, {
+			Pet = "Magical Wyvern";
+			Chance = 0.15;
+		}, {
+			Pet = "Cursed Wizard";
+			Chance = 0.03;
+		}, {
+			Pet = "Magic Voodoo";
+			Chance = 0.002;
+		}};
+	};
+	["Carnival Egg"] = {
+		WorldNumber = 9;
+		Cost = 1e+44;
+		Currency = "Coins";
+		Pets = {{
+			Pet = "Clown Cat";
+			Chance = 28.757978441538455;
+		}, {
+			Pet = "Clown Dog";
+			Chance = 25;
+		}, {
+			Pet = "Hula-Hoop Bunny";
+			Chance = 23;
+		}, {
+			Pet = "Caramel Apple";
+			Chance = 18;
+		}, {
+			Pet = "Showman Bear";
+			Chance = 5;
+		}, {
+			Pet = "Clown Juggler";
+			Chance = 0.2;
+		}, {
+			Pet = "Circus Elephant";
+			Chance = 0.04;
+		}, {
+			Pet = "Carnival Spirit";
+			Chance = 0.002;
+		}, {
+			Pet = "Target Minigame";
+			Chance = 0.00002;
+		}, {
+			Pet = "Hot Air Balloon";
+			Chance = 0.0000015384615384615385;
+		}, {
+			Pet = "Carnival Cannon";
+			Chance = 2e-08;
+		}};
+	};
+	["Music Egg"] = {
+		Exclusive = true;
+		Pets = {{
+			Pet = "Guitar Beagle";
+			Chance = 44.75;
+		}, {
+			Pet = "Piano Cat";
+			Chance = 37;
+		}, {
+			Pet = "Drum Monkey";
+			Chance = 15;
+		}, {
+			Pet = "Saxophone Panda";
+			Chance = 3;
+		}, {
+			Pet = "DJ Cat";
+			Chance = 0.25;
+		}};
+	};
+	["Dark Egg"] = {
+		Exclusive = true;
+		Pets = {{
+			Pet = "Crystal Fiend";
+			Chance = 44.75;
+		}, {
+			Pet = "Fiery Bull";
+			Chance = 37;
+		}, {
+			Pet = "Dark Komodo Dragon";
+			Chance = 15;
+		}, {
+			Pet = "Altar Beast";
+			Chance = 3;
+		}, {
+			Pet = "Nightmare Terror";
+			Chance = 0.25;
+		}};
+	};
+	["Winter Egg"] = {
+		Exclusive = true;
+		Pets = {{
+			Pet = "Winter Penguin";
+			Chance = 44.75;
+		}, {
+			Pet = "Winter Walrus";
+			Chance = 37;
+		}, {
+			Pet = "Yeti";
+			Chance = 15;
+		}, {
+			Pet = "Snowman";
+			Chance = 3;
+		}, {
+			Pet = "Frostwing Seraph";
+			Chance = 0.25;
+		}};
+	};
+	["Heaven Egg"] = {
+		Exclusive = true;
+		Pets = {{
+			Pet = "Angelic Dove";
+			Chance = 44.75;
+		}, {
+			Pet = "Dreamy Spirit";
+			Chance = 37;
+		}, {
+			Pet = "Angelic Necromancer";
+			Chance = 15;
+		}, {
+			Pet = "Divine Fox";
+			Chance = 3;
+		}, {
+			Pet = "Celestial Dominus";
+			Chance = 0.25;
+		}};
+	};
+	["Rocket Egg"] = {
+		Exclusive = true;
+		Pets = {{
+			Pet = "Retro Cube";
+			Chance = 40;
+		}, {
+			Pet = "Hydra Dragon";
+			Chance = 30;
+		}, {
+			Pet = "Phantom Dragon";
+			Chance = 20;
+		}, {
+			Pet = "Neon Cube";
+			Chance = 9;
+		}, {
+			Pet = "Abyssal Bloom";
+			Chance = 1;
+		}};
+	};
+	["Electric Egg"] = {
+		Exclusive = true;
+		Pets = {{
+			Pet = "Electric Fish";
+			Chance = 40;
+		}, {
+			Pet = "Shock Bull";
+			Chance = 30;
+		}, {
+			Pet = "Shock Dragon";
+			Chance = 20;
+		}, {
+			Pet = "Electric Tiger";
+			Chance = 9;
+		}, {
+			Pet = "Electric Dragon";
+			Chance = 1;
+		}};
+	};
+	["Toy Egg"] = {
+		Exclusive = true;
+		Pets = {{
+			Pet = "Airplane Toy";
+			Chance = 40;
+		}, {
+			Pet = "Robotic Toy";
+			Chance = 30;
+		}, {
+			Pet = "Gamepad Toy";
+			Chance = 20;
+		}, {
+			Pet = "Arcade Toy";
+			Chance = 9;
+		}, {
+			Pet = "Immortal Airplane";
+			Chance = 1;
+		}};
+	};
+	["Cloudy Egg"] = {
+		Exclusive = true;
+		Pets = {{
+			Pet = "Chinchilla Wizard";
+			Chance = 40;
+		}, {
+			Pet = "Bighorn Sheep";
+			Chance = 30;
+		}, {
+			Pet = "Mystical Cougar";
+			Chance = 20;
+		}, {
+			Pet = "Griffin";
+			Chance = 9;
+		}, {
+			Pet = "Lord Snake";
+			Chance = 1;
+		}};
+	};
+	["Aura Egg"] = {
+		Exclusive = true;
+		Pets = {{
+			Pet = "Blue Bee";
+			Chance = 39.99;
+		}, {
+			Pet = "King Ben";
+			Chance = 30;
+		}, {
+			Pet = "Goo Axolotl";
+			Chance = 20;
+		}, {
+			Pet = "Ultra Capybara";
+			Chance = 9;
+		}, {
+			Pet = "Mystical Cat";
+			Chance = 1;
+		}, {
+			Pet = "Ascended Lapizlord";
+			Chance = 0.01;
+		}};
+	};
+	["Admin Egg"] = {
+		Exclusive = true;
+		Pets = {{
+			Pet = "Axolotl";
+			Chance = 48.98;
+		}, {
+			Pet = "Zebra";
+			Chance = 26;
+		}, {
+			Pet = "Octopus";
+			Chance = 18;
+		}, {
+			Pet = "Retro Duo";
+			Chance = 6;
+		}, {
+			Pet = "Piggy Farmer";
+			Chance = 1;
+		}, {
+			Pet = "Chicken Commando";
+			Chance = 0.02;
+		}};
+	};
+	["5M Egg"] = {
+		WorldNumber = 1;
+		Cost = 250;
+		Currency = "Gems";
+		Pets = {{
+			Pet = "Villager Cat";
+			Chance = 44.7038959;
+		}, {
+			Pet = "Villager Dog";
+			Chance = 30;
+		}, {
+			Pet = "Royal Bear";
+			Chance = 20;
+		}, {
+			Pet = "Medieval Jug";
+			Chance = 5;
+		}, {
+			Pet = "Coin Pouch";
+			Chance = 0.2;
+		}, {
+			Pet = "Molten Anvil";
+			Chance = 0.08;
+		}, {
+			Pet = "Joyful Chest";
+			Chance = 0.015;
+		}, {
+			Pet = "Tower Turret";
+			Chance = 0.001;
+		}, {
+			Pet = "Devious Dragon";
+			Chance = 0.0001;
+		}, {
+			Pet = "Royal Crown";
+			Chance = 0.000004;
+		}, {
+			Pet = "Vitality Knight";
+			Chance = 1e-07;
+		}};
+	};
+	["Ice Egg"] = {
+		WorldNumber = -1;
+		Cost = 25;
+		Currency = "Snowflakes";
+		Pets = {{
+			Pet = "Snow Cat";
+			Chance = 39.7159;
+		}, {
+			Pet = "Snow Dog";
+			Chance = 35;
+		}, {
+			Pet = "Snow Armadillo";
+			Chance = 20;
+		}, {
+			Pet = "Sabertooth Tiger";
+			Chance = 5;
+		}, {
+			Pet = "Woolly Mammoth";
+			Chance = 0.2;
+		}, {
+			Pet = "Triple Snow Cube";
+			Chance = 0.08;
+		}, {
+			Pet = "Ice Spirit";
+			Chance = 0.003;
+		}, {
+			Pet = "Frost Golem";
+			Chance = 0.001;
+		}, {
+			Pet = "Divine Frost";
+			Chance = 0.0001;
+		}};
+	};
+	["Christmas Egg"] = {
+		WorldNumber = -1;
+		Cost = 100000;
+		Currency = "Snowflakes";
+		Pets = {{
+			Pet = "Festive Cat";
+			Chance = 69.77897482063491;
+		}, {
+			Pet = "Festive Dog";
+			Chance = 25;
+		}, {
+			Pet = "Moose";
+			Chance = 5;
+		}, {
+			Pet = "Frozen Snowflake";
+			Chance = 0.2;
+		}, {
+			Pet = "Snow Lord";
+			Chance = 0.02;
+		}, {
+			Pet = "Winged Festive Candy";
+			Chance = 0.001;
+		}, {
+			Pet = "Ice Wisp";
+			Chance = 0.000022222222222222223;
+		}, {
+			Pet = "Snow Golem";
+			Chance = 0.0000028571428571428573;
+		}, {
+			Pet = "Festive Reindeer";
+			Chance = 1e-07;
+		}};
+	};
+	["Festive Egg"] = {
+		WorldNumber = -1;
+		Cost = 1000000;
+		Currency = "Snowflakes";
+		Pets = {{
+			Pet = "Ice Bunny";
+			Chance = 64.73897773777779;
+		}, {
+			Pet = "Christmas Bear";
+			Chance = 30;
+		}, {
+			Pet = "Christmas Deer";
+			Chance = 5;
+		}, {
+			Pet = "Frostbit";
+			Chance = 0.25;
+		}, {
+			Pet = "Frost Titan";
+			Chance = 0.01;
+		}, {
+			Pet = "Christmas Lion";
+			Chance = 0.001;
+		}, {
+			Pet = "Cookie Man";
+			Chance = 0.00002;
+		}, {
+			Pet = "Snow Globe";
+			Chance = 0.000002222222222222222;
+		}, {
+			Pet = "Santa";
+			Chance = 4e-08;
+		}};
+	};
+	["2026 Egg"] = {
+		WorldNumber = 1;
+		Cost = 350;
+		Currency = "Gems";
+		Pets = {{
+			Pet = "Party Dog";
+			Chance = 69.73896940857142;
+		}, {
+			Pet = "Party Cat";
+			Chance = 25;
+		}, {
+			Pet = "Party Squirrel";
+			Chance = 5;
+		}, {
+			Pet = "Party Horse";
+			Chance = 0.25;
+		}, {
+			Pet = "Happy Firework";
+			Chance = 0.01;
+		}, {
+			Pet = "Evolved Warrior";
+			Chance = 0.001;
+		}, {
+			Pet = "Explosive Firework";
+			Chance = 0.00002857142857142857;
+		}, {
+			Pet = "Starlight Orbital";
+			Chance = 0.000002;
+		}, {
+			Pet = "Magic Hat";
+			Chance = 2e-08;
+		}};
+	};
+	["35M Royal Egg"] = {
+		WorldNumber = -1;
+		Cost = 25;
+		Currency = "Gold";
+		Pets = {{
+			Pet = "35M Green Dino";
+			Chance = 43.2184;
+		}, {
+			Pet = "35M Blue Dino";
+			Chance = 30;
+		}, {
+			Pet = "35M Triceratops";
+			Chance = 22;
+		}, {
+			Pet = "35M Diplodocus";
+			Chance = 4.5;
+		}, {
+			Pet = "35M Dino Egg";
+			Chance = 0.2;
+		}, {
+			Pet = "35M Pterodactyl";
+			Chance = 0.075;
+		}, {
+			Pet = "35M Velociraptor";
+			Chance = 0.005;
+		}, {
+			Pet = "35M Mecha T-Rex";
+			Chance = 0.0015;
+		}, {
+			Pet = "35M Big Baby Dino";
+			Chance = 0.0001;
+		}};
+	};
+	["35M Fancy Egg"] = {
+		WorldNumber = -1;
+		Cost = 150000;
+		Currency = "Gold";
+		Pets = {{
+			Pet = "35M Capybara";
+			Chance = 39.76632798;
+		}, {
+			Pet = "35M Dog";
+			Chance = 35;
+		}, {
+			Pet = "35M Axolotl";
+			Chance = 20;
+		}, {
+			Pet = "35M Cat";
+			Chance = 5;
+		}, {
+			Pet = "35M Pinguin";
+			Chance = 0.15;
+		}, {
+			Pet = "35M Cow";
+			Chance = 0.08;
+		}, {
+			Pet = "35M Seeker";
+			Chance = 0.003;
+		}, {
+			Pet = "35M Crystal Shard";
+			Chance = 0.00065;
+		}, {
+			Pet = "35M Crystal Golem";
+			Chance = 0.00002;
+		}, {
+			Pet = "35M Crystal Animals";
+			Chance = 0.000002;
+		}, {
+			Pet = "35M Crystal Demon";
+			Chance = 2e-08;
+		}};
+	};
+}
+
+Paper
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-01-10 18:43:29
+-- Luau version 6, Types version 3
+-- Time taken: 0.004566 seconds
+
+local RunService = game:GetService("RunService")
+local module_upvr = {}
+local function _(arg1) -- Line 19, Named "RequireModule"
+	--[[ Upvalues[1]:
+		[1]: module_upvr (readonly)
+	]]
+	module_upvr[arg1.Name] = require(arg1)
+end
+local ServerScriptService_upvr = game:GetService("ServerScriptService")
+if RunService:IsClient() then
+	(function() -- Line 32, Named "Client"
+		--[[ Upvalues[1]:
+			[1]: module_upvr (readonly)
+		]]
+		for _, v in script.Client:GetChildren() do
+			module_upvr[v.Name] = require(v)
+		end
+		for _, v_2 in script.Shared:GetChildren() do
+			module_upvr[v_2.Name] = require(v_2)
+		end
+	end)()
+else
+	(function() -- Line 42, Named "Server"
+		--[[ Upvalues[2]:
+			[1]: module_upvr (readonly)
+			[2]: ServerScriptService_upvr (readonly)
+		]]
+		for _, v_3 in script.Shared:GetChildren() do
+			module_upvr[v_3.Name] = require(v_3)
+		end
+		for _, v_4 in ServerScriptService_upvr.PaperServer:GetChildren() do
+			module_upvr[v_4.Name] = require(v_4)
+		end
+	end)()
+end
+if RunService:IsClient() then
+	print(`[PAPER] Client initialized in {(os.clock() - os.clock()) * 1000}ms`)
+else
+	-- KONSTANTERROR: Expression was reused, decompilation is incorrect
+	print(`[PAPER] Server initialized in {(os.clock() - os.clock()) * 1000}ms`)
+end
+for i_5, v_5 in module_upvr do
+	if typeof(v_5) == "table" and v_5.init then
+		v_5.init()
+		print(`[PAPER] Initialized {i_5}`)
+	end
+end
+return module_upvr
+
+Revenue 
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-01-10 18:43:53
+-- Luau version 6, Types version 3
+-- Time taken: 0.006307 seconds
+
+local MarketplaceService_upvr = game:GetService("MarketplaceService")
+local module_upvr = {
+	Specific = require(script.Specific);
+	GamepassPricesToUpdate = {};
+	ProductPricesToUpdate = {};
+}
+local tbl_3_upvr = {}
+function module_upvr.GetProductPrice(arg1) -- Line 26
+	--[[ Upvalues[2]:
+		[1]: tbl_3_upvr (readonly)
+		[2]: MarketplaceService_upvr (readonly)
+	]]
+	local var4 = tbl_3_upvr[arg1]
+	if var4 and 0 < var4[1] - DateTime.now().UnixTimestamp then
+		return var4[2]
+	end
+	local pcall_result1_2, pcall_result2 = pcall(function() -- Line 32
+		--[[ Upvalues[2]:
+			[1]: MarketplaceService_upvr (copied, readonly)
+			[2]: arg1 (readonly)
+		]]
+		return MarketplaceService_upvr:GetProductInfoAsync(arg1, Enum.InfoType.Product)
+	end)
+	if not pcall_result1_2 then
+		return 0
+	end
+	local var8 = pcall_result2.PriceInRobux or 0
+	if var8 ~= 0 then
+		tbl_3_upvr[arg1] = {DateTime.now().UnixTimestamp + 300, var8}
+	end
+	return var8
+end
+local tbl_upvr = {}
+function module_upvr.GetGamepassPrice(arg1) -- Line 65
+	--[[ Upvalues[2]:
+		[1]: tbl_upvr (readonly)
+		[2]: MarketplaceService_upvr (readonly)
+	]]
+	local var11 = tbl_upvr[arg1]
+	if var11 and 0 < var11[1] - DateTime.now().UnixTimestamp then
+		return var11[2]
+	end
+	local pcall_result1, pcall_result2_2 = pcall(function() -- Line 71
+		--[[ Upvalues[2]:
+			[1]: MarketplaceService_upvr (copied, readonly)
+			[2]: arg1 (readonly)
+		]]
+		return MarketplaceService_upvr:GetProductInfoAsync(arg1, Enum.InfoType.GamePass)
+	end)
+	if not pcall_result1 then
+		return 0
+	end
+	if (pcall_result2_2.PriceInRobux or 0) ~= 0 then
+		tbl_upvr[arg1] = {DateTime.now().UnixTimestamp + 300, pcall_result2_2.PriceInRobux}
+	end
+	return pcall_result2_2.PriceInRobux or 0
+end
+local Paper_upvr = require(game:GetService("ReplicatedStorage").Paper)
+function module_upvr.UpdateLabel(arg1, arg2, arg3, arg4) -- Line 86
+	--[[ Upvalues[2]:
+		[1]: module_upvr (readonly)
+		[2]: Paper_upvr (readonly)
+	]]
+	-- KONSTANTERROR: [0] 1. Error Block 1 start (CF ANALYSIS FAILED)
+	-- KONSTANTERROR: [0] 1. Error Block 1 end (CF ANALYSIS FAILED)
+	-- KONSTANTERROR: [25] 19. Error Block 9 start (CF ANALYSIS FAILED)
+	-- KONSTANTWARNING: Failed to evaluate expression, replaced with nil [28.4]
+	task.spawn(arg4, nil)
+	do
+		return
+	end
+	-- KONSTANTERROR: [25] 19. Error Block 9 end (CF ANALYSIS FAILED)
+	-- KONSTANTERROR: [31] 24. Error Block 27 start (CF ANALYSIS FAILED)
+	local var17 = arg2
+	local any_GetProductPrice_result1 = module_upvr.GetProductPrice(var17)
+	if any_GetProductPrice_result1 == 0 or any_GetProductPrice_result1 == nil then
+		var17 = "???"
+	else
+		var17 = ""..Paper_upvr.Number.toComma(any_GetProductPrice_result1)
+	end
+	arg1.Text = var17
+	if arg4 then
+		task.spawn(arg4, any_GetProductPrice_result1)
+	end
+	-- KONSTANTERROR: [31] 24. Error Block 27 end (CF ANALYSIS FAILED)
+end
+function module_upvr.AddGamepassLabelToUpdate(arg1, arg2, arg3) -- Line 98
+	--[[ Upvalues[1]:
+		[1]: module_upvr (readonly)
+	]]
+	local tbl = {}
+	tbl[1] = arg2
+	tbl[2] = arg3
+	module_upvr.GamepassPricesToUpdate[arg1] = tbl
+	module_upvr.UpdateLabel(arg1, arg2, "Gamepass", arg3)
+end
+function module_upvr.AddProductLabelToUpdate(arg1, arg2, arg3) -- Line 103
+	--[[ Upvalues[1]:
+		[1]: module_upvr (readonly)
+	]]
+	local tbl_2 = {}
+	tbl_2[1] = arg2
+	tbl_2[2] = arg3
+	module_upvr.ProductPricesToUpdate[arg1] = tbl_2
+	module_upvr.UpdateLabel(arg1, arg2, "Product", arg3)
+end
+function module_upvr.UpdateAllLabels() -- Line 108
+	--[[ Upvalues[1]:
+		[1]: module_upvr (readonly)
+	]]
+	for i, v in module_upvr.GamepassPricesToUpdate do
+		module_upvr.UpdateLabel(i, v[1], "Gamepass", v[2])
+	end
+	for i_2, v_2 in module_upvr.ProductPricesToUpdate do
+		module_upvr.UpdateLabel(i_2, v_2[1], "Product", v_2[2])
+	end
+end
+return module_upvr
