@@ -1,96 +1,29 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-01-10 15:37:44
+-- Luau version 6, Types version 3
+-- Time taken: 0.003525 seconds
 
-local Window = Rayfield:CreateWindow({
-   Name = "BloxMinds | Gamepass Unlocker",
-   Icon = 0, 
-   LoadingTitle = "Analisando Módulos...",
-   LoadingSubtitle = "By BloxMinds AI",
-   Theme = "Default", 
-   ConfigurationSaving = { Enabled = true, FileName = "BloxMinds_GP_Config" },
-   KeySystem = false 
-})
+return {
+	["Lucky I"] = {1, 3, 0.05, "Gives an additional 5% luck", "Luck"};
+	["Lucky II"] = {1, 10, 0.075, "Gives an additional 7.5% luck", "Luck"};
+	["Lucky III"] = {1, 25, 0.1, "Gives an additional 10% luck", "Luck"};
+	["Lucky IV"] = {1, 65, 0.125, "Gives an additional 12.5% luck", "Luck"};
+	["Lucky V"] = {1, 99, 0.15, "Gives an additional 15% luck", "Luck"};
+	["Clicks I"] = {1, 3, 0.05, "Gives an additional 5% clicks", "Clicks"};
+	["Clicks II"] = {1, 10, 0.075, "Gives an additional 7.5% clicks", "Clicks"};
+	["Clicks III"] = {1, 25, 0.1, "Gives an additional 10% clicks", "Clicks"};
+	["Clicks IV"] = {1, 65, 0.15, "Gives an additional 15% clicks", "Clicks"};
+	["Clicks V"] = {1, 99, 0.2, "Gives an additional 20% clicks", "Clicks"};
+	["Rebirths I"] = {1, 3, 0.05, "Gives an additional 5% rebirths", "Rebirths"};
+	["Rebirths II"] = {1, 10, 0.075, "Gives an additional 7.5% rebirths", "Rebirths"};
+	["Rebirths III"] = {1, 25, 0.1, "Gives an additional 10% rebirths", "Rebirths"};
+	["Rebirths IV"] = {1, 65, 0.15, "Gives an additional 15% rebirths", "Rebirths"};
+	["Rebirths V"] = {1, 99, 0.2, "Gives an additional 20% rebirths", "Rebirths"};
+	["Gems I"] = {1, 5, 0.02, "Gives an additional 2% gems", "Gems"};
+	["Gems II"] = {1, 15, 0.04, "Gives an additional 4% gems", "Gems"};
+	["Gems III"] = {1, 40, 0.1, "Gives an additional 10% gems", "Gems"};
+	["Gems IV"] = {1, 99, 0.135, "Gives an additional 13.5% gems", "Gems"};
+	["Gems V"] = {1, 150, 0.165, "Gives an additional 16.5% gems", "Gems"};
+}
 
-local Tab = Window:CreateTab("Main", "unlock")
-local Section = Tab:CreateSection("Gamepass Manager")
 
--- Variáveis para armazenar as funções originais (para poder desligar se quiser)
-local GamepassController = nil
-local OldFunctions = {}
-local IsSpoofed = false
-
--- Tentativa de localizar o módulo com base nos caminhos vistos no seu código
-local success, result = pcall(function()
-    return require(game:GetService("ReplicatedStorage").Modules.Client.UI.Gamepass.GamepassController)
-end)
-
-if success and result then
-    GamepassController = result
-    Rayfield:Notify({ Title = "Sucesso", Content = "Módulo GamepassController encontrado!", Duration = 5, Image = "check" })
-else
-    Rayfield:Notify({ Title = "Erro", Content = "Não foi possível encontrar o módulo. O jogo atualizou?", Duration = 5, Image = "x" })
-end
-
--- Função principal de Unlock
-local function ToggleGamepasses(state)
-    if not GamepassController then return end
-    
-    if state then
-        -- Salvar originais se ainda não salvou
-        if not OldFunctions.IsOwned then
-            OldFunctions.IsOwned = GamepassController.IsOwned
-            OldFunctions.IsPermanentlyOwned = GamepassController.IsPermanentlyOwned
-            OldFunctions.IsPlayerOwned = GamepassController.IsPlayerOwned
-            OldFunctions.IsPlayerOwnedLegacy = GamepassController.IsPlayerOwnedLegacy
-        end
-
-        -- Sobrescrever (Hook) as funções para retornar TRUE
-        GamepassController.IsOwned = function(...) return true end
-        GamepassController.IsPermanentlyOwned = function(...) return true end
-        GamepassController.IsPlayerOwned = function(...) return true end
-        GamepassController.IsPlayerOwnedLegacy = function(...) return true end
-        
-        -- Tentar forçar atualização da UI
-        local Signal = require(game:GetService("ReplicatedStorage").Packages.Signal)
-        if GamepassController.OnGamepassUnlocked and GamepassController.OnGamepassUnlocked.Fire then
-             -- Dispara evento visual de desbloqueio para todos os IDs conhecidos
-             for i = 1, 50 do -- Loop genérico para tentar atualizar ícones
-                 task.spawn(function() GamepassController.OnGamepassUnlocked:Fire(i) end)
-             end
-        end
-
-        Rayfield:Notify({ Title = "Unlocked", Content = "Gamepasses liberados visualmente/localmente.", Duration = 3, Image = "unlock" })
-    else
-        -- Restaurar funções originais
-        if OldFunctions.IsOwned then
-            GamepassController.IsOwned = OldFunctions.IsOwned
-            GamepassController.IsPermanentlyOwned = OldFunctions.IsPermanentlyOwned
-            GamepassController.IsPlayerOwned = OldFunctions.IsPlayerOwned
-            GamepassController.IsPlayerOwnedLegacy = OldFunctions.IsPlayerOwnedLegacy
-        end
-        Rayfield:Notify({ Title = "Restored", Content = "Funções originais restauradas.", Duration = 3, Image = "lock" })
-    end
-end
-
-Tab:CreateToggle({
-   Name = "Unlock All Gamepasses (Client)",
-   CurrentValue = false,
-   Flag = "UnlockGP", 
-   Callback = function(Value)
-       ToggleGamepasses(Value)
-   end,
-})
-
-Tab:CreateButton({
-   Name = "Forçar Atualização da UI",
-   Callback = function()
-       -- Tenta recarregar a UI de loja/inventário
-       local Players = game:GetService("Players")
-       local Gui = Players.LocalPlayer:WaitForChild("PlayerGui")
-       -- Isso é genérico, pois depende de como o jogo desenha a tela
-       Rayfield:Notify({ Title = "Info", Content = "Tente reabrir o menu do jogo para ver as mudanças.", Duration = 3, Image = "info" })
-   end,
-})
-
-Section:CreateLabel("Nota: Isso libera o acesso no CLIENTE.")
-Section:CreateLabel("Veículos/Itens com verificação no servidor")
-Section:CreateLabel("podem não funcionar.")
