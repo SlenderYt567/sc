@@ -1,415 +1,179 @@
---[[
-    SlenderHub - Pickaxe Simulator [V65.0 TITANIUM - 35M EVENT UPDATE]
-    Architect: BloxMinds AI
-    
-    =========== [ INSTRUÇÕES DE ACESSO ] ===========
-    Defina o nível de acesso ANTES de rodar o script:
-    
-    getgenv().SlenderHubAccessLevel = "Free"    
-    -- Limita mineração a 2x, delay humano.
-    
-    getgenv().SlenderHubAccessLevel = "Premium" 
-    -- Libera mineração 100x, loops Heartbeat, Auto-Buy Instantâneo.
-    ================================================
-]]
+Rebirths 
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-01-11 17:44:59
+-- Luau version 6, Types version 3
+-- Time taken: 0.001930 seconds
 
-getgenv().SecureMode = true -- Extra Safety
+return {1, 5, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2500000, 10000000, 25000000, 100000000, 1000000000, 50000000000, 500000000000, 5000000000000, 100000000000000, 1000000000000000, 50000000000000000, 500000000000000000, 2500000000000000000, 50000000000000000000, 500000000000000000000, 5e+21, 1e+23, 1e+24, 5e+25, 5e+26, 2.5e+28, 5e+29, 2.5e+31, 5e+32, 2.5e+34, 5e+35, 2.5e+37}
 
--- [ 0. SAFETY SINGLETON ] --
-if getgenv().SlenderHubLoaded then 
-    local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-    Rayfield:Notify({Title = "System", Content = "SlenderHub is already running!", Duration = 3, Image = "check"})
-    return 
-end
-getgenv().SlenderHubLoaded = true
 
--- [ 1. CONFIGURAÇÃO DE ACESSO ] --
-local AccessLevel = getgenv().SlenderHubAccessLevel or "Free" 
-local IsPremium = (AccessLevel == "Premium")
 
-local Config = {
-    SpeedLimit = IsPremium and 100 or 2,
-    LoopDelay = IsPremium and 0.05 or 0.25,
+Upgrades 
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-01-11 17:45:14
+-- Luau version 6, Types version 3
+-- Time taken: 0.008364 seconds
+
+local module = {}
+local tbl = {
+	Order = -1;
+	Icon = "rbxassetid://117317424139183";
+	Color = Color3.fromRGB(5, 255, 47);
+	StatName = "MoreGemsUpgrade";
+	Max = 50;
+	Suffix = 'x';
+	Boost = 1;
 }
-
--- Services
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local LocalPlayer = Players.LocalPlayer
-
--- UI Library
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
--- [ 2. DATABASE INTERNA (UPDATED 35M EVENT) ] --
-getgenv().Flags = {
-    MiningSpeed = 1,
-    Egg = "35M Royal Egg",
-    HatchMode = "1",
-    RebirthMode = "1",
-    SelectedMerch = "Royal Crown",
-    SelectedUpg = "More Crowns",
-    AutoMine = false
+local function UpgradeCosts(arg1) -- Line 16
+	return math.ceil(((arg1 + 1) ^ 1.75 + arg1) * (1 + arg1 / 2))
+end
+tbl.UpgradeCosts = UpgradeCosts
+module["More Gems"] = tbl
+local tbl_5 = {
+	Order = 0;
+	Icon = "rbxassetid://102811483618158";
+	Color = Color3.fromRGB(93, 255, 90);
+	StatName = "MoreRebirthsUpgrade";
+	Max = #require(game:GetService("ReplicatedStorage"):WaitForChild("Tables"):WaitForChild("Rebirths")) - 3;
+	Suffix = "";
+	Boost = 1;
 }
-
-local GameData = {
-    Paper = nil,
-    MineClient = nil,
-    Remotes = { 
-        Funct = nil, 
-        Event = nil,
-        -- New Event Specific Remotes
-        EventMerchant = nil,
-        EventUpgrade = nil,
-        DirectMine = nil
-    },
-    Tables = { 
-        Eggs = { -- Merged New Eggs + Common
-            "35M Royal Egg", "35M Fancy Egg", "Basic Egg", "Rare Egg", "Forest Egg", 
-            "Black Hole Egg", "UFO Egg", "Garden Egg", "Sand Egg", "Snow Egg", 
-            "Lava Egg", "Sunny Egg", "Cave Egg", "Sakura Egg", "Beach Egg", 
-            "Aqua Egg", "Pixel Egg", "Farm Egg", "Galaxy Egg", "Angelic Egg", 
-            "Void Egg", "5M Egg", "Ice Egg", "2026 Egg"
-        }, 
-        Rebirths = {"1", "Max"}, 
-        Upgrades = {}, -- Scraped automatically
-        
-        -- NEW 35M EVENT DATA
-        MerchantItems = {
-            "Luck Potion", "Speed Potion", "Damage Potion", "Coin Potion", "Gold Potion",
-            "Royal Crown", "Royal Gem", "Royal Ring", "Hatch Booster", "Holy Clover",
-            "Lucky Rainbow", "Large Star", "Huge Star", "Giga Star",
-            "Luck Charm I", "Luck Charm II", "Luck Charm III", "Luck Charm IV",
-            "Coin Charm I", "Coin Charm II", "Coin Charm III", "Coin Charm IV",
-            "Mining Speed Charm I", "Mining Speed Charm II", "Mining Speed Charm III", "Mining Speed Charm IV",
-            "Hatch Charm I", "Hatch Charm II", "Hatch Charm III", "Hatch Charm IV",
-            "Coconut Seed"
-        },
-        EventUpgrades = {
-            "More Event Damage", "More Crowns", "More Gold", "Chest Luck", 
-            "Crowns Boost", "Egg Luck", "Hatch Speed", "Faster Event Merchant"
-        }
-    }
+local function UpgradeCosts(arg1) -- Line 33
+	local floored = math.floor((arg1 + 1) ^ 2 * 10)
+	if 16 <= arg1 then
+		floored *= 1 + (arg1 - 15) / 3.5
+	end
+	return math.floor(floored)
+end
+tbl_5.UpgradeCosts = UpgradeCosts
+module["More Rebirths"] = tbl_5
+local tbl_2 = {
+	Order = 1;
+	Icon = "rbxassetid://102931276077803";
+	Color = Color3.fromRGB(255, 255, 0);
+	StatName = "MoreCoinsUpgrade";
+	Max = 160;
+	Suffix = '%';
+	Boost = 10;
 }
-
--- [ 3. INICIALIZAÇÃO E HOOKS ] --
-local function Initialize()
-    local s, e = pcall(function()
-        -- 3.1 Load Framework (Paper)
-        if ReplicatedStorage:FindFirstChild("Paper") then
-            GameData.Paper = require(ReplicatedStorage.Paper)
-            local R = ReplicatedStorage.Paper:FindFirstChild("Remotes")
-            if R then
-                GameData.Remotes.Funct = R:FindFirstChild("__remotefunction")
-                GameData.Remotes.Event = R:FindFirstChild("__remoteevent")
-            end
-        end
-
-        -- 3.2 Find New Event Remotes (Dynamic Search)
-        local Events = ReplicatedStorage:FindFirstChild("Events") or ReplicatedStorage
-        GameData.Remotes.EventMerchant = Events:FindFirstChild("BuyMerchantItem") or Events:FindFirstChild("MerchantBuy")
-        GameData.Remotes.EventUpgrade = Events:FindFirstChild("BuyUpgrade") or Events:FindFirstChild("EventUpgrade")
-        GameData.Remotes.DirectMine = Events:FindFirstChild("Mine") or Events:FindFirstChild("Click")
-
-        -- 3.3 Hook MineClient (For Fast Mining)
-        task.spawn(function()
-            local attempts = 0
-            while not GameData.MineClient and attempts < 20 do
-                for _, v in pairs(getgc(true)) do
-                    if type(v) == "table" and rawget(v, "MineCurrentOre") then
-                        GameData.MineClient = v
-                        break
-                    end
-                end
-                attempts = attempts + 1
-                task.wait(1)
-            end
-        end)
-
-        -- 3.4 Scrape Game Tables
-        local T = ReplicatedStorage:FindFirstChild("Tables")
-        if T then
-            -- Attempt to merge scraped eggs with hardcoded list
-            local ET = require(T:WaitForChild("Eggs"))
-            for n,_ in pairs(ET) do 
-                if not table.find(GameData.Tables.Eggs, n) then
-                    table.insert(GameData.Tables.Eggs, n) 
-                end
-            end
-            table.sort(GameData.Tables.Eggs)
-
-            -- Rebirths
-            local RT = require(T:WaitForChild("Rebirths"))
-            local rebs = {}
-            for _,v in pairs(RT) do table.insert(rebs, tostring(v)) end
-            table.sort(rebs, function(a,b) return tonumber(a) < tonumber(b) end)
-            table.insert(rebs, "Max")
-            GameData.Tables.Rebirths = rebs
-
-            -- Upgrades
-            local UT = require(T:WaitForChild("Upgrades"))
-            for n,_ in pairs(UT) do table.insert(GameData.Tables.Upgrades, n) end
-            table.sort(GameData.Tables.Upgrades)
-        end
-    end)
-    if not s then warn("Init Error: " .. tostring(e)) end
+local function UpgradeCosts(arg1) -- Line 55
+	local floored_3 = math.floor((arg1 + 1) ^ 1.6 * 2)
+	if 50 <= arg1 then
+		floored_3 *= 1 + (arg1 - 49) / 3
+	end
+	return math.floor(floored_3)
 end
-Initialize()
-
--- [ 4. GERENCIADOR DE TAREFAS ] --
-local TaskManager = {}
-local Connections = {} 
-
-local function StopTask(name)
-    if TaskManager[name] then task.cancel(TaskManager[name]) TaskManager[name] = nil end
-    if Connections[name] then Connections[name]:Disconnect() Connections[name] = nil end
+tbl_2.UpgradeCosts = UpgradeCosts
+module["More Coins"] = tbl_2
+local tbl_6 = {
+	Order = 2;
+	Icon = "rbxassetid://74487495899409";
+	Color = Color3.fromRGB(255, 15, 31);
+	StatName = "MoreDamageUpgrade";
+	Max = 50;
+	Suffix = '%';
+	Boost = 10;
+}
+local function UpgradeCosts(arg1) -- Line 77
+	local floored_2 = math.floor((arg1 + 1) ^ 1.7 * (1 + arg1 / 2))
+	if 30 <= arg1 then
+		floored_2 *= 1 + (arg1 - 29) / 3
+	end
+	return math.floor(floored_2)
 end
-
-local function StartTask(name, func)
-    StopTask(name)
-    TaskManager[name] = task.spawn(func)
+tbl_6.UpgradeCosts = UpgradeCosts
+module["More Damage"] = tbl_6
+local tbl_7 = {
+	Order = 16;
+	Icon = "rbxassetid://98424797282893";
+	Color = Color3.fromRGB(3, 255, 3);
+	StatName = "EggLuckUpgrade";
+	Max = 25;
+	Suffix = '%';
+	Boost = 1;
+}
+local function UpgradeCosts(arg1) -- Line 100
+	return math.floor(25 * (arg1 + 1) ^ 1.75 * (arg1 + 1))
 end
-
-local function NetworkCall(type, method, ...)
-    -- Hybrid System: Tries Paper Framework first, then Direct Remotes
-    if GameData.Paper and GameData.Paper.Network then
-        local call = (type == "Invoke") and GameData.Paper.Network.InvokeServer or GameData.Paper.Network.FireServer
-        return call(method, ...)
-    elseif GameData.Remotes.Funct and type == "Invoke" then
-        return GameData.Remotes.Funct:InvokeServer(method, ...)
-    elseif GameData.Remotes.Event and type == "Fire" then
-        return GameData.Remotes.Event:FireServer(method, ...)
-    end
+tbl_7.UpgradeCosts = UpgradeCosts
+module["Egg Luck"] = tbl_7
+module["Hatch Speed"] = {
+	Order = 17;
+	Icon = "rbxassetid://131186631223943";
+	Color = Color3.fromRGB(255, 255, 255);
+	StatName = "HatchSpeedUpgrade";
+	Prefix = '+';
+	Suffix = 'x';
+	Boost = 0.05;
+	UpgradeCosts = {50000, 500000, 5000000, -- : First try: K:0: attempt to index nil with 't'
+;
+}
+module["Pets Equipped"] = {
+	Order = 18;
+	Icon = "rbxassetid://138342172231560";
+	Color = Color3.fromRGB(93, 226, 55);
+	StatName = "PetsEquippedUpgrade";
+	Suffix = "";
+	Boost = 1;
+	UpgradeCosts = {7500000};
+}
+module["Inventory Space"] = {
+	Order = 19;
+	Icon = "rbxassetid://73510812041960";
+	Color = Color3.fromRGB(247, 151, 41);
+	StatName = "InventorySpaceUpgrade";
+	Suffix = "";
+	Boost = 5;
+	UpgradeCosts = {100, 2000, 15000, 50000, 200000, 1000000, 2500000, 5000000, 10000000};
+}
+local tbl_4 = {
+	Order = 20;
+	Icon = "rbxassetid://116968808498559";
+	Color = Color3.fromRGB(255, 255, 0);
+	StatName = "GoldenHatchUpgrade";
+	Max = 20;
+	Suffix = '%';
+	Boost = 0.1;
+}
+local function UpgradeCosts(arg1) -- Line 176
+	return math.floor(20 * (arg1 + 1) ^ 1.65 * (arg1 + 1))
 end
-
--- [ 5. LÓGICA PRINCIPAL (CORE) ] --
-
--- 5.1 SISTEMA DE MINERAÇÃO (Hybrid: Client Hook + Remote Spam)
-local function EnableMining(bool)
-    StopTask("Mining")
-    getgenv().Flags.AutoMine = bool
-    
-    if bool then
-        -- Speed Hack Attribute
-        if LocalPlayer then 
-            LocalPlayer:SetAttribute("SPEED_HACK", getgenv().Flags.MiningSpeed) 
-        end
-        
-        NetworkCall("Fire", "Toggle Setting", "AutoMine")
-
-        if IsPremium then
-            -- PREMIUM: Heartbeat Loop (Physics Sync)
-            Connections["Mining"] = RunService.Heartbeat:Connect(function()
-                -- Method 1: Client Hook
-                if GameData.MineClient then GameData.MineClient.MineCurrentOre() end
-                -- Method 2: Direct Remote (Backup)
-                if GameData.Remotes.DirectMine then GameData.Remotes.DirectMine:FireServer() end
-            end)
-        else
-            -- FREE: Standard Loop
-            StartTask("Mining", function()
-                while getgenv().Flags.AutoMine do
-                    if GameData.MineClient then GameData.MineClient.MineCurrentOre() end
-                    if GameData.Remotes.DirectMine then GameData.Remotes.DirectMine:FireServer() end
-                    task.wait(0.15)
-                end
-            end)
-        end
-    else
-        if LocalPlayer then LocalPlayer:SetAttribute("SPEED_HACK", nil) end
-    end
+tbl_4.UpgradeCosts = UpgradeCosts
+module["Golden Chance"] = tbl_4
+local tbl_3 = {
+	Order = 20;
+	Icon = "rbxassetid://94681176744729";
+	Color = Color3.fromRGB(236, 86, 81);
+	StatName = "RainbowHatchUpgrade";
+	Max = 20;
+	Suffix = '%';
+	Boost = 0.02;
+}
+local function UpgradeCosts(arg1) -- Line 192
+	return math.floor(50 * (arg1 + 1) ^ 1.8 * (arg1 + 1))
 end
+tbl_3.UpgradeCosts = UpgradeCosts
+module["Rainbow Chance"] = tbl_3
+module["Walk Speed"] = {
+	Order = 21;
+	Icon = "rbxassetid://126146209188361";
+	Color = Color3.fromRGB(38, 172, 255);
+	StatName = "WalkSpeedUpgrade";
+	Max = 5;
+	Suffix = 'x';
+	Boost = 0.25;
+	StartBoost = 1;
+	UpgradeCosts = function(arg1) -- Line 224, Named "UpgradeCosts"
+		return math.floor(25 * (arg1 + 1) ^ 2 * (arg1 + 1))
+	end;
+}
+return module
 
--- 5.2 FARM PLANT/HARVEST
-local function FarmLogic()
-    local W = Workspace.Worlds:FindFirstChild("Stud World") or Workspace.Worlds:FindFirstChild("Farm")
-    if W and W:FindFirstChild("Farm") then
-        for _, p in pairs(W.Farm.Plants:GetChildren()) do
-            if p:FindFirstChild("Fruits") and #p.Fruits:GetChildren() > 0 then
-                NetworkCall("Invoke", "Harvest Fruit", "Stud World", p.Name)
-            end
-        end
-    end
-    NetworkCall("Invoke", "Upgrade Farm")
-end
 
--- [ 6. INTERFACE GRÁFICA (UI) ] --
-local Window = Rayfield:CreateWindow({
-   Name = IsPremium and "SlenderHub | TITANIUM V65.0 💎" or "SlenderHub | FREE V65.0 ⚠️",
-   LoadingTitle = "35M Event Update Loaded",
-   LoadingSubtitle = "By BloxMinds AI",
-   ConfigurationSaving = { Enabled = true, FileName = "SlenderHubV65" },
-   KeySystem = false,
-})
+remotes
+local args = {
+	"Rebirth",
+	1
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
 
--- ==== ABA: MINE ==== --
-local TabMine = Window:CreateTab("Mine ⛏️", "pickaxe")
-
-TabMine:CreateSection(IsPremium and "GOD MODE CONTROLS" or "LEGIT CONTROLS")
-
-TabMine:CreateSlider({
-    Name = "Mining Speed Multiplier",
-    Range = {1, Config.SpeedLimit},
-    Increment = IsPremium and 1 or 0.5,
-    Suffix = "x",
-    CurrentValue = 1,
-    Callback = function(Value)
-        getgenv().Flags.MiningSpeed = Value
-        if LocalPlayer and LocalPlayer:GetAttribute("SPEED_HACK") then
-            LocalPlayer:SetAttribute("SPEED_HACK", Value)
-        end
-    end
-})
-
-TabMine:CreateToggle({
-    Name = "Enable Auto Mine (Hybrid)",
-    CurrentValue = false,
-    Callback = function(v) EnableMining(v) end
-})
-
-TabMine:CreateToggle({
-    Name = "Auto Buy Miner",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then StartTask("Miner", function() while true do NetworkCall("Invoke", "Buy Miner") task.wait(2) end end)
-        else StopTask("Miner") end
-    end
-})
-
--- ==== ABA: 35M EVENT (NEW) ==== --
-local TabEvent = Window:CreateTab("35M Event", "star")
-
-TabEvent:CreateSection("Event Merchant")
-
-TabEvent:CreateDropdown({
-    Name = "Select Merchant Item",
-    Options = GameData.Tables.MerchantItems,
-    CurrentOption = {"Royal Crown"},
-    MultipleOptions = false,
-    Callback = function(O) getgenv().Flags.SelectedMerch = O[1] end
-})
-
-TabEvent:CreateToggle({
-    Name = "Auto Buy Merchant Item",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then 
-            StartTask("Merch", function() 
-                while true do 
-                    if GameData.Remotes.EventMerchant then
-                        GameData.Remotes.EventMerchant:FireServer(getgenv().Flags.SelectedMerch, 1)
-                    end
-                    task.wait(IsPremium and 0.5 or 1.5) 
-                end 
-            end)
-        else StopTask("Merch") end
-    end
-})
-
-TabEvent:CreateSection("Event Upgrades")
-
-TabEvent:CreateDropdown({
-    Name = "Select Upgrade",
-    Options = GameData.Tables.EventUpgrades,
-    CurrentOption = {"More Crowns"},
-    MultipleOptions = false,
-    Callback = function(O) getgenv().Flags.SelectedUpg = O[1] end
-})
-
-TabEvent:CreateToggle({
-    Name = "Auto Buy Event Upgrade",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then 
-            StartTask("EventUpg", function() 
-                while true do 
-                    if GameData.Remotes.EventUpgrade then
-                        GameData.Remotes.EventUpgrade:FireServer(getgenv().Flags.SelectedUpg)
-                    end
-                    task.wait(1) 
-                end 
-            end)
-        else StopTask("EventUpg") end
-    end
-})
-
--- ==== ABA: EGGS ==== --
-local TabEggs = Window:CreateTab("Eggs 🥚", "egg")
-
-TabEggs:CreateDropdown({
-    Name = "Select Egg",
-    Options = GameData.Tables.Eggs,
-    CurrentOption = {"35M Royal Egg"},
-    Callback = function(O) getgenv().Flags.Egg = O[1] end
-})
-
-TabEggs:CreateDropdown({
-    Name = "Hatch Amount",
-    Options = {"1", "3", "Max"},
-    CurrentOption = {"1"},
-    Callback = function(O) getgenv().Flags.HatchMode = O[1] end
-})
-
-TabEggs:CreateToggle({
-    Name = "Auto Hatch",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then
-            StartTask("Hatch", function()
-                while true do
-                    local mode = getgenv().Flags.HatchMode
-                    local amt = (mode == "Max" and "Max" or tonumber(mode))
-                    
-                    -- Try Standard Remote
-                    NetworkCall("Invoke", "Hatch Egg", getgenv().Flags.Egg, amt)
-                    
-                    -- Try Event Remote (Backup)
-                    local EventHatch = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("OpenEgg")
-                    if EventHatch then
-                        EventHatch:FireServer(getgenv().Flags.Egg, "Single")
-                    end
-                    
-                    task.wait(IsPremium and 0.1 or 0.6)
-                end
-            end)
-        else StopTask("Hatch") end
-    end
-})
-
--- ==== ABA: FARM/PETS ==== --
-local TabFP = Window:CreateTab("Farm/Pets", "sprout")
-
-TabFP:CreateToggle({
-    Name = "Auto Plant & Harvest",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then StartTask("Farm", function() while true do FarmLogic() task.wait(IsPremium and 1 or 3) end end)
-        else StopTask("Farm") end
-    end
-})
-
--- ==== ABA: UPGRADES ==== --
-local TabUpg = Window:CreateTab("Upgrades", "trending-up")
-
-TabUpg:CreateToggle({
-    Name = "Auto Rebirth",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then StartTask("Reb", function() 
-            while true do 
-                local r = getgenv().Flags.RebirthMode
-                NetworkCall("Invoke", "Rebirth", (r=="Max" and "Max" or tonumber(r))) 
-                task.wait(1) 
-            end end)
-        else StopTask("Reb") end
-    end
-})
-
-Rayfield:LoadConfiguration()
-Rayfield:Notify({
-    Title = "35M Event Ready",
-    Content = "New Merchant & Upgrades Loaded.",
-    Duration = 5,
-    Image = "star",
-})
