@@ -1,925 +1,197 @@
-Shop
--- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
--- Decompiled on 2026-01-11 18:44:42
--- Luau version 6, Types version 3
--- Time taken: 0.013235 seconds
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
+local Window = Rayfield:CreateWindow({
+   Name = "Shop Bypass Hub",
+   Icon = 0,
+   LoadingTitle = "Injecting Exploits...",
+   LoadingSubtitle = "By BloxMinds",
+   Theme = "Default",
+   ConfigurationSaving = {
+      Enabled = true,
+      FileName = "ShopBypassConfig"
+   },
+   KeySystem = false
+})
+
+-- // SERVICES // --
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players_upvr = game:GetService("Players")
-local Paper_upvr = require(ReplicatedStorage.Paper)
-local UI_upvr = require(ReplicatedStorage.Modules.Client.UI)
-local Tickets_upvr = require(script.Tickets)
-local Eggs = require(script.Eggs)
-local LocalPlayer_upvr = Players_upvr.LocalPlayer
-local PlayerGui = LocalPlayer_upvr:WaitForChild("PlayerGui")
-local Main = PlayerGui:WaitForChild("Main")
-local Shop_upvr = PlayerGui:WaitForChild("Menus"):WaitForChild("Shop")
-local var11_upvw = false
-local var12_upvw
-Paper_upvr.Stats.Loaded()
-local any_Get_result1_upvr = Paper_upvr.Stats.Get("GiftingTarget")
-local Assets_upvr = ReplicatedStorage:WaitForChild("Assets")
-local HttpService_upvr = game:GetService("HttpService")
-local function LoadPlayersToGift_upvr() -- Line 61, Named "LoadPlayersToGift"
-	--[[ Upvalues[8]:
-		[1]: Shop_upvr (readonly)
-		[2]: Players_upvr (readonly)
-		[3]: LocalPlayer_upvr (readonly)
-		[4]: Paper_upvr (readonly)
-		[5]: Assets_upvr (readonly)
-		[6]: UI_upvr (readonly)
-		[7]: var12_upvw (read and write)
-		[8]: HttpService_upvr (readonly)
-	]]
-	for _, v_2 in Shop_upvr.Frame.Gifting.Frame.Main.List:GetChildren() do
-		if v_2:IsA("Frame") then
-			v_2:Destroy()
-		end
-	end
-	for _, v_3_upvr in Players_upvr:GetPlayers() do
-		if v_3_upvr ~= LocalPlayer_upvr then
-			local any_GetUserThumbnailFromID_result1_upvr = Paper_upvr.Player.GetUserThumbnailFromID(v_3_upvr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
-			local clone = Assets_upvr.UI.Shop.PlayerToGift:Clone()
-			clone.Main.Label.Text = v_3_upvr.Name
-			clone.Main.Avatar.Icon.Image = any_GetUserThumbnailFromID_result1_upvr
-			clone.Parent = Shop_upvr.Frame.Gifting.Frame.Main.List
-			UI_upvr.Button.ApplyClickGeneric(clone.Main.Gift, function() -- Line 86
-				--[[ Upvalues[7]:
-					[1]: Paper_upvr (copied, readonly)
-					[2]: v_3_upvr (readonly)
-					[3]: UI_upvr (copied, readonly)
-					[4]: var12_upvw (copied, read and write)
-					[5]: Shop_upvr (copied, readonly)
-					[6]: any_GetUserThumbnailFromID_result1_upvr (readonly)
-					[7]: HttpService_upvr (copied, readonly)
-				]]
-				-- KONSTANTERROR: [0] 1. Error Block 1 start (CF ANALYSIS FAILED)
-				local any_InvokeServer_result1, any_InvokeServer_result2, _ = Paper_upvr.Network.InvokeServer("Set Gifting", v_3_upvr)
-				-- KONSTANTERROR: [0] 1. Error Block 1 end (CF ANALYSIS FAILED)
-				-- KONSTANTERROR: [9] 8. Error Block 2 start (CF ANALYSIS FAILED)
-				UI_upvr.Notification.Create({
-					Text = "Something unexpected happened, please try again.";
-					Color = Color3.fromRGB(255, 0, 0);
-					Duration = 4;
-				})
-				do
-					return
-				end
-				-- KONSTANTERROR: [9] 8. Error Block 2 end (CF ANALYSIS FAILED)
-				-- KONSTANTERROR: [31] 24. Error Block 3 start (CF ANALYSIS FAILED)
-				-- KONSTANTERROR: [31] 24. Error Block 3 end (CF ANALYSIS FAILED)
-			end)
-		end
-	end
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+-- // VARIABLES // --
+local LocalPlayer = Players.LocalPlayer
+local Paper = nil
+local Success, Err = pcall(function()
+    Paper = require(ReplicatedStorage:WaitForChild("Paper"))
+end)
+
+-- // TABS // --
+local MainTab = Window:CreateTab("Shop Exploits", "shopping-cart")
+local PlayerTab = Window:CreateTab("Player", "user")
+
+-- // NOTIFICATIONS // --
+local function Notify(title, content)
+    Rayfield:Notify({
+        Title = title,
+        Content = content,
+        Duration = 5,
+        Image = "info"
+    })
 end
-Shop_upvr:GetPropertyChangedSignal("Enabled"):Connect(function() -- Line 120
-	--[[ Upvalues[6]:
-		[1]: Shop_upvr (readonly)
-		[2]: var11_upvw (read and write)
-		[3]: var12_upvw (read and write)
-		[4]: Paper_upvr (readonly)
-		[5]: UI_upvr (readonly)
-		[6]: LocalPlayer_upvr (readonly)
-	]]
-	if not Shop_upvr.Enabled then
-		var11_upvw = false
-		var12_upvw = nil
-		Shop_upvr.Frame.Gift.Main.Label.Text = "Gift Player"
-		Shop_upvr.Frame.Selected.Visible = false
-		Shop_upvr.Frame.Gifting.Visible = false
-		Paper_upvr.Network.InvokeServer("Set Gifting", nil)
-		UI_upvr.Shop.UpdateShop(LocalPlayer_upvr)
-		UI_upvr.Shop.ShowBlocked(nil, LocalPlayer_upvr)
-	end
-end)
-UI_upvr.Button.ApplyClickGeneric(Shop_upvr.Frame.Gift, function() -- Line 136
-	--[[ Upvalues[8]:
-		[1]: var12_upvw (read and write)
-		[2]: var11_upvw (read and write)
-		[3]: LoadPlayersToGift_upvr (readonly)
-		[4]: Shop_upvr (readonly)
-		[5]: Paper_upvr (readonly)
-		[6]: UI_upvr (readonly)
-		[7]: LocalPlayer_upvr (readonly)
-		[8]: Tickets_upvr (readonly)
-	]]
-	if var12_upvw == nil then
-		var11_upvw = not var11_upvw
-		LoadPlayersToGift_upvr()
-	else
-		var11_upvw = false
-		var12_upvw = nil
-		Shop_upvr.Frame.Gift.Main.Label.Text = "Gift Player"
-		Shop_upvr.Frame.Selected.Visible = false
-		Paper_upvr.Network.InvokeServer("Set Gifting", nil)
-		UI_upvr.Shop.UpdateShop(LocalPlayer_upvr)
-	end
-	Shop_upvr.Frame.Gifting.Visible = var11_upvw
-	Paper_upvr.Settings.Currency = "Robux"
-	Tickets_upvr.UpdateCurrency()
-end)
-UI_upvr.Button.ApplyHoverAnimationGeneric(Shop_upvr.Frame.Gift)
-UI_upvr.Button.ApplyClickGeneric(Shop_upvr.Frame.Gifting.Frame.Close, function() -- Line 159
-	--[[ Upvalues[5]:
-		[1]: var11_upvw (read and write)
-		[2]: var12_upvw (read and write)
-		[3]: Shop_upvr (readonly)
-		[4]: UI_upvr (readonly)
-		[5]: LocalPlayer_upvr (readonly)
-	]]
-	var11_upvw = false
-	var12_upvw = nil
-	Shop_upvr.Frame.Gifting.Visible = var11_upvw
-	UI_upvr.Shop.UpdateShop(LocalPlayer_upvr)
-end)
-UI_upvr.Button.ApplyHoverAnimationGeneric(Shop_upvr.Frame.Gifting.Frame.Close)
-any_Get_result1_upvr.Changed:Connect(function() -- Line 168
-	--[[ Upvalues[6]:
-		[1]: any_Get_result1_upvr (readonly)
-		[2]: UI_upvr (readonly)
-		[3]: LocalPlayer_upvr (readonly)
-		[4]: var11_upvw (read and write)
-		[5]: var12_upvw (read and write)
-		[6]: Shop_upvr (readonly)
-	]]
-	local Value_3 = any_Get_result1_upvr.Value
-	if Value_3 then
-		UI_upvr.Shop.UpdateShop(Value_3)
-	else
-		UI_upvr.Shop.UpdateShop(LocalPlayer_upvr)
-		UI_upvr.Shop.ShowBlocked(nil, LocalPlayer_upvr)
-		var11_upvw = false
-		var12_upvw = nil
-		Shop_upvr.Frame.Gift.Main.Label.Text = "Gift Player"
-		Shop_upvr.Frame.Selected.Visible = false
-	end
-end)
-Paper_upvr.Network.OnClientEvent("Gifted", function(arg1) -- Line 182
-	--[[ Upvalues[4]:
-		[1]: Paper_upvr (readonly)
-		[2]: UI_upvr (readonly)
-		[3]: any_Get_result1_upvr (readonly)
-		[4]: LocalPlayer_upvr (readonly)
-	]]
-	Paper_upvr.Audio.PlaySoundLocal("Claim")
-	UI_upvr.Misc.Confetti(50)
-	local tbl = {}
-	tbl.Text = arg1
-	tbl.Color = Color3.fromRGB(255, 235, 17)
-	tbl.Duration = 4
-	UI_upvr.Notification.Create(tbl)
-	local Value_4 = any_Get_result1_upvr.Value
-	if Value_4 then
-		UI_upvr.Shop.UpdateShop(Value_4)
-	else
-		UI_upvr.Shop.UpdateShop(LocalPlayer_upvr)
-		UI_upvr.Shop.ShowBlocked(nil, LocalPlayer_upvr)
-	end
-end)
-Paper_upvr.Network.OnClientEvent("On Purchase", function() -- Line 201
-	--[[ Upvalues[4]:
-		[1]: Paper_upvr (readonly)
-		[2]: UI_upvr (readonly)
-		[3]: any_Get_result1_upvr (readonly)
-		[4]: LocalPlayer_upvr (readonly)
-	]]
-	Paper_upvr.Audio.PlaySoundLocal("Purchase")
-	UI_upvr.Misc.Confetti(50)
-	UI_upvr.Notification.Create({
-		Text = "Thanks For The Support!";
-		Color = Color3.fromRGB(255, 235, 17);
-	})
-	local Value_2 = any_Get_result1_upvr.Value
-	if Value_2 then
-		UI_upvr.Shop.UpdateShop(Value_2)
-	else
-		UI_upvr.Shop.UpdateShop(LocalPlayer_upvr)
-		UI_upvr.Shop.ShowBlocked(nil, LocalPlayer_upvr)
-	end
-end)
-Paper_upvr.Network.OnClientEvent("Update Shop", function() -- Line 218
-	--[[ Upvalues[3]:
-		[1]: any_Get_result1_upvr (readonly)
-		[2]: UI_upvr (readonly)
-		[3]: LocalPlayer_upvr (readonly)
-	]]
-	local Value = any_Get_result1_upvr.Value
-	if Value then
-		UI_upvr.Shop.UpdateShop(Value)
-	else
-		UI_upvr.Shop.UpdateShop(LocalPlayer_upvr)
-		UI_upvr.Shop.ShowBlocked(nil, LocalPlayer_upvr)
-	end
-end)
-UI_upvr.Misc.ConnectListAutoScale(Shop_upvr.Frame.Gifting.Frame.Main.List.UIListLayout)
-UI_upvr.Button.ApplyClickGeneric(Main.Left.Buttons.Shop, function() -- Line 231
-	--[[ Upvalues[1]:
-		[1]: UI_upvr (readonly)
-	]]
-	UI_upvr.Menu.OpenMenu("Shop")
-end)
-UI_upvr.Button.ApplyHoverAnimationGeneric(Main.Left.Buttons.Shop)
-UI_upvr.Button.ApplyClickGeneric(Shop_upvr.Frame.Close, function() -- Line 238
-	--[[ Upvalues[1]:
-		[1]: UI_upvr (readonly)
-	]]
-	UI_upvr.Menu.CloseMenu("Shop")
-end)
-UI_upvr.Button.ApplyHoverAnimationGeneric(Shop_upvr.Frame.Close)
-UI_upvr.Misc.ConnectListAutoScale(Shop_upvr.Frame.Main.List.UIListLayout)
-UI_upvr.Misc.AddRotatingFrame(Main.Left.Buttons.Shop.Main.Shine, 35)
-;(function() -- Line 50, Named "SideButtons"
-	--[[ Upvalues[2]:
-		[1]: Shop_upvr (readonly)
-		[2]: UI_upvr (readonly)
-	]]
-	for _, v_upvr in Shop_upvr.Frame.Tabs.List:GetChildren() do
-		if v_upvr:IsA("TextButton") then
-			UI_upvr.Button.ApplyClickGeneric(v_upvr, function() -- Line 53
-				--[[ Upvalues[2]:
-					[1]: UI_upvr (copied, readonly)
-					[2]: v_upvr (readonly)
-				]]
-				UI_upvr.Shop.ScrollToMatchingItem(v_upvr.Name)
-			end)
-			UI_upvr.Button.ApplyHoverAnimationGeneric(v_upvr)
-		end
-	end
-end)()
-Eggs.SetupWorkspaceEggBoard("Heaven Egg", workspace:WaitForChild("EggBoard"))
-Eggs.SetupWorkspaceEggBoard("Heaven Egg", workspace:WaitForChild("EggBoardEvent"))
-Eggs.SetupEgg("Heaven Egg", 1)
-Eggs.SetupEgg("Cloudy Egg", 3)
-require(script.Event).Setup()
-require(script.Codes).Setup()
-Tickets_upvr.Setup()
-require(script.Coins).Setup()
-require(script.Pickaxes).Setup()
-require(script.Miners).Setup()
-require(script.Potions).Setup()
-require(script.EggLucks).Setup()
-require(script.Passes).Setup()
-require(script.Packs).Setup()
-require(script.OnScreen).Setup()
-require(script.NewOffers).Setup()
-UI_upvr.Shop.UpdateShop(LocalPlayer_upvr)
 
-
--- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
--- Decompiled on 2026-01-11 18:44:57
--- Luau version 6, Types version 3
--- Time taken: 0.034338 seconds
-
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Paper_upvr = require(ReplicatedStorage.Paper)
-local LocalPlayer_upvr = game:GetService("Players").LocalPlayer
-local List_upvr = LocalPlayer_upvr:WaitForChild("PlayerGui"):WaitForChild("Menus"):WaitForChild("Shop").Frame.Main.List
-Paper_upvr.Stats.Loaded()
-local module = {}
-local any_Get_result1_2_upvr = Paper_upvr.Stats.Get("GiftingTarget")
-local Notification_upvr = require(script.Parent.Notification)
-local MarketplaceService_upvr = game:GetService("MarketplaceService")
-function module.BuyProduct(arg1) -- Line 38
-	--[[ Upvalues[5]:
-		[1]: any_Get_result1_2_upvr (readonly)
-		[2]: Paper_upvr (readonly)
-		[3]: Notification_upvr (readonly)
-		[4]: MarketplaceService_upvr (readonly)
-		[5]: LocalPlayer_upvr (readonly)
-	]]
-	-- KONSTANTERROR: [0] 1. Error Block 1 start (CF ANALYSIS FAILED)
-	-- KONSTANTERROR: [0] 1. Error Block 1 end (CF ANALYSIS FAILED)
-	-- KONSTANTERROR: [44] 36. Error Block 10 start (CF ANALYSIS FAILED)
-	local tbl_2 = {}
-	-- KONSTANTWARNING: Failed to evaluate expression, replaced with nil [48.3]
-	tbl_2.Text = nil
-	tbl_2.Color = Color3.fromRGB(212, 77, 72)
-	Notification_upvr.Create(tbl_2)
-	do
-		return
-	end
-	-- KONSTANTERROR: [44] 36. Error Block 10 end (CF ANALYSIS FAILED)
-	-- KONSTANTERROR: [60] 48. Error Block 11 start (CF ANALYSIS FAILED)
-	MarketplaceService_upvr:PromptProductPurchase(LocalPlayer_upvr, arg1)
-	-- KONSTANTERROR: [60] 48. Error Block 11 end (CF ANALYSIS FAILED)
+if not Success then
+    Notify("Error", "Could not find 'Paper' module. Game might have updated.")
+else
+    Notify("Success", "Game Logic Found. Exploits Ready.")
 end
-local Shop_upvr = require(ReplicatedStorage.Tables.Shop)
-function module.GetProductData(arg1) -- Line 60
-	--[[ Upvalues[1]:
-		[1]: Shop_upvr (readonly)
-	]]
-	for _, v in Shop_upvr do
-		if v[arg1] then
-			return v[arg1]
-		end
-	end
-end
-local TweenService_upvr = game:GetService("TweenService")
-function module.ScrollToMatchingItem(arg1) -- Line 68
-	--[[ Upvalues[2]:
-		[1]: List_upvr (readonly)
-		[2]: TweenService_upvr (readonly)
-	]]
-	-- KONSTANTERROR: [0] 1. Error Block 1 start (CF ANALYSIS FAILED)
-	local children_14, NONE_5, NONE_6 = List_upvr:GetChildren()
-	-- KONSTANTERROR: [0] 1. Error Block 1 end (CF ANALYSIS FAILED)
-	-- KONSTANTERROR: [17] 14. Error Block 5 start (CF ANALYSIS FAILED)
-	-- KONSTANTERROR: [17] 14. Error Block 5 end (CF ANALYSIS FAILED)
-	-- KONSTANTERROR: [6] 6. Error Block 2 start (CF ANALYSIS FAILED)
-	-- KONSTANTWARNING: Failed to evaluate expression, replaced with nil [17.7]
-	-- KONSTANTERROR: [6] 6. Error Block 2 end (CF ANALYSIS FAILED)
-end
-function module.UpdateShop(arg1) -- Line 87
-	--[[ Upvalues[2]:
-		[1]: List_upvr (readonly)
-		[2]: Paper_upvr (readonly)
-	]]
-	for _, v_2 in List_upvr.Passes:GetChildren() do
-		if v_2:IsA("TextButton") then
-			v_2.Main.Owned.Visible = Paper_upvr.Stats.Get(arg1, v_2:GetAttribute("PassName")).Value
-		end
-	end
-	for _, v_3 in List_upvr:GetChildren() do
-		if v_3:IsA("Frame") and v_3:GetAttribute("IsPass") then
-			local any_Get_result1_3 = Paper_upvr.Stats.Get(arg1, v_3:GetAttribute("PassName"))
-			v_3.Visible = not any_Get_result1_3.Value
-			v_3.Main.Owned.Visible = any_Get_result1_3.Value
-		end
-	end
-	for _, v_4 in List_upvr:GetChildren() do
-		if v_4:IsA("Frame") and v_4:GetAttribute("IsUpgrade") then
-			local Value = Paper_upvr.Stats.Get(arg1, v_4:GetAttribute("StatRequirement")).Value
-			if Value then
-				Value = not Paper_upvr.Stats.Get(arg1, v_4.Name).Value
-			end
-			v_4.Visible = Value
-		end
-	end
-	for _, v_5 in List_upvr.Miners:GetChildren() do
-		if v_5:IsA("Frame") then
-			v_5.Main.Owned.Visible = Paper_upvr.Stats.Get(arg1, v_5.Name).Value
-		end
-	end
-	for _, v_6 in List_upvr:GetChildren() do
-		if v_6:IsA("Frame") and v_6:GetAttribute("IsMiner") then
-			v_6.Main.Owned.Visible = Paper_upvr.Stats.Get(arg1, v_6.Name).Value
-		end
-	end
-	for _, v_7 in List_upvr.Pickaxes:GetChildren() do
-		if v_7:IsA("Frame") then
-			v_7.Main.Owned.Visible = Paper_upvr.Stats.Get(arg1, v_7.Name).Value
-		end
-	end
-	for _, v_8 in List_upvr:GetChildren() do
-		if v_8:IsA("Frame") and v_8:GetAttribute("IsPickaxe") then
-			v_8.Main.Owned.Visible = Paper_upvr.Stats.Get(arg1, v_8.Name).Value
-		end
-	end
-	local Frame = List_upvr.EggLuck.Frame
-	local any_Get_result1 = Paper_upvr.Stats.Get(arg1, "LuckyEggs")
-	local any_Get_result1_4 = Paper_upvr.Stats.Get(arg1, "SuperLuckyEggs")
-	Frame.Lucky.Main.Owned.Visible = any_Get_result1.Value
-	Frame.SuperLucky.Main.Owned.Visible = any_Get_result1_4.Value
-	Frame.UltraLucky.Main.Owned.Visible = Paper_upvr.Stats.Get(arg1, "UltraLuckyEggs").Value
-	Frame.SuperLucky.Main.Locked.Visible = not any_Get_result1.Value
-	Frame.UltraLucky.Main.Locked.Visible = not any_Get_result1_4.Value
-end
-function module.ShowBlocked(arg1, arg2) -- Line 172
-	--[[ Upvalues[1]:
-		[1]: List_upvr (readonly)
-	]]
-	if arg1 == nil then
-		local tbl = {}
-	end
-	for _, v_9 in List_upvr.Passes:GetChildren() do
-		if v_9:IsA("TextButton") then
-			v_9.Main.Blocked.Visible = tbl[tostring(v_9:GetAttribute("GiftId"))] or false
-		end
-	end
-	for _, v_10 in List_upvr:GetChildren() do
-		if v_10:IsA("Frame") and v_10:GetAttribute("IsPass") then
-			v_10.Main.Blocked.Visible = tbl[tostring(v_10:GetAttribute("GiftId"))] or false
-		end
-	end
-	for _, v_11 in List_upvr:GetChildren() do
-		if v_11:IsA("Frame") and v_11:GetAttribute("IsUpgrade") then
-			v_11.Main.Buy.Main.Blocked.Visible = tbl[tostring(v_11:GetAttribute("Id"))] or false
-		end
-	end
-	for _, v_12 in List_upvr.EggLuck.Frame:GetChildren() do
-		if v_12:IsA("Frame") then
-			v_12.Main.Blocked.Visible = tbl[tostring(v_12:GetAttribute("Id"))] or false
-		end
-	end
-	for _, v_13 in List_upvr.Miners:GetChildren() do
-		if v_13:IsA("Frame") then
-			v_13.Main.Blocked.Visible = tbl[tostring(v_13:GetAttribute("Id"))] or false
-		end
-	end
-	for _, v_14 in List_upvr:GetChildren() do
-		if v_14:IsA("Frame") and v_14:GetAttribute("IsMiner") then
-			v_14.Main.Blocked.Visible = tbl[tostring(v_14:GetAttribute("Id"))] or false
-		end
-	end
-	for _, v_15 in List_upvr.Pickaxes:GetChildren() do
-		if v_15:IsA("Frame") then
-			v_15.Main.Blocked.Visible = tbl[tostring(v_15:GetAttribute("Id"))] or false
-		end
-	end
-	for _, v_16 in List_upvr:GetChildren() do
-		if v_16:IsA("Frame") and v_16:GetAttribute("IsPickaxe") then
-			v_16.Main.Blocked.Visible = tbl[tostring(v_16:GetAttribute("Id"))] or false
-		end
-	end
-	for _, v_17 in List_upvr:GetChildren() do
-		if v_17:GetAttribute("IsExclusiveEgg") then
-			for _, v_18 in v_17.Main:GetChildren() do
-				if v_18:IsA("TextButton") then
-					v_18.Main.Blocked.Visible = tbl[tostring(v_18:GetAttribute("Id"))] or false
-				end
-			end
-		end
-	end
-	for _, v_19 in List_upvr.Boosts:GetChildren() do
-		if v_19:IsA("Frame") then
-			v_19.Main.Button.Main.Blocked.Visible = tbl[tostring(v_19:GetAttribute("Id"))] or false
-			v_19.Main.Button10.Main.Blocked.Visible = tbl[tostring(v_19:GetAttribute("Id10"))] or false
-		end
-	end
-	for _, v_20 in List_upvr.Coins:GetChildren() do
-		if v_20:IsA("Frame") then
-			v_20.Main.Buy.Main.Blocked.Visible = tbl[tostring(v_20:GetAttribute("Id"))] or false
-		end
-	end
-end
-return module
 
-
-
-
--- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
--- Decompiled on 2026-01-11 18:45:15
--- Luau version 6, Types version 3
--- Time taken: 0.019147 seconds
-
-return {
-	Gamepasses = {-- : First try: K:0: attempt to index nil with 't'
-;
-	Products = {-- : First try: K:0: attempt to index nil with 't'
-;
-	Packs = {
-		["Starter Pack"] = {
-			CantGift = true;
-			Id = 3438462807;
-			Value = 99;
-			PackTier = 0;
-			Items = {
-				["Damage Potion"] = {
-					Amount = 1;
-					Order = 1;
-				};
-			};
-			Stats = {};
-			Pets = {
-				Deer = {
-					Text = "OP!";
-					Order = 3;
-				};
-			};
-		};
-		["Pro Pack"] = {
-			CantGift = true;
-			Id = 3438462951;
-			Value = 699;
-			PackTier = 1;
-			Items = {
-				["Luck Potion"] = {
-					Amount = 10;
-					Order = 4;
-				};
-				["Aura Egg"] = {
-					Amount = 1;
-					Order = 5;
-				};
-				["Cloudy Egg"] = {
-					Amount = 1;
-					Order = 5;
-					Text = "Cloudy";
-				};
-			};
-			Stats = {
-				Coins = {
-					Amount = 10000;
-					Order = 3;
-				};
-			};
-			Pets = {};
-		};
-		["God Pack"] = {
-			CantGift = true;
-			Id = 3438463045;
-			Value = 1299;
-			PackTier = 2;
-			Items = {
-				["Heaven Egg"] = {
-					Amount = 1;
-					Order = 5;
-					Text = "Heaven";
-				};
-				["Cloudy Egg"] = {
-					Amount = 1;
-					Order = 6;
-					Text = "Cloudy";
-				};
-			};
-			Stats = {};
-			Pets = {};
-		};
-		["Superior Pack"] = {
-			CantGift = true;
-			Id = 3438940074;
-			Value = 1999;
-			PackTier = 3;
-			Items = {
-				["Damage Potion"] = {
-					Amount = 5;
-					Order = 1;
-				};
-				["Coin Potion"] = {
-					Amount = 5;
-					Order = 2;
-				};
-				["Speed Potion"] = {
-					Amount = 5;
-					Order = 3;
-				};
-				["Heaven Egg"] = {
-					Amount = 2;
-					Order = 5;
-					Text = "Heaven";
-				};
-			};
-			Stats = {};
-			Pets = {};
-		};
-	};
-	ExclusivePets = {};
-	Miners = {
-		["Robux Man"] = {
-			Icon = "rbxassetid://80331152059076";
-			Id = 3437474086;
-			Order = 1;
-		};
-		["Dominus Man"] = {
-			Icon = "rbxassetid://130241768310132";
-			Id = 3437474252;
-			Order = 2;
-		};
-		["Mine King"] = {
-			Icon = "rbxassetid://112786656875186";
-			Background = "rbxassetid://119764723307759";
-			Id = 3437474404;
-			Order = 3;
-			BigFrame = true;
-		};
-	};
-	Pickaxes = {
-		["Mining Drill"] = {
-			Icon = "rbxassetid://121689162596630";
-			Id = 3438262674;
-			Order = 1;
-		};
-		["Frostbite Reaper"] = {
-			Icon = "rbxassetid://103020565051973";
-			Id = 3438262761;
-			Order = 2;
-		};
-		["Dark Surge"] = {
-			Icon = "rbxassetid://87606781929011";
-			Background = "rbxassetid://128154236270597";
-			Id = 3438262872;
-			Order = 3;
-			BigFrame = true;
-		};
-	};
-	Eggs = {
-		["Heaven Egg"] = {
-			ProductBuy1 = 3493375951;
-			ProductBuy3 = 3493376152;
-			ProductBuy10 = 3493376315;
-			ProductBuy50 = 3493376537;
-			PriceBefore10 = 3950;
-			PriceBefore50 = 39500;
-			EggTier = 1;
-			Icon = "rbxassetid://115777766343785";
-			Background = "rbxassetid://120954557934385";
-		};
-		["Cloudy Egg"] = {
-			ProductBuy1 = 3492017879;
-			ProductBuy3 = 3492018149;
-			ProductBuy10 = 3492018306;
-			ProductBuy50 = 3492018489;
-			PriceBefore10 = 1450;
-			PriceBefore50 = 7250;
-			EggTier = 2;
-			Icon = "rbxassetid://117351369633008";
-			Background = "rbxassetid://74785217781386";
-		};
-	};
-	NameToId = {
-		SkipDailyChest = 3420012839;
-		DoubleDamage2Min = 3436333108;
-		DoublePower2Min = 3436333256;
-		DoubleMiningSpeed2Min = 3441851913;
-		SuperPotionPack = 3441975601;
-		SixHatchPass = 1541307984;
-		TwelveHatchProduct = 3442008609;
-		LavaDragon = 3451014641;
-		ShrineLevelTier1 = 3459557217;
-		ShrineLevelTier2 = 3459557380;
-		ShrineLevelTier3 = 3459557460;
-		ShrineLevelTier4 = 3459557643;
-		ShrineLevelTier5 = 3459557755;
-		HourServerBoost = 3506692444;
-		TwelveHoursServerBoost = 3506692876;
-		GrowAll = 3470945556;
-		EventPack = 3506861632;
-	};
-	NewOffers = {
-		CurrentOffer = 5;
-		Items = {};
-		Passes = {
-			["Double Crowns"] = 1663356154;
-		};
-	};
+-- // BYPASS LOGIC // --
+local SpoofedStats = {
+    -- Pickaxes
+    "Dark Surge", "Frostbite Reaper", "Mining Drill",
+    -- Miners
+    "Robux Man", "Dominus Man", "Mine King",
+    -- Gamepasses/Upgrades
+    "Pulse", "LuckyEggs", "SuperLuckyEggs", "UltraLuckyEggs",
+    "Double Crowns", "AutoHatch", "MagicEggs", "TripleHatch",
+    "VIP", "Teleport"
 }
 
+local HookEnabled = false
+local OriginalGet = nil
 
-robuxstands 
--- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
--- Decompiled on 2026-01-11 18:47:32
--- Luau version 6, Types version 3
--- Time taken: 0.001576 seconds
-
-return {
-	ExclusivePulse = {
-		Type = "Aura";
-		AuraName = "Pulse";
-		ProductId = 3440099309;
-	};
-	ExclusiveDarkSurge = {
-		Type = "Pickaxe";
-		PickaxeName = "Dark Surge";
-		ProductId = 3438262872;
-		Stat = "Dark Surge";
-	};
-	ExclusiveFrostbite = {
-		Type = "Pickaxe";
-		PickaxeName = "Frostbite Reaper";
-		ProductId = 3438262761;
-		Stat = "Frostbite Reaper";
-	};
-	ExclusiveMiningDrill = {
-		Type = "Pickaxe";
-		PickaxeName = "Mining Drill";
-		ProductId = 3438262674;
-		Stat = "Mining Drill";
-	};
-	ExclusiveRobuxMan = {
-		Type = "Miner";
-		MinerName = "Robux Man";
-		ProductId = 3437474086;
-		Stat = "Robux Man";
-	};
-	ExclusiveDominusMan = {
-		Type = "Miner";
-		MinerName = "Dominus Man";
-		ProductId = 3437474252;
-		Stat = "Dominus Man";
-	};
-	ExclusiveMineKing = {
-		Type = "Miner";
-		MinerName = "Mine King";
-		ProductId = 3437474404;
-		Stat = "Mine King";
-	};
-}
-
-
-RobuxWorkspace 
--- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
--- Decompiled on 2026-01-11 18:48:37
--- Luau version 6, Types version 3
--- Time taken: 0.019542 seconds
-
-local MarketplaceService_upvr = game:GetService("MarketplaceService")
-local ReplicatedStorage_upvr = game:GetService("ReplicatedStorage")
-local Paper_upvr = require(ReplicatedStorage_upvr.Paper)
-local Shop_upvr = require(ReplicatedStorage_upvr.Tables.Shop)
-local UI_upvr = require(ReplicatedStorage_upvr.Modules.Client.UI)
-local Revenue_upvr = require(ReplicatedStorage_upvr.Revenue)
-local LocalPlayer_upvr = game:GetService("Players").LocalPlayer
-local Passes_upvr = workspace:WaitForChild("Passes")
-local Assets_upvr = ReplicatedStorage_upvr.Assets
-Paper_upvr.Stats.Loaded()
-local function _(arg1) -- Line 34, Named "GetStand"
-	return workspace.ExclusiveStands:WaitForChild(arg1)
+if Paper and Paper.Stats then
+    OriginalGet = Paper.Stats.Get
 end
-local RobuxStands_upvr = require(ReplicatedStorage_upvr.Tables.RobuxStands)
-local PetLib_upvr = require(ReplicatedStorage_upvr.Modules.Shared.PetLib)
-local any_getHumanoidRootPart_result1_upvr = Paper_upvr.Animator.getHumanoidRootPart()
-local Pickaxes_upvr = require(ReplicatedStorage_upvr.Tables.Pickaxes)
-local EasyVisuals_upvr = require(ReplicatedStorage_upvr.Modules.Client.EasyVisuals)
-local RobuxStands_upvr_2 = Assets_upvr.Gradients.RobuxStands
-local Miners_upvr = require(ReplicatedStorage_upvr.Tables.Miners)
-local any_GetJson_result1_upvw = Paper_upvr.Stats.GetJson("BoughtAuras")
-local Auras_upvr = require(ReplicatedStorage_upvr.Tables.Auras)
-local any_Get_result1_upvr_3 = Paper_upvr.Stats.Get("BoughtAuras")
-local function SetupPassBoard_upvr(arg1) -- Line 208, Named "SetupPassBoard"
-	--[[ Upvalues[6]:
-		[1]: Shop_upvr (readonly)
-		[2]: Paper_upvr (readonly)
-		[3]: MarketplaceService_upvr (readonly)
-		[4]: LocalPlayer_upvr (readonly)
-		[5]: UI_upvr (readonly)
-		[6]: Revenue_upvr (readonly)
-	]]
-	task.spawn(function() -- Line 209
-		--[[ Upvalues[7]:
-			[1]: arg1 (readonly)
-			[2]: Shop_upvr (copied, readonly)
-			[3]: Paper_upvr (copied, readonly)
-			[4]: MarketplaceService_upvr (copied, readonly)
-			[5]: LocalPlayer_upvr (copied, readonly)
-			[6]: UI_upvr (copied, readonly)
-			[7]: Revenue_upvr (copied, readonly)
-		]]
-		local GUI_3 = arg1:WaitForChild("Main"):WaitForChild("GUI")
-		local Id_upvr = arg1:GetAttribute("Id")
-		local any_Get_result1_upvr_4 = Paper_upvr.Stats.Get(Shop_upvr.Gamepasses[Id_upvr].Stat)
-		GUI_3.Frame.Trigger.MouseButton1Click:Connect(function() -- Line 217
-			--[[ Upvalues[3]:
-				[1]: MarketplaceService_upvr (copied, readonly)
-				[2]: LocalPlayer_upvr (copied, readonly)
-				[3]: Id_upvr (readonly)
-			]]
-			MarketplaceService_upvr:PromptGamePassPurchase(LocalPlayer_upvr, Id_upvr)
-		end)
-		UI_upvr.Button.ApplyClickGeneric(GUI_3.Frame.Buy, function() -- Line 221
-			--[[ Upvalues[3]:
-				[1]: MarketplaceService_upvr (copied, readonly)
-				[2]: LocalPlayer_upvr (copied, readonly)
-				[3]: Id_upvr (readonly)
-			]]
-			MarketplaceService_upvr:PromptGamePassPurchase(LocalPlayer_upvr, Id_upvr)
-		end)
-		UI_upvr.Button.ApplyHoverAnimationGeneric(GUI_3.Frame.Buy)
-		Revenue_upvr.AddGamepassLabelToUpdate(GUI_3.Frame.Buy.Main.PriceFrame.Price, Id_upvr)
-		if any_Get_result1_upvr_4.Value then
-			arg1:Destroy()
-		end
-		any_Get_result1_upvr_4.Changed:Connect(function() -- Line 230
-			--[[ Upvalues[2]:
-				[1]: any_Get_result1_upvr_4 (readonly)
-				[2]: arg1 (copied, readonly)
-			]]
-			if any_Get_result1_upvr_4.Value then
-				arg1:Destroy()
-			end
-		end)
-	end)
+
+local function ToggleBypass(state)
+    HookEnabled = state
+    if not Paper or not OriginalGet then return end
+
+    if state then
+        -- Overwrite the Get function
+        Paper.Stats.Get = function(...)
+            local args = {...}
+            -- Usually args: (Player, StatName) or just (StatName)
+            local statName = args[2] or args[1]
+            
+            if table.find(SpoofedStats, statName) then
+                -- Create a fake ValueObject that mimics a real one
+                local FakeValue = Instance.new("BoolValue")
+                FakeValue.Value = true
+                return FakeValue
+            end
+            
+            return OriginalGet(...)
+        end
+        
+        -- Force UI Update
+        local UI = require(ReplicatedStorage.Modules.Client.UI)
+        if UI and UI.Shop then
+            UI.Shop.UpdateShop(LocalPlayer)
+        end
+    else
+        -- Restore original function
+        Paper.Stats.Get = OriginalGet
+        
+        -- Force UI Update
+        local UI = require(ReplicatedStorage.Modules.Client.UI)
+        if UI and UI.Shop then
+            UI.Shop.UpdateShop(LocalPlayer)
+        end
+    end
 end
-local function _() -- Line 236, Named "SetupPassesBoards"
-	--[[ Upvalues[8]:
-		[1]: Passes_upvr (readonly)
-		[2]: Shop_upvr (readonly)
-		[3]: Paper_upvr (readonly)
-		[4]: MarketplaceService_upvr (readonly)
-		[5]: LocalPlayer_upvr (readonly)
-		[6]: UI_upvr (readonly)
-		[7]: Revenue_upvr (readonly)
-		[8]: SetupPassBoard_upvr (readonly)
-	]]
-	for _, v_upvr in Passes_upvr:GetChildren() do
-		task.spawn(function() -- Line 209
-			--[[ Upvalues[7]:
-				[1]: v_upvr (readonly)
-				[2]: Shop_upvr (copied, readonly)
-				[3]: Paper_upvr (copied, readonly)
-				[4]: MarketplaceService_upvr (copied, readonly)
-				[5]: LocalPlayer_upvr (copied, readonly)
-				[6]: UI_upvr (copied, readonly)
-				[7]: Revenue_upvr (copied, readonly)
-			]]
-			local GUI_2 = v_upvr:WaitForChild("Main"):WaitForChild("GUI")
-			local Id_upvr_3 = v_upvr:GetAttribute("Id")
-			local any_Get_result1_upvr = Paper_upvr.Stats.Get(Shop_upvr.Gamepasses[Id_upvr_3].Stat)
-			GUI_2.Frame.Trigger.MouseButton1Click:Connect(function() -- Line 217
-				--[[ Upvalues[3]:
-					[1]: MarketplaceService_upvr (copied, readonly)
-					[2]: LocalPlayer_upvr (copied, readonly)
-					[3]: Id_upvr_3 (readonly)
-				]]
-				MarketplaceService_upvr:PromptGamePassPurchase(LocalPlayer_upvr, Id_upvr_3)
-			end)
-			UI_upvr.Button.ApplyClickGeneric(GUI_2.Frame.Buy, function() -- Line 221
-				--[[ Upvalues[3]:
-					[1]: MarketplaceService_upvr (copied, readonly)
-					[2]: LocalPlayer_upvr (copied, readonly)
-					[3]: Id_upvr_3 (readonly)
-				]]
-				MarketplaceService_upvr:PromptGamePassPurchase(LocalPlayer_upvr, Id_upvr_3)
-			end)
-			UI_upvr.Button.ApplyHoverAnimationGeneric(GUI_2.Frame.Buy)
-			Revenue_upvr.AddGamepassLabelToUpdate(GUI_2.Frame.Buy.Main.PriceFrame.Price, Id_upvr_3)
-			if any_Get_result1_upvr.Value then
-				v_upvr:Destroy()
-			end
-			any_Get_result1_upvr.Changed:Connect(function() -- Line 230
-				--[[ Upvalues[2]:
-					[1]: any_Get_result1_upvr (readonly)
-					[2]: v_upvr (copied, readonly)
-				]]
-				if any_Get_result1_upvr.Value then
-					v_upvr:Destroy()
-				end
-			end)
-		end)
-	end
-	Passes_upvr.ChildAdded:Connect(SetupPassBoard_upvr)
+
+-- // MAIN TAB // --
+
+MainTab:CreateSection("Shop Bypasses (Client)")
+
+MainTab:CreateToggle({
+   Name = "Unlock All Gamepasses (Visual/Client)",
+   CurrentValue = false,
+   Flag = "UnlockPasses",
+   Callback = function(Value)
+       ToggleBypass(Value)
+       if Value then
+           Notify("Bypass Active", "Shop items should now appear 'Owned'. Try equipping them.")
+       end
+   end,
+})
+
+MainTab:CreateButton({
+   Name = "Remove 'Buy' Boards (FPS Boost)",
+   Callback = function()
+       local Stands = Workspace:FindFirstChild("ExclusiveStands")
+       local Passes = Workspace:FindFirstChild("Passes")
+       local EggBoard = Workspace:FindFirstChild("EggBoard")
+       
+       if Stands then Stands:Destroy() end
+       if Passes then Passes:Destroy() end
+       if EggBoard then EggBoard:Destroy() end
+       
+       Notify("Cleaned", "Removed purchase boards from workspace.")
+   end,
+})
+
+MainTab:CreateSection("Automation")
+
+local AutoClick = false
+MainTab:CreateToggle({
+   Name = "Auto Click (Universal)",
+   CurrentValue = false,
+   Flag = "AutoClick",
+   Callback = function(Value)
+       AutoClick = Value
+       task.spawn(function()
+           while AutoClick do
+               -- Try to find a click tool or remote
+               local Tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+               if Tool then
+                   Tool:Activate()
+               end
+               task.wait(0.1)
+           end
+       end)
+   end,
+})
+
+-- // PLAYER TAB // --
+
+PlayerTab:CreateSlider({
+   Name = "WalkSpeed",
+   Range = {16, 300},
+   Increment = 1,
+   Suffix = "Speed",
+   CurrentValue = 16,
+   Flag = "SpeedSlider",
+   Callback = function(Value)
+       if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+           LocalPlayer.Character.Humanoid.WalkSpeed = Value
+       end
+   end,
+})
+
+PlayerTab:CreateSlider({
+   Name = "JumpPower",
+   Range = {50, 300},
+   Increment = 1,
+   Suffix = "Power",
+   CurrentValue = 50,
+   Flag = "JumpSlider",
+   Callback = function(Value)
+       if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+           LocalPlayer.Character.Humanoid.JumpPower = Value
+       end
+   end,
+})
+
+-- // SAFETY // --
+-- Prevent multiple executions
+if getgenv().ShopBypassLoaded then
+    Notify("Warning", "Script is already running!")
+    return
 end
-for _, v_2_upvr in Passes_upvr:GetChildren() do
-	task.spawn(function() -- Line 209
-		--[[ Upvalues[7]:
-			[1]: v_2_upvr (readonly)
-			[2]: Shop_upvr (readonly)
-			[3]: Paper_upvr (readonly)
-			[4]: MarketplaceService_upvr (readonly)
-			[5]: LocalPlayer_upvr (readonly)
-			[6]: UI_upvr (readonly)
-			[7]: Revenue_upvr (readonly)
-		]]
-		local GUI = v_2_upvr:WaitForChild("Main"):WaitForChild("GUI")
-		local Id_upvr_2 = v_2_upvr:GetAttribute("Id")
-		local any_Get_result1_upvr_2 = Paper_upvr.Stats.Get(Shop_upvr.Gamepasses[Id_upvr_2].Stat)
-		GUI.Frame.Trigger.MouseButton1Click:Connect(function() -- Line 217
-			--[[ Upvalues[3]:
-				[1]: MarketplaceService_upvr (copied, readonly)
-				[2]: LocalPlayer_upvr (copied, readonly)
-				[3]: Id_upvr_2 (readonly)
-			]]
-			MarketplaceService_upvr:PromptGamePassPurchase(LocalPlayer_upvr, Id_upvr_2)
-		end)
-		UI_upvr.Button.ApplyClickGeneric(GUI.Frame.Buy, function() -- Line 221
-			--[[ Upvalues[3]:
-				[1]: MarketplaceService_upvr (copied, readonly)
-				[2]: LocalPlayer_upvr (copied, readonly)
-				[3]: Id_upvr_2 (readonly)
-			]]
-			MarketplaceService_upvr:PromptGamePassPurchase(LocalPlayer_upvr, Id_upvr_2)
-		end)
-		UI_upvr.Button.ApplyHoverAnimationGeneric(GUI.Frame.Buy)
-		Revenue_upvr.AddGamepassLabelToUpdate(GUI.Frame.Buy.Main.PriceFrame.Price, Id_upvr_2)
-		if any_Get_result1_upvr_2.Value then
-			v_2_upvr:Destroy()
-		end
-		any_Get_result1_upvr_2.Changed:Connect(function() -- Line 230
-			--[[ Upvalues[2]:
-				[1]: any_Get_result1_upvr_2 (readonly)
-				[2]: v_2_upvr (copied, readonly)
-			]]
-			if any_Get_result1_upvr_2.Value then
-				v_2_upvr:Destroy()
-			end
-		end)
-	end)
-end
-Passes_upvr.ChildAdded:Connect(SetupPassBoard_upvr)
-;(function() -- Line 38, Named "LoadStands"
-	--[[ Upvalues[16]:
-		[1]: RobuxStands_upvr (readonly)
-		[2]: Assets_upvr (readonly)
-		[3]: PetLib_upvr (readonly)
-		[4]: Paper_upvr (readonly)
-		[5]: UI_upvr (readonly)
-		[6]: any_getHumanoidRootPart_result1_upvr (readonly)
-		[7]: Pickaxes_upvr (readonly)
-		[8]: EasyVisuals_upvr (readonly)
-		[9]: ReplicatedStorage_upvr (readonly)
-		[10]: RobuxStands_upvr_2 (readonly)
-		[11]: Miners_upvr (readonly)
-		[12]: any_GetJson_result1_upvw (read and write)
-		[13]: Auras_upvr (readonly)
-		[14]: any_Get_result1_upvr_3 (readonly)
-		[15]: LocalPlayer_upvr (readonly)
-		[16]: MarketplaceService_upvr (readonly)
-	]]
-	-- KONSTANTERROR: [0] 1. Error Block 1 start (CF ANALYSIS FAILED)
-	local children_3, NONE_2, NONE = workspace.ExclusiveStands:GetChildren()
-	-- KONSTANTERROR: [0] 1. Error Block 1 end (CF ANALYSIS FAILED)
-	-- KONSTANTERROR: [654] 435. Error Block 53 start (CF ANALYSIS FAILED)
-	-- KONSTANTERROR: [654] 435. Error Block 53 end (CF ANALYSIS FAILED)
-	-- KONSTANTERROR: [8] 6. Error Block 2 start (CF ANALYSIS FAILED)
-	-- KONSTANTWARNING: Failed to evaluate expression, replaced with nil [654.7]
-	-- KONSTANTERROR: [8] 6. Error Block 2 end (CF ANALYSIS FAILED)
-end)()
+getgenv().ShopBypassLoaded = true
+
+Notify("Loaded", "Shop Bypass Script Loaded Successfully!")
