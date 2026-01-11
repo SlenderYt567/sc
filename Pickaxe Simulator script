@@ -1,34 +1,28 @@
 --[[
-    SlenderHub - Pickaxe Simulator [V60.1 TITANIUM COMPLETE]
-    Architect: ScriptForge AI (v3.5)
+    SlenderHub - Pickaxe Simulator [V60.3 TITANIUM - PREMIUM SHOP EDITION]
+    Architect: BloxMinds AI
     
-    =========== [ INSTRUÇÕES DE ACESSO ] ===========
-    Defina o nível de acesso ANTES de rodar o script:
-    
-    getgenv().SlenderHubAccessLevel = "Free"    
-    -- Limita mineração a 2x, delay humano, loops lentos.
-    
-    getgenv().SlenderHubAccessLevel = "Premium" 
-    -- Libera mineração 100x, vacuum instantâneo, loops Heartbeat.
-    ================================================
+    =========== [ INSTRUCTIONS ] ===========
+    getgenv().SlenderHubAccessLevel = "Free"    -- Standard Features
+    getgenv().SlenderHubAccessLevel = "Premium" -- Unlocks Shop Bypass & Fast Modes
+    ========================================
 ]]
 
 -- [ 0. SAFETY SINGLETON ] --
 if getgenv().SlenderHubLoaded then 
-    warn("⛔ SlenderHub já está rodando!")
+    warn("⛔ SlenderHub is already running!")
     return 
 end
 getgenv().SlenderHubLoaded = true
 
--- [ 1. CONFIGURAÇÃO DE ACESSO ] --
+-- [ 1. CONFIGURATION & ACCESS ] --
 local AccessLevel = getgenv().SlenderHubAccessLevel or "Free" 
 local IsPremium = (AccessLevel == "Premium")
 
--- Configurações Dinâmicas Baseadas no Acesso
 local Config = {
-    SpeedLimit = IsPremium and 100 or 2, -- Premium: 100x | Free: 2x
-    LoopDelay = IsPremium and 0.01 or 0.25, -- Delay dos loops gerais
-    EventDelay = IsPremium and 0 or 1.5, -- Delay para pegar presentes
+    SpeedLimit = IsPremium and 100 or 2,
+    LoopDelay = IsPremium and 0.01 or 0.25,
+    EventDelay = IsPremium and 0 or 1.5,
 }
 
 -- Services
@@ -41,33 +35,58 @@ local LocalPlayer = Players.LocalPlayer
 -- UI Library
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- [ 2. DATABASE INTERNA ] --
+-- [ 2. INTERNAL DATABASE ] --
 getgenv().Flags = {
     MiningSpeed = 1,
     Egg = "Basic Egg",
     HatchMode = "1",
     RebirthMode = "1",
     SelectedMerch = {},
-    SelectedUpg = {}
+    SelectedUpg = {},
+    SelectedEventUpg = {},
+    UnlockPasses = false
 }
 
 local GameData = {
     Paper = nil,
     MineClient = nil,
+    OriginalGet = nil, -- For Bypass Storage
     Remotes = { Funct = nil, Event = nil },
     Tables = { 
         Eggs = {}, 
         Rebirths = {"1", "Max"}, 
         Upgrades = {},
-        EventItems = { -- Extraído do Decompile
-            "Luck Potion", "Speed Potion", "Snowflake Potion", "Festive Candy", 
-            "Festive Bell", "Snowball", "Hatch Booster", "Holy Clover", 
-            "Lucky Rainbow", "Candy Cane Seed", "Christmas Tree Seed"
+        EventItems = { 
+            "Luck Potion", "Speed Potion", "Damage Potion", "Coin Potion", "Gold Potion",
+            "Royal Crown", "Royal Gem", "Royal Ring",
+            "Hatch Booster", "Holy Clover", "Lucky Rainbow",
+            "Large Star", "Huge Star", "Giga Star",
+            "Luck Charm I", "Coin Charm I", "Mining Speed Charm I", "Hatch Charm I",
+            "Luck Charm II", "Coin Charm II", "Mining Speed Charm II", "Hatch Charm II",
+            "Luck Charm III", "Coin Charm III", "Mining Speed Charm III", "Hatch Charm III",
+            "Luck Charm IV", "Coin Charm IV", "Mining Speed Charm IV", "Hatch Charm IV",
+            "Coconut Seed"
+        },
+        EventUpgrades = {
+            "More Event Damage", "More Crowns", "More Gold", "Chest Luck", 
+            "Crowns Boost", "Egg Luck", "Hatch Speed", "Faster Event Merchant"
         }
     }
 }
 
--- [ 3. INICIALIZAÇÃO E HOOKS ] --
+-- Bypass List (Spoofed Items)
+local SpoofedStats = {
+    -- Pickaxes
+    "Dark Surge", "Frostbite Reaper", "Mining Drill", "Galaxy Pickaxe", "Void Pickaxe",
+    -- Miners
+    "Robux Man", "Dominus Man", "Mine King",
+    -- Gamepasses/Upgrades
+    "Pulse", "LuckyEggs", "SuperLuckyEggs", "UltraLuckyEggs",
+    "Double Crowns", "AutoHatch", "MagicEggs", "TripleHatch",
+    "VIP", "Teleport", "Double Gems", "Double Coins"
+}
+
+-- [ 3. INITIALIZATION & HOOKS ] --
 local function Initialize()
     local s, e = pcall(function()
         -- 3.1 Load Framework
@@ -80,7 +99,7 @@ local function Initialize()
             GameData.Remotes.Event = R:FindFirstChild("__remoteevent")
         end
 
-        -- 3.3 Hook MineClient (Crucial para o Loop de Mineração)
+        -- 3.3 Hook MineClient (Garbage Collection Scan)
         task.spawn(function()
             local attempts = 0
             while not GameData.MineClient and attempts < 20 do
@@ -95,15 +114,13 @@ local function Initialize()
             end
         end)
 
-        -- 3.4 Carregar Tabelas do Jogo (Dropdowns)
+        -- 3.4 Load Game Tables
         local T = ReplicatedStorage:WaitForChild("Tables", 5)
         if T then
-            -- Eggs
             local ET = require(T:WaitForChild("Eggs"))
             for n,_ in pairs(ET) do table.insert(GameData.Tables.Eggs, n) end
             table.sort(GameData.Tables.Eggs)
 
-            -- Rebirths
             local RT = require(T:WaitForChild("Rebirths"))
             local rebs = {}
             for _,v in pairs(RT) do table.insert(rebs, tostring(v)) end
@@ -111,17 +128,16 @@ local function Initialize()
             table.insert(rebs, "Max")
             GameData.Tables.Rebirths = rebs
 
-            -- Upgrades
             local UT = require(T:WaitForChild("Upgrades"))
             for n,_ in pairs(UT) do table.insert(GameData.Tables.Upgrades, n) end
             table.sort(GameData.Tables.Upgrades)
         end
     end)
-    if not s then warn("Falha na Inicialização: " .. tostring(e)) end
+    if not s then warn("Init Failed: " .. tostring(e)) end
 end
 Initialize()
 
--- [ 4. GERENCIADOR DE TAREFAS ] --
+-- [ 4. TASK MANAGER ] --
 local TaskManager = {}
 local Connections = {} 
 
@@ -145,28 +161,58 @@ local function NetworkCall(type, method, ...)
     end
 end
 
--- [ 5. LÓGICA PRINCIPAL (CORE) ] --
+-- [ 5. CORE LOGIC ] --
 
--- 5.1 SISTEMA DE MINERAÇÃO (Nativo + Loop)
+-- 5.0 SHOP BYPASS SYSTEM (PREMIUM ONLY)
+local function ToggleShopBypass(state)
+    if not GameData.Paper or not GameData.Paper.Stats then return end
+
+    -- Save original function
+    if not GameData.OriginalGet then
+        GameData.OriginalGet = GameData.Paper.Stats.Get
+    end
+
+    if state then
+        -- Hook Get function
+        GameData.Paper.Stats.Get = function(...)
+            local args = {...}
+            local statName = args[2] or args[1]
+            
+            if table.find(SpoofedStats, statName) then
+                local FakeValue = Instance.new("BoolValue")
+                FakeValue.Value = true
+                return FakeValue
+            end
+            
+            return GameData.OriginalGet(...)
+        end
+    else
+        -- Restore original
+        if GameData.OriginalGet then
+            GameData.Paper.Stats.Get = GameData.OriginalGet
+        end
+    end
+
+    -- Force UI Update
+    pcall(function()
+        local UI = require(ReplicatedStorage.Modules.Client.UI)
+        if UI and UI.Shop then
+            UI.Shop.UpdateShop(LocalPlayer)
+        end
+    end)
+end
+
+-- 5.1 MINING SYSTEM
 local function EnableMining(bool)
     StopTask("Mining")
-    
     if bool then
-        -- Aplica o Speed Hack Nativo (Exploit descoberto no AutoMine.lua)
-        if LocalPlayer then 
-            LocalPlayer:SetAttribute("SPEED_HACK", getgenv().Flags.MiningSpeed) 
-        end
-        
-        -- Garante que o jogo sabe que estamos minerando
+        if LocalPlayer then LocalPlayer:SetAttribute("SPEED_HACK", getgenv().Flags.MiningSpeed) end
         NetworkCall("Fire", "Toggle Setting", "AutoMine")
-
         if IsPremium then
-            -- PREMIUM: Usa Heartbeat (60x/segundo ou mais, sincronizado com física)
             Connections["Mining"] = RunService.Heartbeat:Connect(function()
                 if GameData.MineClient then GameData.MineClient.MineCurrentOre() end
             end)
         else
-            -- FREE: Usa loop While simples com delay (Segurança anti-kick)
             StartTask("Mining", function()
                 while true do
                     if GameData.MineClient then GameData.MineClient.MineCurrentOre() end
@@ -179,32 +225,29 @@ local function EnableMining(bool)
     end
 end
 
--- 5.2 GIFT VACUUM (Evento de Natal)
-local function EnableGiftVacuum(bool)
-    StopTask("Gifts")
+-- 5.2 EVENT VACUUM
+local function EnableEventVacuum(bool)
+    StopTask("EventVacuum")
     if bool then
-        local GiftFolder = Workspace:WaitForChild("Objects", 5)
-        if not GiftFolder then return end
+        local DropFolder = Workspace:WaitForChild("Objects", 5)
+        if not DropFolder then return end
 
         local function Collect(model)
             if model:IsA("Model") and model.PrimaryPart then
-                -- Teleporta acima do presente
                 LocalPlayer.Character:PivotTo(model.PrimaryPart.CFrame + Vector3.new(0,3,0))
-                -- Free tem delay para não parecer bot
                 if not IsPremium then task.wait(0.25) end
-                NetworkCall("Invoke", "Claim Gift", model.Name)
+                NetworkCall("Invoke", "Claim Gift", model.Name) 
+                NetworkCall("Invoke", "Collect Drop", model.Name)
             end
         end
 
         if IsPremium then
-            -- PREMIUM: Event Listener (Instantâneo assim que spawna)
-            Connections["Gifts"] = GiftFolder.ChildAdded:Connect(Collect)
-            for _, g in pairs(GiftFolder:GetChildren()) do Collect(g) end
+            Connections["EventVacuum"] = DropFolder.ChildAdded:Connect(Collect)
+            for _, g in pairs(DropFolder:GetChildren()) do Collect(g) end
         else
-            -- FREE: Loop Scanner (Verifica a pasta a cada X segundos)
-            StartTask("Gifts", function()
+            StartTask("EventVacuum", function()
                 while true do
-                    for _, g in pairs(GiftFolder:GetChildren()) do Collect(g) end
+                    for _, g in pairs(DropFolder:GetChildren()) do Collect(g) end
                     task.wait(2) 
                 end
             end)
@@ -212,9 +255,8 @@ local function EnableGiftVacuum(bool)
     end
 end
 
--- 5.3 FARM PLANT/HARVEST
+-- 5.3 FARM LOGIC
 local function FarmLogic()
-    -- Colheita
     local W = Workspace.Worlds:FindFirstChild("Stud World") or Workspace.Worlds:FindFirstChild("Farm")
     if W and W:FindFirstChild("Farm") then
         for _, p in pairs(W.Farm.Plants:GetChildren()) do
@@ -223,12 +265,11 @@ local function FarmLogic()
             end
         end
     end
-    -- Plantio
     if GameData.Paper then
         local plants = GameData.Paper.Stats.Get("Plants"):GetChildren()
         local max = 4 + GameData.Paper.Stats.Get("FarmLevel").Value
         if #plants < max then
-            for _,s in pairs({"Christmas Tree", "Candy Cane", "Watermelon", "Apple"}) do 
+            for _,s in pairs({"Coconut Seed", "Watermelon", "Apple"}) do 
                 NetworkCall("Invoke", "Plant", s) 
             end
         end
@@ -256,31 +297,80 @@ local function BulkCraft(tier)
     end
 end
 
--- [ 6. INTERFACE GRÁFICA (UI) ] --
+-- [ 6. UI INTERFACE ] --
 local Window = Rayfield:CreateWindow({
-   Name = IsPremium and "SlenderHub | TITANIUM V60.1 💎" or "SlenderHub | FREE V60.1 ⚠️",
-   LoadingTitle = IsPremium and "Titanium Access Granted" or "Free Version Loaded",
-   ConfigurationSaving = { Enabled = true, FileName = "SlenderHubV60" },
+   Name = IsPremium and "SlenderHub | TITANIUM V60.3 💎" or "SlenderHub | FREE V60.3 ⚠️",
+   LoadingTitle = "Loading Modules...",
+   LoadingSubtitle = "By BloxMinds AI",
+   ConfigurationSaving = { Enabled = true, FileName = "SlenderHubV60_3" },
    KeySystem = false,
 })
 
--- ==== ABA: MINE ==== --
+-- ==== TAB: SHOP (PREMIUM PROTECTED) ==== --
+local TabShop = Window:CreateTab("Shop 🛒", "shopping-cart")
+
+TabShop:CreateSection("Client Bypass (Visual/Equip)")
+
+TabShop:CreateToggle({
+    Name = "Unlock All Gamepasses & Items (Premium)",
+    CurrentValue = false,
+    Flag = "UnlockPasses",
+    Callback = function(Value)
+        -- [ PREMIUM CHECK ] --
+        if not IsPremium then
+            Rayfield:Notify({
+                Title = "ACCESS DENIED 🔒",
+                Content = "This feature is restricted to Premium users.",
+                Duration = 5,
+                Image = "lock"
+            })
+            return -- Stops execution here
+        end
+        
+        -- Execute Bypass if Premium
+        ToggleShopBypass(Value)
+        if Value then
+            Rayfield:Notify({Title = "Bypass Active", Content = "Items unlocked locally.", Duration = 4})
+        end
+    end,
+})
+
+TabShop:CreateButton({
+    Name = "Force Update Shop UI",
+    Callback = function()
+        pcall(function()
+            require(ReplicatedStorage.Modules.Client.UI).Shop.UpdateShop(LocalPlayer)
+        end)
+    end,
+})
+
+TabShop:CreateSection("Performance")
+
+TabShop:CreateButton({
+    Name = "Remove 'Buy' Boards (FPS Boost)",
+    Callback = function()
+        local targets = {"ExclusiveStands", "Passes", "EggBoard"}
+        for _, t in pairs(targets) do
+            local obj = Workspace:FindFirstChild(t)
+            if obj then obj:Destroy() end
+        end
+        Rayfield:Notify({Title = "Cleaned", Content = "Removed purchase boards.", Duration = 3})
+    end,
+})
+
+-- ==== TAB: MINE ==== --
 local TabMine = Window:CreateTab("Mine ⛏️", 4483345998)
 
 TabMine:CreateSection(IsPremium and "GOD MODE CONTROLS" or "LEGIT CONTROLS")
 
 TabMine:CreateSlider({
     Name = "Mining Speed Multiplier",
-    -- A LÓGICA PEDIDA:
-    -- Free: Range 1 a 2. Incremento 0.5 (Permite 1x, 1.5x, 2x)
-    -- Premium: Range 1 a 100.
     Range = {1, Config.SpeedLimit},
     Increment = IsPremium and 1 or 0.5,
     Suffix = "x",
     CurrentValue = 1,
     Callback = function(Value)
         getgenv().Flags.MiningSpeed = Value
-        -- Atualiza em tempo real
         if LocalPlayer and LocalPlayer:GetAttribute("SPEED_HACK") then
             LocalPlayer:SetAttribute("SPEED_HACK", Value)
         end
@@ -311,7 +401,7 @@ TabMine:CreateToggle({
     end
 })
 
--- ==== ABA: EGGS ==== --
+-- ==== TAB: EGGS ==== --
 local TabEggs = Window:CreateTab("Eggs 🥚", 4483362458)
 
 TabEggs:CreateDropdown({
@@ -338,7 +428,6 @@ TabEggs:CreateToggle({
                     local mode = getgenv().Flags.HatchMode
                     local amt = (mode == "Max" and "Max" or tonumber(mode))
                     NetworkCall("Invoke", "Hatch Egg", getgenv().Flags.Egg, amt)
-                    -- Premium quase sem delay, Free espera animação
                     task.wait(IsPremium and 0.05 or 0.6)
                 end
             end)
@@ -346,7 +435,7 @@ TabEggs:CreateToggle({
     end
 })
 
--- ==== ABA: FARM/PETS ==== --
+-- ==== TAB: FARM/PETS ==== --
 local TabFP = Window:CreateTab("Farm/Pets 🐾", 4483362458)
 
 TabFP:CreateToggle({
@@ -375,7 +464,7 @@ TabFP:CreateToggle({
     end
 })
 
--- ==== ABA: UPGRADES ==== --
+-- ==== TAB: UPGRADES ==== --
 local TabUpg = Window:CreateTab("Upgrades 📈", 4483362458)
 
 TabUpg:CreateDropdown({
@@ -416,16 +505,18 @@ TabUpg:CreateToggle({
     end
 })
 
--- ==== ABA: EVENTO ==== --
-local TabEvent = Window:CreateTab("Event 🎄", 4483362458)
+-- ==== TAB: EVENT ==== --
+local TabEvent = Window:CreateTab("Event 👑", 4483362458)
 
-TabEvent:CreateSection(IsPremium and "VACUUM MODE" or "SLOW SCAN MODE")
+TabEvent:CreateSection("35M / Royal Event")
 
 TabEvent:CreateToggle({
-    Name = IsPremium and "GIFT VACUUM (Instant Teleport)" or "Auto Farm Gifts (Scan Loop)",
+    Name = IsPremium and "EVENT VACUUM (Instant Teleport)" or "Auto Farm Drops (Scan Loop)",
     CurrentValue = false,
-    Callback = function(v) EnableGiftVacuum(v) end
+    Callback = function(v) EnableEventVacuum(v) end
 })
+
+TabEvent:CreateSection("Event Merchant")
 
 TabEvent:CreateDropdown({
     Name = "Merchant Items",
@@ -436,7 +527,7 @@ TabEvent:CreateDropdown({
 })
 
 TabEvent:CreateToggle({
-    Name = "Auto Buy Merchant",
+    Name = "Auto Buy Merchant Items",
     CurrentValue = false,
     Callback = function(v)
         if v then StartTask("Merch", function() while true do for _, item in pairs(getgenv().Flags.SelectedMerch) do NetworkCall("Invoke", "Buy Event Merchant", item) end task.wait(3) end end)
@@ -444,19 +535,38 @@ TabEvent:CreateToggle({
     end
 })
 
+TabEvent:CreateSection("Event Upgrades")
+
+TabEvent:CreateDropdown({
+    Name = "Select Event Upgrades",
+    Options = GameData.Tables.EventUpgrades,
+    CurrentOption = {"More Crowns"},
+    MultipleOptions = true,
+    Callback = function(O) getgenv().Flags.SelectedEventUpg = O end
+})
+
 TabEvent:CreateToggle({
-    Name = "Auto Buy Event Pickaxe",
+    Name = "Auto Buy Event Upgrades",
     CurrentValue = false,
     Callback = function(v)
-        if v then StartTask("EventPick", function() while true do NetworkCall("Invoke", "Buy Christmas Pickaxe") task.wait(1) end end)
-        else StopTask("EventPick") end
+        if v then 
+            StartTask("EventUpg", function() 
+                while true do 
+                    for _, u in pairs(getgenv().Flags.SelectedEventUpg) do 
+                        NetworkCall("Invoke", "Buy Event Upgrade", u) 
+                        NetworkCall("Invoke", "Upgrade Event", u) 
+                    end 
+                    task.wait(2) 
+                end 
+            end)
+        else StopTask("EventUpg") end
     end
 })
 
 Rayfield:LoadConfiguration()
 Rayfield:Notify({
-    Title = IsPremium and "TITANIUM ACCESS" or "FREE ACCESS",
-    Content = IsPremium and "Max Speed: 100x | Instant Vacuum" or "Max Speed: 2x | Safe Mode",
+    Title = "SlenderHub Loaded",
+    Content = IsPremium and "Premium Active: Shop Bypass Unlocked!" or "Free Version Active",
     Duration = 5,
     Image = 4483345998,
 })
