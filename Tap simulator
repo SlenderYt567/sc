@@ -1,0 +1,476 @@
+--[[
+    SlenderHub | V1.0 - Tap Simulator (Universal Edition)
+    Architect: Senior Lead Developer
+    Framework: Rayfield Interface Suite
+    
+    [ACCESS CONTROL]:
+    Reads: getgenv().SlenderHubAccessLevel
+    States: "Free" | "Premium"
+]]
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- // 1. SYSTEM CHECK \\ --
+local AccessLevel = getgenv().SlenderHubAccessLevel or "Free"
+local IsPremium = (AccessLevel == "Premium")
+
+-- // 2. CORE SERVICES \\ --
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+
+-- // 3. SECURITY BYPASS \\ --
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    if getnamecallmethod() == "FireServer" and self.Name == "GameAnalyticsError" then return nil end
+    return oldNamecall(self, ...)
+end)
+
+-- // 4. MODULE INJECTION (DYNAMIC) \\ --
+local M = {}
+local DataCache = { Eggs = {}, Portals = {}, Upgrades = {} }
+
+local function InjectModules()
+    local s, e = pcall(function()
+        M.Net = require(ReplicatedStorage.Modules.Network)
+        M.Rep = require(ReplicatedStorage.Game.Replication)
+        M.Eggs = require(ReplicatedStorage.Game.Eggs)
+        M.Portals = require(ReplicatedStorage.Game.Portals)
+        M.GemShop = require(ReplicatedStorage.Game.GemShop)
+        
+        -- Populate Lists
+        if M.Eggs then
+            for n,v in pairs(M.Eggs) do if type(v)=="table" then table.insert(DataCache.Eggs, n) end end
+            table.sort(DataCache.Eggs)
+        end
+        if M.Portals then
+            for n,_ in pairs(M.Portals) do table.insert(DataCache.Portals, n) end
+            table.sort(DataCache.Portals)
+        end
+        if M.GemShop then
+            for n,v in pairs(M.GemShop) do if not v.Hidden then table.insert(DataCache.Upgrades, n) end end
+            table.sort(DataCache.Upgrades)
+        end
+    end)
+    if not s then warn("SlenderHub: Module Injection Failed") end
+end
+InjectModules()
+
+-- // 5. HELPER FUNCTIONS \\ --
+local function UnlockGamepasses()
+    if M.Rep and M.Rep.Data then
+        local GP = M.Rep.Data.Gamepasses or {}
+        GP["x3Egg"] = true; GP["x8Egg"] = true; GP["FasterEgg"] = true
+        GP["AutoClicker"] = true; GP["Luck"] = true
+        M.Rep.Data.Gamepasses = GP
+    end
+end
+task.spawn(UnlockGamepasses)
+
+-- // 6. GLOBAL FLAGS \\ --
+getgenv().Flags = {
+    -- Free Flags
+    AutoTap = false, AutoRebirth = false, RebirthAmt = 1,
+    AutoHatch = false, Egg = "Starter", HatchAmt = 1,
+    AutoDig = false, AutoBoss = false,
+    AutoQuests = false, AutoRank = false, AutoSpin = false,
+    AutoUpgrade = false, SelectedUpgrade = "",
+    Sniper = false, AutoPotions = false,
+    DeleteFilter = {["Common"]=false, ["Uncommon"]=false, ["Rare"]=false},
+    
+    -- Premium Flags
+    GodTap = false, NuclearHatch = false, InstantCraft = false
+}
+
+-- // 7. UI CONSTRUCTION \\ --
+local Window = Rayfield:CreateWindow({
+   Name = "SlenderHub | V1.0 [" .. AccessLevel .. "]",
+   LoadingTitle = "System Initialization...",
+   LoadingSubtitle = "Tap Simulator",
+   ConfigurationSaving = { Enabled = true, FileName = "SlenderTapV1" },
+   KeySystem = false,
+})
+
+-- ==================================================================
+-- [TAB] 👑 PREMIUM (TIER EXCLUSIVE)
+-- ==================================================================
+local TabPrem = Window:CreateTab("Premium", "crown")
+
+if IsPremium then
+    TabPrem:CreateSection("GOD MODE (Packet Spam)")
+    
+    TabPrem:CreateToggle({
+        Name = "GOD TAP (50x Speed)",
+        CurrentValue = false,
+        Flag = "GodTap",
+        Callback = function(V)
+            getgenv().Flags.GodTap = V
+            if V then
+                task.spawn(function()
+                    local Con
+                    Con = RunService.Heartbeat:Connect(function()
+                        if not getgenv().Flags.GodTap then Con:Disconnect() return end
+                        -- Extreme Speed: 50 requests per frame
+                        for i = 1, 50 do 
+                            M.Net:FireServer("Tap", true, false, true) 
+                        end
+                    end)
+                end)
+            end
+        end
+    })
+
+    TabPrem:CreateToggle({
+        Name = "NUCLEAR HATCH (Multi-Thread)",
+        CurrentValue = false,
+        Flag = "NuclearHatch",
+        Callback = function(V)
+            getgenv().Flags.NuclearHatch = V
+            if V then
+                -- Launches 4 parallel threads to spam hatch requests
+                for i=1, 4 do
+                    task.spawn(function()
+                        while getgenv().Flags.NuclearHatch do
+                            local filter = {}
+                            for r, on in pairs(getgenv().Flags.DeleteFilter) do if on then filter[r]=true end end
+                            M.Net:InvokeServer("OpenEgg", getgenv().Flags.Egg, getgenv().Flags.HatchAmt, filter)
+                            task.wait() -- Minimal wait, relies on server response time
+                        end
+                    end)
+                end
+            end
+        end
+    })
+
+    TabPrem:CreateSection("INSTANT ACTIONS")
+
+    TabPrem:CreateButton({
+        Name = "⚡ Instant Craft Inventory",
+        Callback = function()
+            if M.Rep.Data and M.Rep.Data.Pets then
+                local groups = {}
+                for id, p in pairs(M.Rep.Data.Pets) do
+                    local k = p.Name .. (p.Tier or "Normal")
+                    if not groups[k] then groups[k] = {} end
+                    table.insert(groups[k], id)
+                end
+                -- Batch process everything instantly
+                for _, ids in pairs(groups) do
+                    while #ids >= 5 do
+                        local batch = {table.remove(ids), table.remove(ids), table.remove(ids), table.remove(ids), table.remove(ids)}
+                        task.spawn(function() M.Net:InvokeServer("CraftPets", batch) end)
+                    end
+                end
+                Rayfield:Notify({Title="Premium", Content="Mass Craft Sent!", Duration=2})
+            end
+        end
+    })
+
+    TabPrem:CreateButton({
+        Name = "💎 Force Buy All Portals",
+        Callback = function()
+            for _, pName in ipairs(DataCache.Portals) do
+                task.spawn(function() M.Net:InvokeServer("BuyPortal", pName) end)
+            end
+            Rayfield:Notify({Title="Premium", Content="Buy Requests Sent!", Duration=2})
+        end
+    })
+
+else
+    TabPrem:CreateParagraph({Title = "Access Denied", Content = "Upgrade to Premium Key to unlock:\n\n• GOD TAP (50x Faster)\n• NUCLEAR HATCH (No Animation/Delay)\n• INSTANT CRAFT (Whole Inventory)\n• FORCE UNLOCK ALL"})
+    TabPrem:CreateButton({
+        Name = "Get Premium Key",
+        Callback = function()
+            setclipboard("https://www.slenderhub.shop/")
+            Rayfield:Notify({Title="Link Copied", Content="Visit our shop!", Duration=3})
+        end
+    })
+end
+
+-- ==================================================================
+-- [TAB] FARM (FREE)
+-- ==================================================================
+local TabFarm = Window:CreateTab("Farm", "sword")
+
+TabFarm:CreateSection("Main Loop")
+
+TabFarm:CreateToggle({
+   Name = "Auto Tap (Normal)",
+   CurrentValue = false,
+   Flag = "AutoTap", 
+   Callback = function(V)
+        getgenv().Flags.AutoTap = V
+        if V then
+            task.spawn(function()
+                while getgenv().Flags.AutoTap do
+                    -- Only run if GodTap is OFF to avoid conflict
+                    if not getgenv().Flags.GodTap then
+                        for i=1, 5 do M.Net:FireServer("Tap", true, false, true) end
+                    end
+                    task.wait(0.1)
+                end
+            end)
+        end
+   end,
+})
+
+TabFarm:CreateToggle({
+   Name = "Auto Rebirth",
+   CurrentValue = false,
+   Flag = "AutoRebirth", 
+   Callback = function(V)
+        getgenv().Flags.AutoRebirth = V
+        task.spawn(function()
+            while getgenv().Flags.AutoRebirth do
+                M.Net:InvokeServer("Rebirth", 1, getgenv().Flags.RebirthAmt)
+                task.wait(0.5)
+            end
+        end)
+   end,
+})
+
+TabFarm:CreateSection("Minigames & Boss")
+
+TabFarm:CreateToggle({
+   Name = "Auto Minigames (Dig/Memory)",
+   CurrentValue = false,
+   Flag = "AutoDig", 
+   Callback = function(V)
+        getgenv().Flags.AutoDig = V
+        task.spawn(function()
+            while getgenv().Flags.AutoDig do
+                task.spawn(function() M.Net:InvokeServer("StartMinigame", "DigGame"); M.Net:InvokeServer("FinishMinigame", "DigGame") end)
+                task.spawn(function() M.Net:InvokeServer("StartMinigame", "MemoryMatch"); M.Net:InvokeServer("FinishMinigame", "MemoryMatch") end)
+                task.wait(1)
+            end
+        end)
+   end,
+})
+
+TabFarm:CreateButton({
+    Name = "Teleport to Boss",
+    Callback = function()
+        local Boss = Workspace:FindFirstChild("Game") and Workspace.Game:FindFirstChild("BridgeBoss")
+        if Boss and Boss:FindFirstChild("SecondZone") then
+            LocalPlayer.Character:PivotTo(Boss.SecondZone.CFrame + Vector3.new(0,5,0))
+        end
+    end
+})
+
+-- ==================================================================
+-- [TAB] PETS (FREE)
+-- ==================================================================
+local TabPets = Window:CreateTab("Pets", "cat")
+
+TabPets:CreateSection("Hatching")
+
+TabPets:CreateDropdown({
+   Name = "Select Egg",
+   Options = DataCache.Eggs,
+   CurrentOption = {"Starter"},
+   Callback = function(O) getgenv().Flags.Egg = O[1] end,
+})
+
+TabPets:CreateDropdown({
+   Name = "Hatch Mode",
+   Options = {"1", "3", "8"},
+   CurrentOption = {"1"},
+   Callback = function(O) 
+       getgenv().Flags.HatchAmt = tonumber(O[1])
+       UnlockGamepasses()
+   end,
+})
+
+TabPets:CreateToggle({
+   Name = "Auto Hatch (Normal)",
+   CurrentValue = false,
+   Flag = "AutoHatch", 
+   Callback = function(V)
+        getgenv().Flags.AutoHatch = V
+        if V then
+            task.spawn(function()
+                while getgenv().Flags.AutoHatch do
+                    if not getgenv().Flags.NuclearHatch then
+                        local filter = {}
+                        for r, on in pairs(getgenv().Flags.DeleteFilter) do if on then filter[r]=true end end
+                        M.Net:InvokeServer("OpenEgg", getgenv().Flags.Egg, getgenv().Flags.HatchAmt, filter)
+                    end
+                    task.wait(0.2)
+                end
+            end)
+        end
+   end,
+})
+
+TabPets:CreateSection("Auto Delete")
+for _, r in ipairs({"Common", "Uncommon", "Rare", "Epic", "Legendary"}) do
+    TabPets:CreateToggle({
+        Name = "Delete " .. r,
+        CurrentValue = false,
+        Callback = function(V) getgenv().Flags.DeleteFilter[r] = V end
+    })
+end
+
+-- ==================================================================
+-- [TAB] PROGRESSION (FREE)
+-- ==================================================================
+local TabProg = Window:CreateTab("Progression", "trending-up")
+
+TabProg:CreateToggle({
+    Name = "Auto Claim Quests",
+    CurrentValue = false,
+    Flag = "AutoQuests",
+    Callback = function(V)
+        getgenv().Flags.AutoQuests = V
+        task.spawn(function()
+            while getgenv().Flags.AutoQuests do
+                if M.Rep.Data and M.Rep.Data.Quests then
+                    for q, d in pairs(M.Rep.Data.Quests) do
+                        if not d.Claimed then M.Net:InvokeServer("ClaimQuest", q) end
+                    end
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+TabProg:CreateToggle({
+    Name = "Auto Rank Rewards",
+    CurrentValue = false,
+    Flag = "AutoRank",
+    Callback = function(V)
+        getgenv().Flags.AutoRank = V
+        task.spawn(function()
+            while getgenv().Flags.AutoRank do
+                M.Net:InvokeServer("ClaimRankReward")
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+TabProg:CreateToggle({
+    Name = "Auto Spin Wheels",
+    CurrentValue = false,
+    Flag = "AutoSpin",
+    Callback = function(V)
+        getgenv().Flags.AutoSpin = V
+        task.spawn(function()
+            while getgenv().Flags.AutoSpin do
+                M.Net:InvokeServer("SpinWheel", "FestiveSpinWheel")
+                M.Net:InvokeServer("SpinWheel", "VoidSpinWheel")
+                task.wait(3)
+            end
+        end)
+    end
+})
+
+TabProg:CreateSection("Gem Shop")
+
+TabProg:CreateDropdown({
+   Name = "Select Upgrade",
+   Options = DataCache.Upgrades,
+   CurrentOption = {"MoreDiamonds"},
+   Callback = function(O) getgenv().Flags.SelectedUpgrade = O[1] end,
+})
+
+TabProg:CreateToggle({
+    Name = "Auto Buy Upgrade",
+    CurrentValue = false,
+    Flag = "AutoUpgrade",
+    Callback = function(V)
+        getgenv().Flags.AutoUpgrade = V
+        task.spawn(function()
+            while getgenv().Flags.AutoUpgrade do
+                if getgenv().Flags.SelectedUpgrade ~= "" then
+                    M.Net:InvokeServer("UpgradeGemShop", getgenv().Flags.SelectedUpgrade)
+                end
+                task.wait(1)
+            end
+        end)
+    end
+})
+
+-- ==================================================================
+-- [TAB] WORLD (FREE)
+-- ==================================================================
+local TabWorld = Window:CreateTab("World", "globe")
+
+TabWorld:CreateSection("Teleports")
+for _, p in ipairs(DataCache.Portals) do
+    TabWorld:CreateButton({
+        Name = "TP to " .. p,
+        Callback = function()
+            M.Net:InvokeServer("TeleportZone", p)
+            local Zone = Workspace:FindFirstChild("Zones") and Workspace.Zones:FindFirstChild("Portals")
+            if Zone and Zone:FindFirstChild(p) then
+                LocalPlayer.Character:PivotTo(Zone[p].TP.CFrame)
+            end
+        end
+    })
+end
+
+TabWorld:CreateSection("Automation")
+
+TabWorld:CreateToggle({
+   Name = "Infinity Chest Sniper",
+   CurrentValue = false,
+   Flag = "Sniper", 
+   Callback = function(V)
+        getgenv().Flags.Sniper = V
+        task.spawn(function()
+            while getgenv().Flags.Sniper do
+                local target
+                for _, o in ipairs(CollectionService:GetTagged("Breakable")) do
+                    if o.Name == "InfinityChest" and o:FindFirstChild("ClickDetector") then target = o break end
+                end
+                if target then
+                    LocalPlayer.Character:PivotTo(target:GetPivot())
+                    for i=1,5 do fireclickdetector(target.ClickDetector) end
+                end
+                task.wait(0.1)
+            end
+        end)
+   end,
+})
+
+TabWorld:CreateToggle({
+    Name = "Auto Use Potions",
+    CurrentValue = false,
+    Flag = "AutoPotions",
+    Callback = function(V)
+        getgenv().Flags.AutoPotions = V
+        task.spawn(function()
+            while getgenv().Flags.AutoPotions do
+                if M.Rep.Data and M.Rep.Data.Items then
+                    for id, item in pairs(M.Rep.Data.Items) do
+                        if string.find(item.Name or "", "Potion") or string.find(item.Name or "", "Boost") then
+                            M.Net:InvokeServer("UseItem", id)
+                        end
+                    end
+                end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+TabWorld:CreateButton({
+    Name = "FPS Boost",
+    Callback = function()
+        pcall(function()
+            Lighting.GlobalShadows = false
+            for _, v in pairs(Workspace:GetDescendants()) do
+                if v:IsA("BasePart") then v.Material = Enum.Material.SmoothPlastic; v.Reflectance = 0 end
+                if v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
+            end
+        end)
+    end
+})
+
+Rayfield:LoadConfiguration()
