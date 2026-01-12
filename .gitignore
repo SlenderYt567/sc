@@ -7,3 +7,356 @@ local args = {
 }
 game:GetService("ReplicatedStorage"):WaitForChild("617ef9c5-ccf9-4f09-8998-544e32b9b00a"):WaitForChild("Events"):WaitForChild(""):FireServer(unpack(args))
 
+--[[
+    ScriptForge AI - Tap Simulator SPEED DEMON (v10.0)
+    
+    [MODIFICAÇÃO SOLICITADA]:
+    + Velocidade MÁXIMA no Auto Tap (Spam de 300+ cliques/segundo)
+    + Velocidade MÁXIMA no Auto Hatch (Sem delay, instantâneo)
+    
+    [FUNCIONALIDADES]:
+    + Gamepass Unlocker & Auto Hatch (1x, 3x, 8x)
+    + Infinity Chest Sniper & Math-Based Auto Equip
+    + Auto Farm Minigames, Craft, Rebirth & Potions
+    + FPS Boost & Anti-Lag
+]]
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- // 1. SERVIÇOS \\ --
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+
+-- // 2. SEGURANÇA (Anti-Analytics & Anti-Admin) \\ --
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    if getnamecallmethod() == "FireServer" and self.Name == "GameAnalyticsError" then return nil end
+    return oldNamecall(self, ...)
+end)
+
+local AdminIDs = { [85126038]=true, [63531881]=true, [1532182659]=true, [669554728]=true, [83706967]=true }
+
+-- // 3. HOOKS DE MÓDULOS \\ --
+local M = {}
+local function Hook()
+    local s, e = pcall(function()
+        M.Net = require(ReplicatedStorage.Modules.Network)
+        M.Rep = require(ReplicatedStorage.Game.Replication)
+        M.Eggs = require(ReplicatedStorage.Game.Eggs)
+        M.Portals = require(ReplicatedStorage.Game.Portals)
+        M.PetStats = require(ReplicatedStorage.Game.PetStats)
+    end)
+    if not s then warn("ScriptForge: Erro nos módulos.", e) end
+end
+Hook()
+
+-- // 4. FUNÇÕES ESPECIAIS \\ --
+local function UnlockGamepasses()
+    if M.Rep and M.Rep.Data then
+        if not M.Rep.Data.Gamepasses then M.Rep.Data.Gamepasses = {} end
+        M.Rep.Data.Gamepasses["x3Egg"] = true
+        M.Rep.Data.Gamepasses["x8Egg"] = true
+        M.Rep.Data.Gamepasses["Luck"] = true
+        M.Rep.Data.Gamepasses["AutoClicker"] = true
+    end
+end
+task.spawn(UnlockGamepasses)
+
+local function GetTruePower(pet)
+    if not pet then return 0 end
+    local m = pet.Multiplier1 or pet.Multi1 or 0
+    return m * (1 + ((pet.Level or 1) / 199))
+end
+
+local function GetEggList()
+    local t = {}
+    if M.Eggs then for n,v in pairs(M.Eggs) do if type(v)=="table" and v.Price then table.insert(t,n) end end table.sort(t) end
+    return t
+end
+
+-- // VARIÁVEIS \\ --
+local Flags = {
+    AutoTap = false, ForceCrit = true,
+    AutoDig = false, AutoMemory = false,
+    AutoRebirth = false, RebirthAmt = 1,
+    AutoHatch = false, Egg = "Starter", HatchAmount = 1,
+    AutoEquip = false, AutoCraft = false,
+    Sniper = false, NotifyRares = true,
+    AutoPotions = false
+}
+
+-- // UI PRINCIPAL \\ --
+local Window = Rayfield:CreateWindow({
+   Name = "ScriptForge v10.0 | Speed Demon",
+   LoadingTitle = "Acelerando...",
+   LoadingSubtitle = "by ScriptForge AI",
+   ConfigurationSaving = { Enabled = true, FileName = "TapSimSpeed" },
+   KeySystem = false,
+})
+
+-- === ABA: FARMING === --
+local TabFarm = Window:CreateTab("Farming", 4483362458)
+
+TabFarm:CreateSection("Automação INSANA")
+
+TabFarm:CreateToggle({
+   Name = "Auto Tap (Velocidade Extrema)",
+   CurrentValue = false,
+   Flag = "AutoTap", 
+   Callback = function(V)
+        Flags.AutoTap = V
+        if V then
+            -- Usamos RunService.Heartbeat para ignorar limites de FPS normais
+            -- Dispara MULTIPLAS VEZES por frame
+            Flags.TapConnection = RunService.Heartbeat:Connect(function()
+                if Flags.AutoTap then
+                    -- Loop de 5x por frame (Aprox 300 requests/s)
+                    -- Mais que isso pode desconectar você.
+                    for i = 1, 5 do 
+                        M.Net:FireServer("Tap", true, false, Flags.ForceCrit)
+                    end
+                else
+                    if Flags.TapConnection then Flags.TapConnection:Disconnect() end
+                end
+            end)
+        else
+            if Flags.TapConnection then Flags.TapConnection:Disconnect() end
+        end
+   end,
+})
+
+TabFarm:CreateToggle({
+   Name = "Auto Rebirth",
+   CurrentValue = false,
+   Flag = "AutoRebirth", 
+   Callback = function(V)
+        Flags.AutoRebirth = V
+        task.spawn(function()
+            while Flags.AutoRebirth do
+                pcall(function() M.Net:InvokeServer("Rebirth", 1, Flags.RebirthAmt) end)
+                task.wait() -- Sem delay artificial
+            end
+        end)
+   end,
+})
+
+TabFarm:CreateToggle({
+    Name = "Auto Usar Poções (Boosts)",
+    CurrentValue = false,
+    Flag = "AutoPotions",
+    Callback = function(V)
+        Flags.AutoPotions = V
+        task.spawn(function()
+            while Flags.AutoPotions do
+                if M.Rep.Data and M.Rep.Data.Items then
+                    for id, item in pairs(M.Rep.Data.Items) do
+                        if string.find(item.Name or "", "Potion") or string.find(item.Name or "", "Boost") then
+                            pcall(function() M.Net:InvokeServer("UseItem", id) end)
+                        end
+                    end
+                end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+TabFarm:CreateSection("Minigames")
+
+TabFarm:CreateToggle({
+   Name = "Auto Dig & Memory Match",
+   CurrentValue = false,
+   Flag = "AutoDig", 
+   Callback = function(V)
+        Flags.AutoDig = V
+        Flags.AutoMemory = V
+        task.spawn(function()
+            while Flags.AutoDig do
+                -- Dispara início e fim no mesmo frame
+                task.spawn(function() 
+                    pcall(function() M.Net:InvokeServer("StartMinigame", "DigGame") end)
+                    pcall(function() M.Net:InvokeServer("FinishMinigame", "DigGame") end)
+                end)
+                task.spawn(function()
+                    pcall(function() M.Net:InvokeServer("StartMinigame", "MemoryMatch") end)
+                    pcall(function() M.Net:InvokeServer("FinishMinigame", "MemoryMatch") end)
+                end)
+                task.wait(0.5) -- Delay mínimo para não bugar a UI do jogo
+            end
+        end)
+   end,
+})
+
+-- === ABA: PETS === --
+local TabPets = Window:CreateTab("Pets", 4483362458)
+
+TabPets:CreateSection("Hatching (0 Delay)")
+
+TabPets:CreateDropdown({
+   Name = "Ovo",
+   Options = GetEggList(),
+   CurrentOption = {"Starter"},
+   Callback = function(O) Flags.Egg = O[1] end,
+})
+
+TabPets:CreateDropdown({
+   Name = "Quantidade (Gamepass Spoof)",
+   Options = {"1", "3", "8"},
+   CurrentOption = {"1"},
+   Callback = function(O) 
+       Flags.HatchAmount = tonumber(O[1]) 
+       UnlockGamepasses()
+   end,
+})
+
+TabPets:CreateToggle({
+   Name = "Auto Hatch (INSTANTÂNEO)",
+   CurrentValue = false,
+   Flag = "AutoHatch", 
+   Callback = function(V)
+        Flags.AutoHatch = V
+        task.spawn(function()
+            while Flags.AutoHatch do
+                -- InvokeServer pausa o script até o servidor responder.
+                -- Removemos o wait() extra. Assim que o servidor responde, abrimos outro.
+                pcall(function() M.Net:InvokeServer("OpenEgg", Flags.Egg, Flags.HatchAmount, {}) end)
+                task.wait() -- Segurança mínima contra crash se o servidor lagar
+            end
+        end)
+   end,
+})
+
+TabPets:CreateSection("Gestão")
+
+TabPets:CreateToggle({
+    Name = "Auto Equip Best (Math)",
+    CurrentValue = false,
+    Flag = "AutoEquip",
+    Callback = function(V)
+        Flags.AutoEquip = V
+        task.spawn(function()
+            while Flags.AutoEquip do
+                if M.Rep.Data and M.Rep.Data.Pets then
+                    local pList = {}
+                    for id, p in pairs(M.Rep.Data.Pets) do
+                        p.ID = id
+                        p.CalculatedPower = GetTruePower(p)
+                        table.insert(pList, p)
+                    end
+                    table.sort(pList, function(a,b) return a.CalculatedPower > b.CalculatedPower end)
+                    local limit = M.Rep.Data.EquipLimit or 4
+                    local idsToEquip = {}
+                    for i=1, math.min(#pList, limit) do table.insert(idsToEquip, pList[i].ID) end
+                    if #idsToEquip > 0 then pcall(function() M.Net:InvokeServer("EquipPets", idsToEquip) end) end
+                end
+                task.wait(2) -- Verificação rápida
+            end
+        end)
+    end
+})
+
+TabPets:CreateToggle({
+    Name = "Auto Craft All (Fast)",
+    CurrentValue = false,
+    Flag = "AutoCraft",
+    Callback = function(V)
+        Flags.AutoCraft = V
+        task.spawn(function()
+            while Flags.AutoCraft do
+                if M.Rep.Data and M.Rep.Data.Pets then
+                    local groups = {}
+                    for id, p in pairs(M.Rep.Data.Pets) do
+                        local key = p.Name .. (p.Tier or "Normal")
+                        if not groups[key] then groups[key] = {} end
+                        table.insert(groups[key], id)
+                    end
+                    for _, ids in pairs(groups) do
+                        if #ids >= 5 then
+                            local batch = {ids[1], ids[2], ids[3], ids[4], ids[5]}
+                            pcall(function() M.Net:InvokeServer("CraftPets", batch) end)
+                        end
+                    end
+                end
+                task.wait(1)
+            end
+        end)
+    end
+})
+
+-- === ABA: MUNDO === --
+local TabWorld = Window:CreateTab("Mundo", 4483362458)
+
+TabWorld:CreateToggle({
+   Name = "Infinity Chest Sniper",
+   CurrentValue = false,
+   Flag = "Sniper", 
+   Callback = function(V)
+        Flags.Sniper = V
+        task.spawn(function()
+            while Flags.Sniper do
+                local target = nil
+                -- Procura em Tags (Mais rápido)
+                for _, o in ipairs(CollectionService:GetTagged("Breakable")) do
+                    if o.Name == "InfinityChest" and o:FindFirstChild("ClickDetector") then target = o break end
+                end
+                -- Procura no Workspace (Fallback)
+                if not target then
+                     local wc = Workspace:FindFirstChild("Game") and Workspace.Game:FindFirstChild("WorldChests")
+                     if wc then for _, c in pairs(wc:GetChildren()) do if c.Name == "InfinityChest" then target = c break end end end
+                end
+                
+                if target then
+                    LocalPlayer.Character:PivotTo(target:GetPivot())
+                    -- Spam de clique no baú
+                    for i=1,5 do fireclickdetector(target.ClickDetector) end
+                end
+                task.wait(0.1) -- Sniper rápido
+            end
+        end)
+   end,
+})
+
+TabWorld:CreateButton({
+    Name = "Server Hop (Trocar Servidor)",
+    Callback = function()
+        local PlaceId = game.PlaceId
+        local Servers = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        for _, s in ipairs(Servers.data) do
+            if s.playing ~= s.maxPlayers and s.id ~= game.JobId then
+                TeleportService:TeleportToPlaceInstance(PlaceId, s.id, LocalPlayer)
+                break
+            end
+        end
+    end
+})
+
+TabWorld:CreateButton({
+    Name = "FPS Boost (Anti-Lag)",
+    Callback = function()
+        pcall(function()
+            Lighting.GlobalShadows = false
+            for _, v in pairs(Workspace:GetDescendants()) do
+                if v:IsA("BasePart") then v.Material = Enum.Material.SmoothPlastic v.Reflectance = 0 end
+                if v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
+            end
+        end)
+        Rayfield:Notify({Title="FPS Boost", Content="Otimizado para Auto Hatch x8!", Duration=3})
+    end
+})
+
+-- Monitoramento de Admins
+task.spawn(function()
+    while task.wait(5) do
+        for _, p in pairs(Players:GetPlayers()) do
+            if AdminIDs[p.UserId] then LocalPlayer:Kick("Admin Detectado.") end
+        end
+    end
+end)
+
+Rayfield:LoadConfiguration()
