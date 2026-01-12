@@ -1,452 +1,268 @@
+--!strict
 --[[
-    SlenderHub | V60.4 - Tap Simulator Architecture
-    Updated by: Senior Lead Architect
-    Framework: Rayfield (Sirius)
-    
-    [CHANGELOG V60.4]:
-    + Dynamic Module Reading (Auto-updates lists)
-    + "Forbidden" Egg Hatching (Attempts to hatch Dev/Event eggs)
-    + Auto Wheel Spin (Festive/Void)
-    + Smart Potion Manager
-    + Dynamic Teleports based on Portal Data
+    Slender Hub - INTELLIGENT TIER SYSTEM (V2.3 - FINAL)
+    Status: ✅ Pickaxe Simulator Added
+    Status: ✅ The Forge Added
+    Status: ✅ Tap Simulator Added (ID: 75992362647444)
+    Links: ✅ Auto-Fixed (Removed 'refs/heads' to prevent HttpGet Errors)
 ]]
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
--- // 1. CORE SERVICES \\ --
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+--//==============================[ SERVICES ]==============================//--
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
-local CollectionService = game:GetService("CollectionService")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local Lighting = game:GetService("Lighting")
+local StarterGui = game:GetService("StarterGui")
+local MarketService = game:GetService("MarketplaceService")
+
 local LocalPlayer = Players.LocalPlayer
+local CurrentPlaceId = game.PlaceId
 
--- // 2. SECURITY & BYPASS \\ --
-local oldNamecall
-oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-    local method = getnamecallmethod()
-    if method == "FireServer" and self.Name == "GameAnalyticsError" then return nil end
-    return oldNamecall(self, ...)
-end)
-
--- // 3. MODULE INJECTION SYSTEM \\ --
-local M = {}
-local DataCache = {
-    Eggs = {},
-    Portals = {},
-    Upgrades = {},
-    Boosts = {}
+--//==============================[ ⚠ CONFIGURAÇÃO DE IDs (COMPLETA) ]==============================//--
+local VELINK_IDS = {
+    -- [ID DO LINK] = {Tipo, Segundos}
+    
+    -- ✅ ID DE 7 DIAS (PREMIUM)
+    ["ed6453e6-5259-49b4-8779-05b866831dc2"] = {Type = "Premium", Duration = 604800}, 
+    
+    -- ✅ ID DE 30 DIAS (PREMIUM)
+    ["2c69fdcf-f8e1-4c1a-9270-f36d9545ebce"] = {Type = "Premium", Duration = 2592000}
+    
+    -- NOTA: Qualquer ID que NÃO for um desses dois, será considerado FREE (24h) automaticamente.
 }
 
-local function InjectModules()
-    local success, err = pcall(function()
-        -- Hooking into the game's internal modules
-        M.Net = require(ReplicatedStorage.Modules.Network)
-        M.Rep = require(ReplicatedStorage.Game.Replication)
-        M.Eggs = require(ReplicatedStorage.Game.Eggs)
-        M.Portals = require(ReplicatedStorage.Game.Portals)
-        M.PetStats = require(ReplicatedStorage.Game.PetStats)
-        M.GemShop = require(ReplicatedStorage.Game.GemShop)
-        M.Boosts = require(ReplicatedStorage.Game.Boosts) -- Assuming filename based on dex
+local Config = {
+    FOLDER = "SlenderHub_Universal", 
+    FILE = "KeyData_" .. LocalPlayer.UserId .. ".json",
+    VELINK_CHECK_URL = "https://velink.to/api/public/check/key",
+    
+    -- Links
+    FREE_KEY_LINK = "https://velink.to/u/678807",
+    PREMIUM_SHOP_URL = "https://www.slenderhub.shop/"
+}
+
+--//==============================[ JOGOS SUPORTADOS ]==============================//--
+local GAMES_MAP = {
+    -- ✅ PICKAXE SIMULATOR
+    [82013336390273] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Pickaxe%20Simulator%20script",
+
+    -- ✅ BEE TAPPERS
+    [107807115409153] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Bee%20Tappers%20Script",
+    
+    -- ✅ STEAL A BRAINROT
+    [109983668079237] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Steal%20a%20Brainrot(Free)",
+
+    -- ✅ THE FORGE
+    [76558904092080] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/The%20Forge%20Script",
+
+    -- ✅ TAP SIMULATOR (ADICIONADO E CORRIGIDO)
+    [75992362647444] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Tap%20simulator"
+}
+
+local TARGET_SCRIPT_URL = GAMES_MAP[CurrentPlaceId]
+
+--//==============================[ CHAVES LIFETIME ]==============================//--
+local LIFETIME_KEYS = {
+    ["LifeTimeF4K9L2P7V8JDHUtY"] = true,
+    ["SlenderDevKey"] = true
+}
+
+local FILE_PATH = Config.FOLDER .. "/" .. Config.FILE
+local isAccessAuthorized = false
+local authorizedKeyType = "Free"
+local authorizedDuration = 86400
+
+--//==============================[ VALIDAÇÃO INTELIGENTE ]==============================//--
+local function verifyKeyWithAPI(inputKey)
+    -- 1. Checa Lifetime (Manual)
+    if LIFETIME_KEYS[inputKey] then
+        return "Premium", math.huge
+    end
+
+    -- 2. Validação API VeLink
+    local requestUrl = string.format("%s?key=%s", Config.VELINK_CHECK_URL, inputKey)
+    local requestFunc = (syn and syn.request) or (http and http.request) or (http_request) or (request)
+    
+    if not requestFunc then return nil, nil end
+
+    local response = requestFunc({Url = requestUrl, Method = "GET"})
+
+    if response and response.StatusCode == 200 then
+        local success, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
         
-        -- Populate Cache Dynamically
-        if M.Eggs then
-            for name, data in pairs(M.Eggs) do
-                if type(data) == "table" then
-                    table.insert(DataCache.Eggs, name)
-                end
+        if success and data and data.expired == false then
+            local unlockerId = tostring(data.unlockerId)
+            
+            print("🔐 [SLENDER HUB] ID Validado: " .. unlockerId)
+            
+            local tierInfo = VELINK_IDS[unlockerId]
+            
+            if tierInfo then
+                return tierInfo.Type, tierInfo.Duration
+            else
+                return "Free", 86400
             end
-            table.sort(DataCache.Eggs)
         end
+    end
 
-        if M.Portals then
-            for name, _ in pairs(M.Portals) do
-                table.insert(DataCache.Portals, name)
-            end
-            table.sort(DataCache.Portals)
-        end
+    return nil, nil
+end
 
-        if M.GemShop then
-            for name, data in pairs(M.GemShop) do
-                if not data.Hidden then
-                    table.insert(DataCache.Upgrades, name)
-                end
-            end
-            table.sort(DataCache.Upgrades)
+--//==============================[ SISTEMA LOCAL ]==============================//--
+local function formatTime(seconds)
+    if seconds == math.huge then return "Lifetime" end
+    local days = math.floor(seconds / 86400)
+    local hours = math.floor((seconds % 86400) / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    return string.format("%dd %02dh %02dm", days, hours, minutes)
+end
+
+local function loadGameScript(accessLevel)
+    if not TARGET_SCRIPT_URL then 
+        warn("🔴 [Slender Hub] Script URL not found for Place ID: " .. CurrentPlaceId)
+        StarterGui:SetCore("SendNotification", {Title = "Slender Hub", Text = "Game Not Supported (Check ID)", Duration = 5})
+        return 
+    end
+    
+    -- Define a variável global para o script do jogo saber se é Free ou Premium
+    if getgenv then 
+        getgenv().SlenderHubAccessLevel = accessLevel
+    else 
+        _G.SlenderHubAccessLevel = accessLevel 
+    end
+    
+    -- Carrega o script com proteção de erro
+    task.spawn(function() 
+        local success, err = pcall(function()
+            loadstring(game:HttpGet(TARGET_SCRIPT_URL))() 
+        end)
+        if not success then
+            warn("Failed to load script: " .. tostring(err))
+            StarterGui:SetCore("SendNotification", {Title = "Error", Text = "Failed to load script! Check Console (F9)", Duration = 5})
         end
     end)
-    
-    if not success then 
-        warn("SlenderHub: Critical Module Failure. Using Fallbacks.") 
-        -- Fallbacks if injection fails
-        DataCache.Eggs = {"Starter", "Forest", "Jungle", "Space"}
-    end
 end
-InjectModules()
 
--- // 4. GLOBAL FLAGS \\ --
-getgenv().Flags = {
-    AutoTap = false, ForceCrit = true,
-    AutoDig = false, AutoMemory = false,
-    AutoRebirth = false, RebirthAmt = 1,
-    AutoHatch = false, Egg = "Starter", HatchAmount = 1,
-    AutoEquip = false, AutoCraft = false,
-    Sniper = false, 
-    AutoPotions = false, PotionType = "Luck",
-    AutoQuests = false, AutoRankReward = false,
-    AutoGemUpgrade = false, SelectedUpgrade = "",
-    AutoBuyPortals = false,
-    AutoSpin = false,
-    DeleteFilter = { ["Common"] = false, ["Uncommon"] = false, ["Rare"] = false }
-}
+local function saveKey(keyType, keyContent, duration)
+    if not isfolder(Config.FOLDER) then makefolder(Config.FOLDER) end
+    local data = {
+        Type = keyType, 
+        Key = keyContent, 
+        Time = os.time(),
+        CustomDuration = duration
+    }
+    writefile(FILE_PATH, HttpService:JSONEncode(data))
+end
 
--- // UI CONSTRUCTION \\ --
+local function checkLocalKey()
+    if not isfile(FILE_PATH) then return false, nil end
+    local success, data = pcall(function() return HttpService:JSONDecode(readfile(FILE_PATH)) end)
+    if not success or not data or not data.Time then delfile(FILE_PATH); return false, nil end
+
+    local duration = data.CustomDuration or 86400
+    if duration == math.huge then return true, data, math.huge end
+
+    local elapsed = os.time() - data.Time
+    if elapsed > duration then
+        delfile(FILE_PATH); return false, nil
+    end
+    return true, data, (duration - elapsed)
+end
+
+--//==============================[ AUTO-EXECUTE ]==============================//--
+local isSaved, savedData, remainingTime = checkLocalKey()
+
+if isSaved and TARGET_SCRIPT_URL then
+    local timeMsg = (remainingTime == math.huge) and "Lifetime Access" or formatTime(remainingTime)
+    StarterGui:SetCore("SendNotification", {Title = "Slender Hub", Text = "Auto-Login! Remaining: " .. timeMsg, Duration = 8})
+    loadGameScript(savedData.Type)
+    return 
+end
+
+--//==============================[ UI RAYFIELD (LOGIN) ]==============================//--
+local success, Rayfield = pcall(function() return loadstring(game:HttpGet("https://sirius.menu/rayfield"))() end)
+if not success then return end
+
 local Window = Rayfield:CreateWindow({
-   Name = "SlenderHub | V60.4",
-   LoadingTitle = "System Initialization...",
-   LoadingSubtitle = "Tap Simulator | Speed Demon",
-   ConfigurationSaving = { Enabled = true, FileName = "SlenderTapV60" },
-   KeySystem = false,
+    Name = "Slender Hub | Universal",
+    LoadingTitle = "Slender Hub",
+    LoadingSubtitle = "VeLink Integration",
+    ConfigurationSaving = { Enabled = false },
+    Discord = { Enabled = false },
 })
 
--- === TAB: FARMING === --
-local TabFarm = Window:CreateTab("Farm", "sword")
+local Tab = Window:CreateTab("Access", 4483362458)
+local Section = Tab:CreateSection("Authentication")
 
-TabFarm:CreateSection("Speed Demon Loop")
+-- Tenta pegar o nome do jogo, se falhar usa "Unknown"
+local gameName = "Unknown Game"
+pcall(function() gameName = MarketService:GetProductInfo(CurrentPlaceId).Name end)
 
-TabFarm:CreateToggle({
-   Name = "Auto Tap (Hyper Speed)",
-   CurrentValue = false,
-   Flag = "AutoTap", 
-   Callback = function(Value)
-        getgenv().Flags.AutoTap = Value
-        if Value then
-            task.spawn(function()
-                local Connection
-                Connection = RunService.Heartbeat:Connect(function()
-                    if not getgenv().Flags.AutoTap then Connection:Disconnect() return end
-                    -- Sending 5 packets per frame for maximum throughput
-                    for i = 1, 5 do 
-                        M.Net:FireServer("Tap", true, false, getgenv().Flags.ForceCrit)
-                    end
-                end)
-            end)
+local statusText = TARGET_SCRIPT_URL and "✅ Supported: " .. gameName or "⚠ Unsupported Game"
+
+Tab:CreateParagraph({Title = "Status", Content = statusText .. "\n(ID: " .. CurrentPlaceId .. ")"})
+
+Tab:CreateInput({
+    Name = "Enter Key",
+    PlaceholderText = "Paste Key (VELINK-XXXX)...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(input)
+        local key = input:gsub("%s+", "") -- Remove espaços acidentais
+        
+        Rayfield:Notify({Title = "Checking API...", Content = "Verifying Tier & Duration...", Duration = 2})
+        
+        local keyType, keyDuration = verifyKeyWithAPI(key)
+        
+        if keyType and keyDuration then
+            isAccessAuthorized = true
+            authorizedKeyType = keyType
+            authorizedDuration = keyDuration
+            saveKey(keyType, key, keyDuration)
+            
+            local durText = (keyDuration == math.huge) and "Lifetime" or formatTime(keyDuration)
+            Rayfield:Notify({Title = "Success!", Content = keyType .. " Key Validated (" .. durText .. ")", Duration = 5})
+        else
+            isAccessAuthorized = false
+            Rayfield:Notify({Title = "Invalid Key", Content = "Expired or Does not Exist.", Duration = 3})
         end
-   end,
+    end,
 })
 
-TabFarm:CreateToggle({
-   Name = "Auto Rebirth",
-   CurrentValue = false,
-   Flag = "AutoRebirth", 
-   Callback = function(Value)
-        getgenv().Flags.AutoRebirth = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().Flags.AutoRebirth do
-                    M.Net:InvokeServer("Rebirth", 1, getgenv().Flags.RebirthAmt)
-                    task.wait() -- No delay, server dependent
-                end
-            end)
-        end
-   end,
-})
-
-TabFarm:CreateSection("Minigames")
-
-TabFarm:CreateToggle({
-   Name = "Auto Minigames (Dig/Memory)",
-   CurrentValue = false,
-   Flag = "AutoDig", 
-   Callback = function(Value)
-        getgenv().Flags.AutoDig = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().Flags.AutoDig do
-                    -- Instant Start/Finish
-                    task.spawn(function() 
-                        M.Net:InvokeServer("StartMinigame", "DigGame")
-                        M.Net:InvokeServer("FinishMinigame", "DigGame")
-                    end)
-                    task.spawn(function()
-                        M.Net:InvokeServer("StartMinigame", "MemoryMatch")
-                        M.Net:InvokeServer("FinishMinigame", "MemoryMatch")
-                    end)
-                    task.wait(0.5)
-                end
-            end)
-        end
-   end,
-})
-
--- === TAB: PETS === --
-local TabPets = Window:CreateTab("Pets", "cat")
-
-TabPets:CreateSection("Hatching System")
-
-TabPets:CreateDropdown({
-   Name = "Select Egg",
-   Options = DataCache.Eggs,
-   CurrentOption = {"Starter"},
-   Callback = function(Option) getgenv().Flags.Egg = Option[1] end,
-})
-
-TabPets:CreateDropdown({
-   Name = "Hatch Mode",
-   Options = {"1", "3", "8"},
-   CurrentOption = {"1"},
-   Callback = function(Option) 
-       getgenv().Flags.HatchAmount = tonumber(Option[1]) 
-       -- Spoof Gamepasses locally to allow UI to update
-       if M.Rep and M.Rep.Data and M.Rep.Data.Gamepasses then
-           M.Rep.Data.Gamepasses["x3Egg"] = true
-           M.Rep.Data.Gamepasses["x8Egg"] = true
-           M.Rep.Data.Gamepasses["FasterEgg"] = true
-       end
-   end,
-})
-
-TabPets:CreateToggle({
-   Name = "Auto Hatch (0 Delay)",
-   CurrentValue = false,
-   Flag = "AutoHatch", 
-   Callback = function(Value)
-        getgenv().Flags.AutoHatch = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().Flags.AutoHatch do
-                    local filter = {}
-                    for rarity, enabled in pairs(getgenv().Flags.DeleteFilter) do
-                        if enabled then filter[rarity] = true end
-                    end
-                    M.Net:InvokeServer("OpenEgg", getgenv().Flags.Egg, getgenv().Flags.HatchAmount, filter)
-                    task.wait()
-                end
-            end)
-        end
-   end,
-})
-
-TabPets:CreateSection("Forbidden Eggs (Experimental)")
-TabPets:CreateParagraph({Title = "Warning", Content = "Attempts to hatch eggs with Price=0 found in game files. May not work if server validates."})
-
-local ForbiddenEggs = {"Chronos Egg", "Cyborg Egg", "Evil Xmas Egg", "Volcanic", "Frozen", "Temple"}
-TabPets:CreateDropdown({
-   Name = "Select Forbidden Egg",
-   Options = ForbiddenEggs,
-   CurrentOption = {"Chronos Egg"},
-   Callback = function(Option) getgenv().Flags.ForbiddenEgg = Option[1] end,
-})
-
-TabPets:CreateButton({
-    Name = "Attempt Hatch Forbidden Egg",
+Tab:CreateButton({
+    Name = "🚀 Launch Hub",
     Callback = function()
-        M.Net:InvokeServer("OpenEgg", getgenv().Flags.ForbiddenEgg, 1, {})
-    end
-})
-
-TabPets:CreateSection("Auto Delete")
-local Rarities = {"Common", "Uncommon", "Rare", "Epic", "Legendary"}
-for _, r in ipairs(Rarities) do
-    TabPets:CreateToggle({
-        Name = "Delete " .. r,
-        CurrentValue = false,
-        Callback = function(V) getgenv().Flags.DeleteFilter[r] = V end
-    })
-end
-
-TabPets:CreateSection("Management")
-TabPets:CreateToggle({
-    Name = "Auto Craft All",
-    CurrentValue = false,
-    Flag = "AutoCraft",
-    Callback = function(Value)
-        getgenv().Flags.AutoCraft = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().Flags.AutoCraft do
-                    if M.Rep.Data and M.Rep.Data.Pets then
-                        local groups = {}
-                        for id, p in pairs(M.Rep.Data.Pets) do
-                            local key = p.Name .. (p.Tier or "Normal")
-                            if not groups[key] then groups[key] = {} end
-                            table.insert(groups[key], id)
-                        end
-                        for _, ids in pairs(groups) do
-                            if #ids >= 5 then
-                                local batch = {ids[1], ids[2], ids[3], ids[4], ids[5]}
-                                M.Net:InvokeServer("CraftPets", batch)
-                            end
-                        end
-                    end
-                    task.wait(1)
-                end
-            end)
+        if not isAccessAuthorized then
+            Rayfield:Notify({Title = "Access Denied", Content = "Please enter a valid key.", Duration = 3})
+            return
         end
-    end
-})
-
--- === TAB: PROGRESSION === --
-local TabProg = Window:CreateTab("Progression", "trending-up")
-
-TabProg:CreateSection("Rewards")
-
-TabProg:CreateToggle({
-    Name = "Auto Claim Quests",
-    CurrentValue = false,
-    Flag = "AutoQuests",
-    Callback = function(Value)
-        getgenv().Flags.AutoQuests = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().Flags.AutoQuests do
-                    if M.Rep.Data and M.Rep.Data.Quests then
-                        for qName, qData in pairs(M.Rep.Data.Quests) do
-                            if not qData.Claimed then
-                                M.Net:InvokeServer("ClaimQuest", qName)
-                            end
-                        end
-                    end
-                    task.wait(2)
-                end
-            end)
+        
+        if not TARGET_SCRIPT_URL then
+             Rayfield:Notify({Title = "Error", Content = "Script not available for this game.", Duration = 3})
+             return
         end
-    end
+        
+        local isSaved, data, remaining = checkLocalKey()
+        local timeMsg = (remaining == math.huge) and "Lifetime" or formatTime(remaining)
+        StarterGui:SetCore("SendNotification", {Title = "Access Granted", Text = "Remaining: " .. timeMsg, Duration = 5})
+
+        Rayfield:Destroy()
+        task.wait(0.5)
+        loadGameScript(authorizedKeyType)
+    end,
 })
 
-TabProg:CreateToggle({
-    Name = "Auto Rank Rewards",
-    CurrentValue = false,
-    Flag = "AutoRankReward",
-    Callback = function(Value)
-        getgenv().Flags.AutoRankReward = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().Flags.AutoRankReward do
-                    M.Net:InvokeServer("ClaimRankReward")
-                    task.wait(5)
-                end
-            end)
-        end
-    end
+local KeySection = Tab:CreateSection("Get Access")
+
+Tab:CreateButton({
+    Name = "🔑 Get Free Key (24h)",
+    Callback = function()
+        setclipboard(Config.FREE_KEY_LINK)
+        Rayfield:Notify({Title = "Copied", Content = "Link copied!", Duration = 2})
+    end,
 })
 
-TabProg:CreateToggle({
-    Name = "Auto Spin Wheel (Festive/Void)",
-    CurrentValue = false,
-    Flag = "AutoSpin",
-    Callback = function(Value)
-        getgenv().Flags.AutoSpin = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().Flags.AutoSpin do
-                    -- Trying common remote names for wheels based on module analysis
-                    M.Net:InvokeServer("SpinWheel", "FestiveSpinWheel")
-                    M.Net:InvokeServer("SpinWheel", "VoidSpinWheel")
-                    task.wait(2)
-                end
-            end)
-        end
-    end
+Tab:CreateButton({
+    Name = "💎 Buy Premium (Shop)",
+    Callback = function()
+        setclipboard(Config.PREMIUM_SHOP_URL)
+        Rayfield:Notify({Title = "Shop Copied", Content = "Visit SlenderHub.shop", Duration = 3})
+    end,
 })
-
-TabProg:CreateSection("Upgrades")
-
-TabProg:CreateDropdown({
-   Name = "Select Gem Upgrade",
-   Options = DataCache.Upgrades,
-   CurrentOption = {"MoreDiamonds"},
-   Callback = function(Option) getgenv().Flags.SelectedUpgrade = Option[1] end,
-})
-
-TabProg:CreateToggle({
-    Name = "Auto Buy Upgrade",
-    CurrentValue = false,
-    Flag = "AutoGemUpgrade",
-    Callback = function(Value)
-        getgenv().Flags.AutoGemUpgrade = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().Flags.AutoGemUpgrade do
-                    if getgenv().Flags.SelectedUpgrade ~= "" then
-                        M.Net:InvokeServer("UpgradeGemShop", getgenv().Flags.SelectedUpgrade)
-                    end
-                    task.wait(0.5)
-                end
-            end)
-        end
-    end
-})
-
--- === TAB: WORLD === --
-local TabWorld = Window:CreateTab("World", "globe")
-
-TabWorld:CreateSection("Teleports")
-
--- Dynamic Teleport Buttons
-for _, portalName in ipairs(DataCache.Portals) do
-    TabWorld:CreateButton({
-        Name = "TP to " .. portalName,
-        Callback = function()
-            M.Net:InvokeServer("TeleportZone", portalName)
-            -- Client side prediction TP
-            local ZoneFolder = Workspace:FindFirstChild("Zones") and Workspace.Zones:FindFirstChild("Portals")
-            if ZoneFolder and ZoneFolder:FindFirstChild(portalName) then
-                LocalPlayer.Character:PivotTo(ZoneFolder[portalName].TP.CFrame)
-            end
-        end
-    })
-end
-
-TabWorld:CreateSection("Automation")
-
-TabWorld:CreateToggle({
-   Name = "Infinity Chest Sniper",
-   CurrentValue = false,
-   Flag = "Sniper", 
-   Callback = function(Value)
-        getgenv().Flags.Sniper = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().Flags.Sniper do
-                    local target = nil
-                    for _, o in ipairs(CollectionService:GetTagged("Breakable")) do
-                        if o.Name == "InfinityChest" and o:FindFirstChild("ClickDetector") then target = o break end
-                    end
-                    if target then
-                        LocalPlayer.Character:PivotTo(target:GetPivot())
-                        for i=1,5 do fireclickdetector(target.ClickDetector) end
-                    end
-                    task.wait(0.1)
-                end
-            end)
-        end
-   end,
-})
-
-TabWorld:CreateToggle({
-    Name = "Auto Use Potions",
-    CurrentValue = false,
-    Flag = "AutoPotions",
-    Callback = function(Value)
-        getgenv().Flags.AutoPotions = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().Flags.AutoPotions do
-                    if M.Rep.Data and M.Rep.Data.Items then
-                        for id, item in pairs(M.Rep.Data.Items) do
-                            -- Smart usage: prioritize high tier potions
-                            if string.find(item.Name or "", "Potion") or string.find(item.Name or "", "Boost") then
-                                M.Net:InvokeServer("UseItem", id)
-                            end
-                        end
-                    end
-                    task.wait(5)
-                end
-            end)
-        end
-    end
-})
-
-Rayfield:LoadConfiguration()
