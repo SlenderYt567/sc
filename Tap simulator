@@ -1,18 +1,19 @@
-
 --[[
-    SlenderHub | V1.0 - Tap Simulator (Universal Edition)
+    SlenderHub | V2.3 - Tap Simulator (Premium + Fixed Crafting)
     Architect: Senior Lead Developer
     Framework: Rayfield Interface Suite
     
-    [ACCESS CONTROL]:
-    Reads: getgenv().SlenderHubAccessLevel
-    States: "Free" | "Premium"
+    [CHANGELOG]:
+    - Restored Premium Tab (God Mode, Nuclear Hatch)
+    - Fixed Auto Craft (Golden/Rainbow/Void/Diamond/Galaxy)
+    - Full Egg List
 ]]
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 -- // 1. SYSTEM CHECK \\ --
-local AccessLevel = getgenv().SlenderHubAccessLevel or "Free"
+-- Mude para "Premium" abaixo se quiser liberar tudo direto
+local AccessLevel = getgenv().SlenderHubAccessLevel or "Free" 
 local IsPremium = (AccessLevel == "Premium")
 
 -- // 2. CORE SERVICES \\ --
@@ -31,23 +32,26 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     return oldNamecall(self, ...)
 end)
 
--- // 4. MODULE INJECTION (DYNAMIC) \\ --
+-- // 4. MODULE INJECTION & DATA \\ --
 local M = {}
-local DataCache = { Eggs = {}, Portals = {}, Upgrades = {} }
+local AllEggs = {
+    "Basic", "Acorn", "Safari", "Forest", "Snowman", "Cactus", "Poison", 
+    "Holy", "Sakura", "Elemental", "Magma", "Candy", "Atlantis", "Space", 
+    "Moonflower", "Starry", "Cryo", "Infernal", "Divine",
+    "5M Event", "Christmas Event", "New Years Event", "Void Event",
+    "Chronos Egg", "Evil Xmas Egg", "Cyborg Egg",
+    "Volcanic", "Frozen", "Temple", "Tropical", "Angelic", "Samurai"
+}
+local DataCache = { Eggs = AllEggs, Portals = {}, Upgrades = {} }
 
 local function InjectModules()
     local s, e = pcall(function()
         M.Net = require(ReplicatedStorage.Modules.Network)
         M.Rep = require(ReplicatedStorage.Game.Replication)
-        M.Eggs = require(ReplicatedStorage.Game.Eggs)
-        M.Portals = require(ReplicatedStorage.Game.Portals)
-        M.GemShop = require(ReplicatedStorage.Game.GemShop)
+        pcall(function() M.Eggs = require(ReplicatedStorage.Game.Eggs) end)
+        pcall(function() M.Portals = require(ReplicatedStorage.Game.Portals) end)
+        pcall(function() M.GemShop = require(ReplicatedStorage.Game.GemShop) end)
         
-        -- Populate Lists
-        if M.Eggs then
-            for n,v in pairs(M.Eggs) do if type(v)=="table" then table.insert(DataCache.Eggs, n) end end
-            table.sort(DataCache.Eggs)
-        end
         if M.Portals then
             for n,_ in pairs(M.Portals) do table.insert(DataCache.Portals, n) end
             table.sort(DataCache.Portals)
@@ -76,28 +80,29 @@ task.spawn(UnlockGamepasses)
 getgenv().Flags = {
     -- Free Flags
     AutoTap = false, AutoRebirth = false, RebirthAmt = 1,
-    AutoHatch = false, Egg = "Starter", HatchAmt = 1,
+    AutoHatch = false, Egg = "Basic", HatchAmt = 1,
     AutoDig = false, AutoBoss = false,
     AutoQuests = false, AutoRank = false, AutoSpin = false,
     AutoUpgrade = false, SelectedUpgrade = "",
     Sniper = false, AutoPotions = false,
     DeleteFilter = {["Common"]=false, ["Uncommon"]=false, ["Rare"]=false},
+    AutoCraft = false,
     
     -- Premium Flags
-    GodTap = false, NuclearHatch = false, InstantCraft = false
+    GodTap = false, NuclearHatch = false
 }
 
 -- // 7. UI CONSTRUCTION \\ --
 local Window = Rayfield:CreateWindow({
-   Name = "SlenderHub | V1.0 [" .. AccessLevel .. "]",
-   LoadingTitle = "System Initialization...",
+   Name = "SlenderHub | V2.3 [" .. AccessLevel .. "]",
+   LoadingTitle = "Initializing Premium Core...",
    LoadingSubtitle = "Tap Simulator",
-   ConfigurationSaving = { Enabled = true, FileName = "SlenderTapV1" },
+   ConfigurationSaving = { Enabled = true, FileName = "SlenderTapV2" },
    KeySystem = false,
 })
 
 -- ==================================================================
--- [TAB] 👑 PREMIUM (TIER EXCLUSIVE)
+-- [TAB] 👑 PREMIUM (RESTORED)
 -- ==================================================================
 local TabPrem = Window:CreateTab("Premium", "crown")
 
@@ -139,7 +144,7 @@ if IsPremium then
                             local filter = {}
                             for r, on in pairs(getgenv().Flags.DeleteFilter) do if on then filter[r]=true end end
                             M.Net:InvokeServer("OpenEgg", getgenv().Flags.Egg, getgenv().Flags.HatchAmt, filter)
-                            task.wait() -- Minimal wait, relies on server response time
+                            task.wait() -- Minimal wait
                         end
                     end)
                 end
@@ -159,7 +164,6 @@ if IsPremium then
                     if not groups[k] then groups[k] = {} end
                     table.insert(groups[k], id)
                 end
-                -- Batch process everything instantly
                 for _, ids in pairs(groups) do
                     while #ids >= 5 do
                         local batch = {table.remove(ids), table.remove(ids), table.remove(ids), table.remove(ids), table.remove(ids)}
@@ -193,7 +197,7 @@ else
 end
 
 -- ==================================================================
--- [TAB] FARM (FREE)
+-- [TAB] FARM
 -- ==================================================================
 local TabFarm = Window:CreateTab("Farm", "sword")
 
@@ -234,36 +238,27 @@ TabFarm:CreateToggle({
    end,
 })
 
-TabFarm:CreateSection("Minigames & Boss")
+TabFarm:CreateSection("Minigames")
 
 TabFarm:CreateToggle({
-   Name = "Auto Minigames (Dig/Memory)",
+   Name = "Auto Dig",
    CurrentValue = false,
    Flag = "AutoDig", 
    Callback = function(V)
         getgenv().Flags.AutoDig = V
         task.spawn(function()
             while getgenv().Flags.AutoDig do
-                task.spawn(function() M.Net:InvokeServer("StartMinigame", "DigGame"); M.Net:InvokeServer("FinishMinigame", "DigGame") end)
-                task.spawn(function() M.Net:InvokeServer("StartMinigame", "MemoryMatch"); M.Net:InvokeServer("FinishMinigame", "MemoryMatch") end)
+                pcall(function() M.Net:InvokeServer("StartMinigame", "DigGame") end)
+                task.wait(0.5)
+                pcall(function() M.Net:InvokeServer("FinishMinigame", "DigGame") end)
                 task.wait(1)
             end
         end)
    end,
 })
 
-TabFarm:CreateButton({
-    Name = "Teleport to Boss",
-    Callback = function()
-        local Boss = Workspace:FindFirstChild("Game") and Workspace.Game:FindFirstChild("BridgeBoss")
-        if Boss and Boss:FindFirstChild("SecondZone") then
-            LocalPlayer.Character:PivotTo(Boss.SecondZone.CFrame + Vector3.new(0,5,0))
-        end
-    end
-})
-
 -- ==================================================================
--- [TAB] PETS (FREE)
+-- [TAB] PETS (UPDATED CRAFTING)
 -- ==================================================================
 local TabPets = Window:CreateTab("Pets", "cat")
 
@@ -272,7 +267,7 @@ TabPets:CreateSection("Hatching")
 TabPets:CreateDropdown({
    Name = "Select Egg",
    Options = DataCache.Eggs,
-   CurrentOption = {"Starter"},
+   CurrentOption = {"Basic"},
    Callback = function(O) getgenv().Flags.Egg = O[1] end,
 })
 
@@ -300,7 +295,7 @@ TabPets:CreateToggle({
                         for r, on in pairs(getgenv().Flags.DeleteFilter) do if on then filter[r]=true end end
                         M.Net:InvokeServer("OpenEgg", getgenv().Flags.Egg, getgenv().Flags.HatchAmt, filter)
                     end
-                    task.wait(0.2)
+                    task.wait(getgenv().Flags.HatchAmt == 8 and 0.3 or 0.1)
                 end
             end)
         end
@@ -316,23 +311,82 @@ for _, r in ipairs({"Common", "Uncommon", "Rare", "Epic", "Legendary"}) do
     })
 end
 
--- ==================================================================
--- [TAB] PROGRESSION (FREE)
--- ==================================================================
-local TabProg = Window:CreateTab("Progression", "trending-up")
+TabPets:CreateSection("Universal Crafting (Optimized)")
 
-TabProg:CreateToggle({
-    Name = "Auto Claim Quests",
+TabPets:CreateToggle({
+    Name = "Auto Craft (Gold/Rainbow/Void)",
     CurrentValue = false,
-    Flag = "AutoQuests",
+    Flag = "AutoCraft",
     Callback = function(V)
-        getgenv().Flags.AutoQuests = V
+        getgenv().Flags.AutoCraft = V
+        
+        -- LISTA EXPANDIDA COM NOMES DESCOBERTOS NO MÓDULO PETSTATS
+        local RainbowRemotes = {"StartRainbow", "CraftRainbow", "RainbowMachine", "CraftDiamond", "StartDiamond"}
+        local VoidRemotes = {"StartVoid", "CraftVoid", "VoidMachine", "CraftGalaxy", "StartGalaxy"}
+        
         task.spawn(function()
-            while getgenv().Flags.AutoQuests do
-                if M.Rep.Data and M.Rep.Data.Quests then
-                    for q, d in pairs(M.Rep.Data.Quests) do
-                        if not d.Claimed then M.Net:InvokeServer("ClaimQuest", q) end
+            while getgenv().Flags.AutoCraft do
+                if M.Rep.Data and M.Rep.Data.Pets then
+                    
+                    local function FireBruteForce(remoteList, batchIDs)
+                        for _, name in ipairs(remoteList) do
+                            task.spawn(function()
+                                pcall(function() M.Net:InvokeServer(name, batchIDs) end)
+                            end)
+                        end
                     end
+
+                    -- 1. AUTO GOLDEN (5 Pets -> 1 Golden)
+                    local goldenGroups = {}
+                    for id, p in pairs(M.Rep.Data.Pets) do
+                        if (p.Tier == "Normal" or p.Tier == nil) and not p.Locked and not p.Equipped then
+                            if not goldenGroups[p.Name] then goldenGroups[p.Name] = {} end
+                            table.insert(goldenGroups[p.Name], id)
+                        end
+                    end
+                    
+                    for _, ids in pairs(goldenGroups) do
+                        while #ids >= 5 do
+                            local batch = {table.remove(ids), table.remove(ids), table.remove(ids), table.remove(ids), table.remove(ids)}
+                            pcall(function() M.Net:InvokeServer("CraftPets", batch) end)
+                            task.wait(0.05)
+                        end
+                    end
+
+                    -- 2. AUTO RAINBOW (3 Pets -> 1 Rainbow)
+                    local rainbowGroups = {}
+                    for id, p in pairs(M.Rep.Data.Pets) do
+                        if p.Tier == "Golden" and not p.Locked and not p.Equipped then
+                            if not rainbowGroups[p.Name] then rainbowGroups[p.Name] = {} end
+                            table.insert(rainbowGroups[p.Name], id)
+                        end
+                    end
+
+                    for _, ids in pairs(rainbowGroups) do
+                        while #ids >= 3 do
+                            local batch = {table.remove(ids), table.remove(ids), table.remove(ids)}
+                            FireBruteForce(RainbowRemotes, batch)
+                            task.wait(0.1)
+                        end
+                    end
+
+                    -- 3. AUTO VOID (3 Pets -> 1 Void)
+                    local voidGroups = {}
+                    for id, p in pairs(M.Rep.Data.Pets) do
+                        if (p.Tier == "Rainbow" or p.Tier == "Diamond") and not p.Locked and not p.Equipped then
+                            if not voidGroups[p.Name] then voidGroups[p.Name] = {} end
+                            table.insert(voidGroups[p.Name], id)
+                        end
+                    end
+
+                    for _, ids in pairs(voidGroups) do
+                        while #ids >= 3 do
+                            local batch = {table.remove(ids), table.remove(ids), table.remove(ids)}
+                            FireBruteForce(VoidRemotes, batch)
+                            task.wait(0.1)
+                        end
+                    end
+                    
                 end
                 task.wait(2)
             end
@@ -340,65 +394,8 @@ TabProg:CreateToggle({
     end
 })
 
-TabProg:CreateToggle({
-    Name = "Auto Rank Rewards",
-    CurrentValue = false,
-    Flag = "AutoRank",
-    Callback = function(V)
-        getgenv().Flags.AutoRank = V
-        task.spawn(function()
-            while getgenv().Flags.AutoRank do
-                M.Net:InvokeServer("ClaimRankReward")
-                task.wait(5)
-            end
-        end)
-    end
-})
-
-TabProg:CreateToggle({
-    Name = "Auto Spin Wheels",
-    CurrentValue = false,
-    Flag = "AutoSpin",
-    Callback = function(V)
-        getgenv().Flags.AutoSpin = V
-        task.spawn(function()
-            while getgenv().Flags.AutoSpin do
-                M.Net:InvokeServer("SpinWheel", "FestiveSpinWheel")
-                M.Net:InvokeServer("SpinWheel", "VoidSpinWheel")
-                task.wait(3)
-            end
-        end)
-    end
-})
-
-TabProg:CreateSection("Gem Shop")
-
-TabProg:CreateDropdown({
-   Name = "Select Upgrade",
-   Options = DataCache.Upgrades,
-   CurrentOption = {"MoreDiamonds"},
-   Callback = function(O) getgenv().Flags.SelectedUpgrade = O[1] end,
-})
-
-TabProg:CreateToggle({
-    Name = "Auto Buy Upgrade",
-    CurrentValue = false,
-    Flag = "AutoUpgrade",
-    Callback = function(V)
-        getgenv().Flags.AutoUpgrade = V
-        task.spawn(function()
-            while getgenv().Flags.AutoUpgrade do
-                if getgenv().Flags.SelectedUpgrade ~= "" then
-                    M.Net:InvokeServer("UpgradeGemShop", getgenv().Flags.SelectedUpgrade)
-                end
-                task.wait(1)
-            end
-        end)
-    end
-})
-
 -- ==================================================================
--- [TAB] WORLD (FREE)
+-- [TAB] WORLD
 -- ==================================================================
 local TabWorld = Window:CreateTab("World", "globe")
 
@@ -408,10 +405,6 @@ for _, p in ipairs(DataCache.Portals) do
         Name = "TP to " .. p,
         Callback = function()
             M.Net:InvokeServer("TeleportZone", p)
-            local Zone = Workspace:FindFirstChild("Zones") and Workspace.Zones:FindFirstChild("Portals")
-            if Zone and Zone:FindFirstChild(p) then
-                LocalPlayer.Character:PivotTo(Zone[p].TP.CFrame)
-            end
         end
     })
 end
@@ -432,9 +425,9 @@ TabWorld:CreateToggle({
                 end
                 if target then
                     LocalPlayer.Character:PivotTo(target:GetPivot())
-                    for i=1,5 do fireclickdetector(target.ClickDetector) end
+                    fireclickdetector(target.ClickDetector)
                 end
-                task.wait(0.1)
+                task.wait(0.5)
             end
         end)
    end,
@@ -456,19 +449,6 @@ TabWorld:CreateToggle({
                     end
                 end
                 task.wait(5)
-            end
-        end)
-    end
-})
-
-TabWorld:CreateButton({
-    Name = "FPS Boost",
-    Callback = function()
-        pcall(function()
-            Lighting.GlobalShadows = false
-            for _, v in pairs(Workspace:GetDescendants()) do
-                if v:IsA("BasePart") then v.Material = Enum.Material.SmoothPlastic; v.Reflectance = 0 end
-                if v:IsA("Texture") or v:IsA("ParticleEmitter") then v:Destroy() end
             end
         end)
     end
