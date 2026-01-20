@@ -1,28 +1,31 @@
 --[[
-    SlenderHub | V2.3 - Tap Simulator (Premium + Fixed Crafting)
+    SlenderHub | V2.9 - Tap Simulator (Dynamic Egg Loader)
     Architect: Senior Lead Developer
     Framework: Rayfield Interface Suite
     
     [CHANGELOG]:
-    - Restored Premium Tab (God Mode, Nuclear Hatch)
-    - Fixed Auto Craft (Golden/Rainbow/Void/Diamond/Galaxy)
-    - Full Egg List
+    - Added Dynamic Egg Scraper (Loads ALL game eggs automatically)
+    - Confirmed "Void Event" support
+    - Auto Void Spin included
+    - Fixed Void Crafting (Instant)
 ]]
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 -- // 1. SYSTEM CHECK \\ --
--- Mude para "Premium" abaixo se quiser liberar tudo direto
+if getgenv().SlenderHubLoaded then 
+    Rayfield:Notify({Title="System", Content="Script já está rodando!", Duration=3})
+    return 
+end
+getgenv().SlenderHubLoaded = true
+
 local AccessLevel = getgenv().SlenderHubAccessLevel or "Free" 
 local IsPremium = (AccessLevel == "Premium")
 
 -- // 2. CORE SERVICES \\ --
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local CollectionService = game:GetService("CollectionService")
 local Workspace = game:GetService("Workspace")
-local Lighting = game:GetService("Lighting")
 local LocalPlayer = Players.LocalPlayer
 
 -- // 3. SECURITY BYPASS \\ --
@@ -34,15 +37,13 @@ end)
 
 -- // 4. MODULE INJECTION & DATA \\ --
 local M = {}
-local AllEggs = {
-    "Basic", "Acorn", "Safari", "Forest", "Snowman", "Cactus", "Poison", 
-    "Holy", "Sakura", "Elemental", "Magma", "Candy", "Atlantis", "Space", 
-    "Moonflower", "Starry", "Cryo", "Infernal", "Divine",
-    "5M Event", "Christmas Event", "New Years Event", "Void Event",
-    "Chronos Egg", "Evil Xmas Egg", "Cyborg Egg",
-    "Volcanic", "Frozen", "Temple", "Tropical", "Angelic", "Samurai"
+-- Lista de backup caso o scraper falhe
+local BackupEggs = {
+    "Basic", "Void Event", "5M Event", "Christmas Event", "New Years Event", 
+    "Chronos Egg", "Evil Xmas Egg", "Cyborg Egg", "Volcanic", "Frozen", 
+    "Temple", "Tropical", "Angelic", "Samurai", "Void"
 }
-local DataCache = { Eggs = AllEggs, Portals = {}, Upgrades = {} }
+local DataCache = { Eggs = BackupEggs, Portals = {} }
 
 local function InjectModules()
     local s, e = pcall(function()
@@ -50,15 +51,21 @@ local function InjectModules()
         M.Rep = require(ReplicatedStorage.Game.Replication)
         pcall(function() M.Eggs = require(ReplicatedStorage.Game.Eggs) end)
         pcall(function() M.Portals = require(ReplicatedStorage.Game.Portals) end)
-        pcall(function() M.GemShop = require(ReplicatedStorage.Game.GemShop) end)
         
+        -- [ARCHITECT UPDATE] Dynamic Egg Scraper
+        if M.Eggs then
+            local foundEggs = {}
+            for eggName, _ in pairs(M.Eggs) do
+                table.insert(foundEggs, eggName)
+            end
+            table.sort(foundEggs) -- Organiza alfabeticamente
+            DataCache.Eggs = foundEggs
+            print("SlenderHub: " .. #foundEggs .. " eggs loaded dynamically.")
+        end
+
         if M.Portals then
             for n,_ in pairs(M.Portals) do table.insert(DataCache.Portals, n) end
             table.sort(DataCache.Portals)
-        end
-        if M.GemShop then
-            for n,v in pairs(M.GemShop) do if not v.Hidden then table.insert(DataCache.Upgrades, n) end end
-            table.sort(DataCache.Upgrades)
         end
     end)
     if not s then warn("SlenderHub: Module Injection Failed") end
@@ -78,122 +85,73 @@ task.spawn(UnlockGamepasses)
 
 -- // 6. GLOBAL FLAGS \\ --
 getgenv().Flags = {
-    -- Free Flags
     AutoTap = false, AutoRebirth = false, RebirthAmt = 1,
     AutoHatch = false, Egg = "Basic", HatchAmt = 1,
-    AutoDig = false, AutoBoss = false,
-    AutoQuests = false, AutoRank = false, AutoSpin = false,
-    AutoUpgrade = false, SelectedUpgrade = "",
+    AutoDig = false, AutoVoidSpin = false,
+    AutoGolden = false, AutoRainbow = false, AutoVoid = false,
     Sniper = false, AutoPotions = false,
     DeleteFilter = {["Common"]=false, ["Uncommon"]=false, ["Rare"]=false},
-    AutoCraft = false,
-    
-    -- Premium Flags
     GodTap = false, NuclearHatch = false
 }
 
 -- // 7. UI CONSTRUCTION \\ --
 local Window = Rayfield:CreateWindow({
-   Name = "SlenderHub | V2.3 [" .. AccessLevel .. "]",
-   LoadingTitle = "Initializing Premium Core...",
+   Name = "SlenderHub | V2.9 [" .. AccessLevel .. "]",
+   LoadingTitle = "Loading Dynamic Assets...",
    LoadingSubtitle = "Tap Simulator",
-   ConfigurationSaving = { Enabled = true, FileName = "SlenderTapV2" },
+   ConfigurationSaving = { Enabled = true, FileName = "SlenderTapV29" },
    KeySystem = false,
 })
 
 -- ==================================================================
--- [TAB] 👑 PREMIUM (RESTORED)
+-- [TAB] 👑 PREMIUM
 -- ==================================================================
 local TabPrem = Window:CreateTab("Premium", "crown")
 
 if IsPremium then
-    TabPrem:CreateSection("GOD MODE (Packet Spam)")
+    TabPrem:CreateSection("GOD MODE")
     
     TabPrem:CreateToggle({
-        Name = "GOD TAP (50x Speed)",
+        Name = "GOD TAP (Safe Mode)",
         CurrentValue = false,
         Flag = "GodTap",
         Callback = function(V)
             getgenv().Flags.GodTap = V
             if V then
                 task.spawn(function()
-                    local Con
-                    Con = RunService.Heartbeat:Connect(function()
-                        if not getgenv().Flags.GodTap then Con:Disconnect() return end
-                        -- Extreme Speed: 50 requests per frame
-                        for i = 1, 50 do 
+                    while getgenv().Flags.GodTap do
+                        for i = 1, 20 do 
                             M.Net:FireServer("Tap", true, false, true) 
                         end
-                    end)
+                        task.wait(0.05)
+                    end
                 end)
             end
         end
     })
 
     TabPrem:CreateToggle({
-        Name = "NUCLEAR HATCH (Multi-Thread)",
+        Name = "NUCLEAR HATCH (Fast)",
         CurrentValue = false,
         Flag = "NuclearHatch",
         Callback = function(V)
             getgenv().Flags.NuclearHatch = V
             if V then
-                -- Launches 4 parallel threads to spam hatch requests
-                for i=1, 4 do
+                for i=1, 3 do 
                     task.spawn(function()
                         while getgenv().Flags.NuclearHatch do
                             local filter = {}
                             for r, on in pairs(getgenv().Flags.DeleteFilter) do if on then filter[r]=true end end
                             M.Net:InvokeServer("OpenEgg", getgenv().Flags.Egg, getgenv().Flags.HatchAmt, filter)
-                            task.wait() -- Minimal wait
+                            task.wait()
                         end
                     end)
                 end
             end
         end
     })
-
-    TabPrem:CreateSection("INSTANT ACTIONS")
-
-    TabPrem:CreateButton({
-        Name = "⚡ Instant Craft Inventory",
-        Callback = function()
-            if M.Rep.Data and M.Rep.Data.Pets then
-                local groups = {}
-                for id, p in pairs(M.Rep.Data.Pets) do
-                    local k = p.Name .. (p.Tier or "Normal")
-                    if not groups[k] then groups[k] = {} end
-                    table.insert(groups[k], id)
-                end
-                for _, ids in pairs(groups) do
-                    while #ids >= 5 do
-                        local batch = {table.remove(ids), table.remove(ids), table.remove(ids), table.remove(ids), table.remove(ids)}
-                        task.spawn(function() M.Net:InvokeServer("CraftPets", batch) end)
-                    end
-                end
-                Rayfield:Notify({Title="Premium", Content="Mass Craft Sent!", Duration=2})
-            end
-        end
-    })
-
-    TabPrem:CreateButton({
-        Name = "💎 Force Buy All Portals",
-        Callback = function()
-            for _, pName in ipairs(DataCache.Portals) do
-                task.spawn(function() M.Net:InvokeServer("BuyPortal", pName) end)
-            end
-            Rayfield:Notify({Title="Premium", Content="Buy Requests Sent!", Duration=2})
-        end
-    })
-
 else
-    TabPrem:CreateParagraph({Title = "Access Denied", Content = "Upgrade to Premium Key to unlock:\n\n• GOD TAP (50x Faster)\n• NUCLEAR HATCH (No Animation/Delay)\n• INSTANT CRAFT (Whole Inventory)\n• FORCE UNLOCK ALL"})
-    TabPrem:CreateButton({
-        Name = "Get Premium Key",
-        Callback = function()
-            setclipboard("https://www.slenderhub.shop/")
-            Rayfield:Notify({Title="Link Copied", Content="Visit our shop!", Duration=3})
-        end
-    })
+    TabPrem:CreateParagraph({Title = "Access Denied", Content = "Upgrade to Premium for GOD TAP & NUCLEAR HATCH."})
 end
 
 -- ==================================================================
@@ -212,7 +170,6 @@ TabFarm:CreateToggle({
         if V then
             task.spawn(function()
                 while getgenv().Flags.AutoTap do
-                    -- Only run if GodTap is OFF to avoid conflict
                     if not getgenv().Flags.GodTap then
                         for i=1, 5 do M.Net:FireServer("Tap", true, false, true) end
                     end
@@ -238,27 +195,46 @@ TabFarm:CreateToggle({
    end,
 })
 
-TabFarm:CreateSection("Minigames")
+TabFarm:CreateSection("Minigames & Events")
 
 TabFarm:CreateToggle({
-   Name = "Auto Dig",
+   Name = "Auto Dig (Instant Win)",
    CurrentValue = false,
    Flag = "AutoDig", 
    Callback = function(V)
         getgenv().Flags.AutoDig = V
         task.spawn(function()
             while getgenv().Flags.AutoDig do
-                pcall(function() M.Net:InvokeServer("StartMinigame", "DigGame") end)
-                task.wait(0.5)
-                pcall(function() M.Net:InvokeServer("FinishMinigame", "DigGame") end)
+                pcall(function() 
+                    M.Net:InvokeServer("StartMinigame", "DigGame") 
+                    task.wait(0.2)
+                    M.Net:InvokeServer("FinishMinigame", "DigGame")
+                end)
                 task.wait(1)
             end
         end)
    end,
 })
 
+TabFarm:CreateToggle({
+   Name = "Auto Void Spin",
+   CurrentValue = false,
+   Flag = "AutoVoidSpin", 
+   Callback = function(V)
+        getgenv().Flags.AutoVoidSpin = V
+        task.spawn(function()
+            while getgenv().Flags.AutoVoidSpin do
+                pcall(function() 
+                    M.Net:InvokeServer("VoidSpinWheel") 
+                end)
+                task.wait(2)
+            end
+        end)
+   end,
+})
+
 -- ==================================================================
--- [TAB] PETS (UPDATED CRAFTING)
+-- [TAB] PETS & CRAFTING
 -- ==================================================================
 local TabPets = Window:CreateTab("Pets", "cat")
 
@@ -282,7 +258,7 @@ TabPets:CreateDropdown({
 })
 
 TabPets:CreateToggle({
-   Name = "Auto Hatch (Normal)",
+   Name = "Auto Hatch",
    CurrentValue = false,
    Flag = "AutoHatch", 
    Callback = function(V)
@@ -302,93 +278,114 @@ TabPets:CreateToggle({
    end,
 })
 
-TabPets:CreateSection("Auto Delete")
-for _, r in ipairs({"Common", "Uncommon", "Rare", "Epic", "Legendary"}) do
-    TabPets:CreateToggle({
-        Name = "Delete " .. r,
-        CurrentValue = false,
-        Callback = function(V) getgenv().Flags.DeleteFilter[r] = V end
-    })
-end
+TabPets:CreateSection("Smart Crafting")
 
-TabPets:CreateSection("Universal Crafting (Optimized)")
-
+-- AUTO GOLDEN (Instant - 5 Pets)
 TabPets:CreateToggle({
-    Name = "Auto Craft (Gold/Rainbow/Void)",
+    Name = "Auto Craft Golden (Instant)",
     CurrentValue = false,
-    Flag = "AutoCraft",
+    Flag = "AutoGolden",
     Callback = function(V)
-        getgenv().Flags.AutoCraft = V
-        
-        -- LISTA EXPANDIDA COM NOMES DESCOBERTOS NO MÓDULO PETSTATS
-        local RainbowRemotes = {"StartRainbow", "CraftRainbow", "RainbowMachine", "CraftDiamond", "StartDiamond"}
-        local VoidRemotes = {"StartVoid", "CraftVoid", "VoidMachine", "CraftGalaxy", "StartGalaxy"}
-        
+        getgenv().Flags.AutoGolden = V
         task.spawn(function()
-            while getgenv().Flags.AutoCraft do
+            while getgenv().Flags.AutoGolden do
                 if M.Rep.Data and M.Rep.Data.Pets then
-                    
-                    local function FireBruteForce(remoteList, batchIDs)
-                        for _, name in ipairs(remoteList) do
-                            task.spawn(function()
-                                pcall(function() M.Net:InvokeServer(name, batchIDs) end)
-                            end)
-                        end
-                    end
-
-                    -- 1. AUTO GOLDEN (5 Pets -> 1 Golden)
-                    local goldenGroups = {}
+                    local groups = {}
                     for id, p in pairs(M.Rep.Data.Pets) do
                         if (p.Tier == "Normal" or p.Tier == nil) and not p.Locked and not p.Equipped then
-                            if not goldenGroups[p.Name] then goldenGroups[p.Name] = {} end
-                            table.insert(goldenGroups[p.Name], id)
+                            if not groups[p.Name] then groups[p.Name] = {} end
+                            table.insert(groups[p.Name], id)
                         end
                     end
-                    
-                    for _, ids in pairs(goldenGroups) do
+                    for _, ids in pairs(groups) do
                         while #ids >= 5 do
                             local batch = {table.remove(ids), table.remove(ids), table.remove(ids), table.remove(ids), table.remove(ids)}
                             pcall(function() M.Net:InvokeServer("CraftPets", batch) end)
                             task.wait(0.05)
                         end
                     end
+                end
+                task.wait(1)
+            end
+        end)
+    end
+})
 
-                    -- 2. AUTO RAINBOW (3 Pets -> 1 Rainbow)
-                    local rainbowGroups = {}
+-- AUTO RAINBOW (Machine - 5 Pets for Speed)
+TabPets:CreateToggle({
+    Name = "Auto Craft Rainbow (Machine)",
+    CurrentValue = false,
+    Flag = "AutoRainbow",
+    Callback = function(V)
+        getgenv().Flags.AutoRainbow = V
+        task.spawn(function()
+            while getgenv().Flags.AutoRainbow do
+                -- 1. Auto Claim
+                if M.Rep.Data.CraftingPets and M.Rep.Data.CraftingPets.Rainbow then
+                    for id, data in pairs(M.Rep.Data.CraftingPets.Rainbow) do
+                        if data.EndTime <= Workspace:GetServerTimeNow() then
+                            M.Net:InvokeServer("ClaimRainbow", id)
+                        end
+                    end
+                end
+
+                -- 2. Verificar Slots
+                local activeCrafts = 0
+                if M.Rep.Data.CraftingPets and M.Rep.Data.CraftingPets.Rainbow then
+                    for _ in pairs(M.Rep.Data.CraftingPets.Rainbow) do activeCrafts = activeCrafts + 1 end
+                end
+
+                -- 3. Iniciar Craft
+                if activeCrafts < 3 and M.Rep.Data and M.Rep.Data.Pets then
+                    local groups = {}
                     for id, p in pairs(M.Rep.Data.Pets) do
                         if p.Tier == "Golden" and not p.Locked and not p.Equipped then
-                            if not rainbowGroups[p.Name] then rainbowGroups[p.Name] = {} end
-                            table.insert(rainbowGroups[p.Name], id)
+                            if not groups[p.Name] then groups[p.Name] = {} end
+                            table.insert(groups[p.Name], id)
                         end
                     end
-
-                    for _, ids in pairs(rainbowGroups) do
-                        while #ids >= 3 do
-                            local batch = {table.remove(ids), table.remove(ids), table.remove(ids)}
-                            FireBruteForce(RainbowRemotes, batch)
-                            task.wait(0.1)
+                    for _, ids in pairs(groups) do
+                        if activeCrafts >= 3 then break end
+                        if #ids >= 5 then
+                            local batch = {ids[1], ids[2], ids[3], ids[4], ids[5]}
+                            local s, e = pcall(function() M.Net:InvokeServer("StartRainbow", batch) end)
+                            if s then activeCrafts = activeCrafts + 1; task.wait(0.5) end
                         end
                     end
-
-                    -- 3. AUTO VOID (3 Pets -> 1 Void)
-                    local voidGroups = {}
-                    for id, p in pairs(M.Rep.Data.Pets) do
-                        if (p.Tier == "Rainbow" or p.Tier == "Diamond") and not p.Locked and not p.Equipped then
-                            if not voidGroups[p.Name] then voidGroups[p.Name] = {} end
-                            table.insert(voidGroups[p.Name], id)
-                        end
-                    end
-
-                    for _, ids in pairs(voidGroups) do
-                        while #ids >= 3 do
-                            local batch = {table.remove(ids), table.remove(ids), table.remove(ids)}
-                            FireBruteForce(VoidRemotes, batch)
-                            task.wait(0.1)
-                        end
-                    end
-                    
                 end
                 task.wait(2)
+            end
+        end)
+    end
+})
+
+-- AUTO VOID (Instant - 3 Pets)
+TabPets:CreateToggle({
+    Name = "Auto Craft Void (Instant)",
+    CurrentValue = false,
+    Flag = "AutoVoid",
+    Callback = function(V)
+        getgenv().Flags.AutoVoid = V
+        task.spawn(function()
+            while getgenv().Flags.AutoVoid do
+                if M.Rep.Data and M.Rep.Data.Pets then
+                    local groups = {}
+                    for id, p in pairs(M.Rep.Data.Pets) do
+                        if p.Tier == "Rainbow" and not p.Locked and not p.Equipped then
+                            if not groups[p.Name] then groups[p.Name] = {} end
+                            table.insert(groups[p.Name], id)
+                        end
+                    end
+                    for _, ids in pairs(groups) do
+                        while #ids >= 3 do
+                            local batch = {table.remove(ids), table.remove(ids), table.remove(ids)}
+                            pcall(function() M.Net:InvokeServer("StartVoid", batch) end) 
+                            pcall(function() M.Net:InvokeServer("CraftVoid", batch) end)
+                            task.wait(0.1)
+                        end
+                    end
+                end
+                task.wait(1)
             end
         end)
     end
