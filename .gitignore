@@ -1,42 +1,39 @@
 --!strict
 --[[
-    SlenderHub - UNIVERSAL LOADER (Architect Edition V10)
-    Architecture: Singleton / Factory Pattern
-    UI Library: SlenderWind V5 (Internal V10 Standard)
-    Security: VeLink Integration + Hybrid Hooking
+    SlenderHub - CORE LOADER (Architect Edition V10)
+    Focus: Authentication & Game Injection Only
+    UI Library: SlenderWind V5 (Internal Standard)
 ]]
 
---//==============================[ 0. CORE INITIALIZATION ]==============================//--
+--//==============================[ 0. INICIALIZAÇÃO ]==============================//--
 local Services = {
     HttpService = game:GetService("HttpService"),
     Players = game:GetService("Players"),
     MarketplaceService = game:GetService("MarketplaceService"),
-    CoreGui = game:GetService("CoreGui"),
-    RunService = game:GetService("RunService"),
-    ReplicatedStorage = game:GetService("ReplicatedStorage")
+    CoreGui = game:GetService("CoreGui")
 }
 
 local LocalPlayer = Services.Players.LocalPlayer
 local CurrentPlaceId = game.PlaceId
 
--- Singleton Check
+-- Singleton (Evita múltiplas execuções)
 if getgenv().SlenderHubLoaded then
-    warn("[SlenderHub] Instance already running.")
+    warn("[SlenderHub] O Hub já está em execução.")
     return
 end
 getgenv().SlenderHubLoaded = true
 
---//==============================[ 1. CONFIGURATION ]==============================//--
+--//==============================[ 1. CONFIGURAÇÃO ]==============================//--
 local Config = {
-    Folder = "SlenderHub_Data",
-    File = "Auth_" .. LocalPlayer.UserId .. ".json",
+    Folder = "SlenderHub_Auth",
+    File = "KeyData_" .. LocalPlayer.UserId .. ".json",
     VeLink_Check = "https://velink.to/api/public/check/key",
     Free_Key_Link = "https://velink.to/u/678807",
     Shop_Link = "https://www.slenderhub.shop/",
     Theme = { Accent = Color3.fromRGB(0, 255, 128) } -- Slender Green
 }
 
--- Game Database (From your input)
+-- Mapa de Jogos Suportados
 local GAMES_MAP = {
     [93787311916283] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Horse%20Race",
     [82013336390273] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Pickaxe%20Simulator%20script",
@@ -47,54 +44,65 @@ local GAMES_MAP = {
     [4924922222] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Brookhaven%20script"
 }
 
+-- IDs Premium do VeLink
 local VELINK_IDS = {
-    ["ed6453e6-5259-49b4-8779-05b866831dc2"] = {Type = "Premium", Duration = 604800},
-    ["2c69fdcf-f8e1-4c1a-9270-f36d9545ebce"] = {Type = "Premium", Duration = 2592000}
+    ["ed6453e6-5259-49b4-8779-05b866831dc2"] = {Type = "Premium", Duration = 604800}, -- 7 Dias
+    ["2c69fdcf-f8e1-4c1a-9270-f36d9545ebce"] = {Type = "Premium", Duration = 2592000} -- 30 Dias
 }
 
+-- Keys de Desenvolvedor/Lifetime
 local LIFETIME_KEYS = {
     ["LifeTimeF4K9L2P7V8JDHUtY"] = true,
     ["SlenderDevKey"] = true
 }
 
---//==============================[ 2. UTILITIES ]==============================//--
-local Utils = {}
+--//==============================[ 2. SISTEMA DE KEY (BACKEND) ]==============================//--
+local AuthSystem = {}
+AuthSystem.IsAuthenticated = false
 
-function Utils.FormatTime(seconds)
+function AuthSystem.FormatTime(seconds)
     if seconds == math.huge then return "Lifetime" end
     local days = math.floor(seconds / 86400)
     local hours = math.floor((seconds % 86400) / 3600)
     return string.format("%dd %02dh", days, hours)
 end
 
-function Utils.SaveKey(key, type, duration)
+function AuthSystem.Save(key, type, duration)
     if not isfolder(Config.Folder) then makefolder(Config.Folder) end
     local data = {Key = key, Type = type, Time = os.time(), Duration = duration}
     writefile(Config.Folder .. "/" .. Config.File, Services.HttpService:JSONEncode(data))
+    AuthSystem.IsAuthenticated = true
 end
 
-function Utils.LoadKey()
+function AuthSystem.Load()
     local path = Config.Folder .. "/" .. Config.File
     if not isfile(path) then return nil end
+    
     local success, result = pcall(function() 
         return Services.HttpService:JSONDecode(readfile(path)) 
     end)
-    if not success then return nil end
+    
+    if not success or not result.Time then return nil end
     
     local elapsed = os.time() - result.Time
     if elapsed > result.Duration then 
-        delfile(path)
+        delfile(path) -- Key expirada
         return nil 
     end
+    
+    AuthSystem.IsAuthenticated = true
     return result, (result.Duration - elapsed)
 end
 
-function Utils.VerifyKey(inputKey)
+function AuthSystem.Verify(inputKey)
+    -- 1. Check Hardcoded Keys
     if LIFETIME_KEYS[inputKey] then return "Dev/Lifetime", math.huge end
     
+    -- 2. Check HTTP Request Capability
     local requestFunc = (syn and syn.request) or (http and http.request) or (http_request) or (request)
     if not requestFunc then return "Executor Unsupported", 0 end
 
+    -- 3. Check VeLink API
     local url = string.format("%s?key=%s", Config.VeLink_Check, inputKey)
     local response = requestFunc({Url = url, Method = "GET"})
 
@@ -103,135 +111,117 @@ function Utils.VerifyKey(inputKey)
         if success and data and data.expired == false then
             local tier = VELINK_IDS[tostring(data.unlockerId)]
             if tier then return tier.Type, tier.Duration end
-            return "Free", 86400 -- Default 24h
+            return "Free", 86400 -- Padrão 24h
         end
     end
     return nil
 end
 
---//==============================[ 3. UI INITIALIZATION ]==============================//--
+--//==============================[ 3. INTERFACE (SLENDERWIND) ]==============================//--
 local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
+
 local Window = SlenderWind.Window({
-    Name = "SlenderHub | Architect V10",
-    KeySystem = false, -- We handle our own custom key system logic
+    Name = "SlenderHub | Loader V10",
+    KeySystem = false, -- Usamos nossa própria lógica de key
     Theme = Config.Theme
 })
 
---//==============================[ 4. TABS & LOGIC ]==============================//--
-
--- [TAB 1] AUTHENTICATION
-local AuthTab = Window:Tab("Authentication")
+-- Variáveis de Estado da UI
 local KeyInputVal = ""
+local GameName = "Desconhecido"
+local IsSupported = GAMES_MAP[CurrentPlaceId] ~= nil
 
-AuthTab:Label("Status: " .. (Utils.LoadKey() and "Authenticated" or "Locked"))
+pcall(function() 
+    GameName = Services.MarketplaceService:GetProductInfo(CurrentPlaceId).Name 
+end)
 
-AuthTab:Input("License Key", "Paste Key Here...", "AuthKey", "VeLink Key", function(val)
+-- [ABA 1] AUTENTICAÇÃO
+local AuthTab = Window:Tab("Key System")
+
+AuthTab:Paragraph("Status do Acesso", "Verifique sua key para liberar o Loader.")
+
+AuthTab:Input("Insira sua Key", "Cole a key aqui...", "AuthKeyInput", "Key do VeLink", function(val)
     KeyInputVal = val
 end)
 
-AuthTab:Button("Verify Key", "Check with Server", function()
-    if KeyInputVal == "" then return end
-    local type, duration = Utils.VerifyKey(KeyInputVal)
+AuthTab:Button("🔎 Verificar Key", "Validar acesso", function()
+    if KeyInputVal == "" then 
+        Window:Notify("Erro", "Cole uma key primeiro!", 2)
+        return 
+    end
+    
+    Window:Notify("Sistema", "Verificando...", 2)
+    local type, duration = AuthSystem.Verify(KeyInputVal)
     
     if type then
-        Utils.SaveKey(KeyInputVal, type, duration)
-        Window:Notify("Success", "Key Validated: " .. type, 5)
-        task.wait(1)
-        -- Refresh UI or Auto-Load
+        AuthSystem.Save(KeyInputVal, type, duration)
+        Window:Notify("Sucesso", "Acesso Liberado: " .. type, 5)
+        AuthTab:Label("Status: Autenticado (" .. type .. ")")
     else
-        Window:Notify("Error", "Invalid or Expired Key", 3)
+        Window:Notify("Erro", "Key Inválida ou Expirada", 3)
     end
 end)
 
-AuthTab:Button("Get Key (Link)", "Copy to Clipboard", function()
+AuthTab:Section("Obter Acesso")
+
+AuthTab:Button("🔑 Pegar Key Free (24h)", "Copia o link", function()
     setclipboard(Config.Free_Key_Link)
-    Window:Notify("System", "Link Copied to Clipboard", 2)
+    Window:Notify("Copiado", "Link copiado para a área de transferência", 2)
 end)
 
--- [TAB 2] LOADER (Game Detection)
+AuthTab:Button("💎 Comprar Premium", "Acesso Vitalício", function()
+    setclipboard(Config.Shop_Link)
+    Window:Notify("Loja", "Link da loja copiado", 2)
+end)
+
+-- [ABA 2] GAME LOADER
 local LoaderTab = Window:Tab("Game Loader")
 
-local GameName = "Unknown"
-pcall(function() GameName = Services.MarketplaceService:GetProductInfo(CurrentPlaceId).Name end)
-local IsSupported = GAMES_MAP[CurrentPlaceId] ~= nil
+LoaderTab:Paragraph("Jogo Atual", GameName .. "\n(ID: " .. CurrentPlaceId .. ")")
 
-LoaderTab:Paragraph("Current Game", GameName .. "\nID: " .. CurrentPlaceId)
-LoaderTab:Label(IsSupported and "✅ Supported" or "⚠ Universal Mode Only")
-
-LoaderTab:Button("Load Script", "Execute Game Script", function()
-    local savedKey = Utils.LoadKey()
-    if not savedKey then
-        Window:Notify("Access Denied", "Please Verify Key First", 3)
-        return
-    end
-
-    if IsSupported then
-        Window:Notify("Loader", "Injecting Script...", 3)
-        loadstring(game:HttpGet(GAMES_MAP[CurrentPlaceId]))()
-    else
-        Window:Notify("Loader", "Game not supported. Use Universal Tab.", 3)
-    end
-end)
-
--- [TAB 3] UNIVERSAL (Spy & Tools)
-local UniTab = Window:Tab("Universal")
-
--- Spy State
-getgenv().SlenderSpy = {
-    Enabled = false,
-    Logs = {},
-    Blocked = {"CharacterSoundEvent", "UpdateMouse", "Move", "TouchHeartbeat"}
-}
-
-UniTab:Toggle("Remote Spy", false, "SpyToggle", "Hybrid Hook", function(val)
-    getgenv().SlenderSpy.Enabled = val
-    if val then
-        Window:Notify("Spy", "Hooking Metamethods...", 2)
-        -- Simple Hook Implementation
-        local mt = getrawmetatable(game)
-        local oldNamecall = mt.__namecall
-        setreadonly(mt, false)
-        
-        mt.__namecall = newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            local args = {...}
-            
-            if getgenv().SlenderSpy.Enabled and (method == "FireServer" or method == "InvokeServer") then
-                local blocked = false
-                for _, v in pairs(getgenv().SlenderSpy.Blocked) do
-                    if self.Name == v then blocked = true break end
-                end
-                
-                if not blocked then
-                    print("Remote: " .. self.Name .. " | Method: " .. method)
-                    -- In a full version, we would push to UI here
-                end
-            end
-            return oldNamecall(self, ...)
-        end)
-        setreadonly(mt, true)
-    end
-end)
-
-UniTab:Button("Dump Remotes (Console)", "Print to F9", function()
-    Window:Notify("Spy", "Check F9 Console", 2)
-    print("--- SlenderHub Remote Dump ---")
-    -- Logic to dump would go here
-end)
-
-UniTab:Button("Clear Cache", "Clean Memory", function()
-    getgenv().SlenderSpy.Logs = {}
-    Window:Notify("System", "Memory Cleared", 2)
-end)
-
---//==============================[ 5. AUTO-EXECUTE LOGIC ]==============================//--
-task.spawn(function()
-    local savedKey, remaining = Utils.LoadKey()
-    if savedKey then
-        Window:Notify("Auto-Auth", "Welcome back! (" .. Utils.FormatTime(remaining) .. ")", 5)
-        if IsSupported then
-            -- Optional: Auto-load script if key is valid
-            -- loadstring(game:HttpGet(GAMES_MAP[CurrentPlaceId]))()
+if IsSupported then
+    LoaderTab:Label("✅ Jogo Suportado")
+    
+    LoaderTab:Button("🚀 INJETAR SCRIPT", "Carregar Hub do Jogo", function()
+        if not AuthSystem.IsAuthenticated then
+            Window:Notify("Acesso Negado", "Você precisa verificar a Key na aba anterior.", 3)
+            return
         end
+
+        Window:Notify("Loader", "Injetando Script...", 3)
+        
+        task.spawn(function()
+            local scriptUrl = GAMES_MAP[CurrentPlaceId]
+            local success, err = pcall(function()
+                loadstring(game:HttpGet(scriptUrl))()
+            end)
+            
+            if not success then
+                warn("[SlenderHub] Erro ao carregar: " .. tostring(err))
+                Window:Notify("Erro", "Falha ao baixar script (Veja F9)", 5)
+            end
+        end)
+    end)
+else
+    LoaderTab:Label("⚠ Jogo Não Suportado")
+    LoaderTab:Paragraph("Aviso", "Este jogo não está na lista oficial do SlenderHub.")
+end
+
+LoaderTab:Button("🗑️ Resetar Key Salva", "Limpar dados locais", function()
+    if isfile(Config.Folder .. "/" .. Config.File) then
+        delfile(Config.Folder .. "/" .. Config.File)
+        AuthSystem.IsAuthenticated = false
+        Window:Notify("Sistema", "Key removida. Reinicie o script.", 3)
+    end
+end)
+
+--//==============================[ 4. AUTO-LOGIN ]==============================//--
+task.spawn(function()
+    local savedData, remaining = AuthSystem.Load()
+    if savedData then
+        Window:Notify("Bem-vindo", "Auto-Login: " .. AuthSystem.FormatTime(remaining), 5)
+        AuthTab:Label("Status: Autenticado (" .. savedData.Type .. ")")
+    else
+        Window:Notify("Atenção", "Por favor, insira sua Key.", 5)
     end
 end)
