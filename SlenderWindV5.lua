@@ -1,13 +1,12 @@
 --[[ 
     SlenderWind UI - Library Source
-    Version: V7.0 [Ultimate Architect Edition]
+    Version: V7.1 [Refresh Update]
     Architect: SlenderHub Lead
     
-    Changelog V7:
-    + Added ColorPicker Component (RGB + Rainbow)
-    + Added Dynamic Theme Support (Custom Colors)
-    + Optimized Tweening
-    + Improved Dropdown Logic
+    Changelog V7.1:
+    + Added :Refresh(options, default) to Dropdown
+    + Added :Set(value) to Dropdown
+    + Fixed Dropdown ZIndex/Layout issues
 ]]
 
 local SlenderWind = {}
@@ -532,9 +531,11 @@ function SlenderWind.Window(config)
             end)
         end
 
+        --// UPDATED DROPDOWN (V7.1) //--
         function TabObj:Dropdown(text, options, default, callback)
             local DropdownOpen = false
             local Selected = default or options[1]
+            local CurrentOptions = options
             
             local DropFrame = Create("Frame", {
                 Parent = Page, BackgroundColor3 = Colors.Element,
@@ -567,9 +568,9 @@ function SlenderWind.Window(config)
             })
             local ListLayout = Create("UIListLayout", {Parent = OptionList, SortOrder = Enum.SortOrder.LayoutOrder})
 
-            local function RefreshOptions()
+            local function BuildList(opts)
                 for _, v in pairs(OptionList:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
-                for _, opt in pairs(options) do
+                for _, opt in pairs(opts) do
                     local OptBtn = Create("TextButton", {
                         Parent = OptionList, Text = opt, TextColor3 = Colors.SubText, Font = Enum.Font.Gotham,
                         TextSize = 12, BackgroundColor3 = Colors.Element, Size = UDim2.new(1, 0, 0, 30), AutoButtonColor = false
@@ -578,20 +579,47 @@ function SlenderWind.Window(config)
                         Selected = opt
                         SelectedLabel.Text = Selected
                         pcall(callback, Selected)
-                        DropBtn.Fire()
+                        DropBtn.Fire() -- Close dropdown
                     end)
                 end
             end
 
             DropBtn.MouseButton1Click:Connect(function()
                 DropdownOpen = not DropdownOpen
-                RefreshOptions()
-                local ListSize = (#options * 30)
+                if DropdownOpen then BuildList(CurrentOptions) end
+                
+                local ListSize = (#CurrentOptions * 30)
                 local TargetSize = DropdownOpen and (36 + ListSize) or 36
                 
                 TweenService:Create(DropFrame, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, TargetSize)}):Play()
                 TweenService:Create(Arrow, TweenInfo.new(0.3), {Rotation = DropdownOpen and 180 or 0}):Play()
             end)
+
+            -- Initial Build
+            BuildList(CurrentOptions)
+
+            -- API Return
+            local DropdownAPI = {}
+            function DropdownAPI:Refresh(newOptions, newDefault)
+                CurrentOptions = newOptions
+                Selected = newDefault or newOptions[1]
+                SelectedLabel.Text = tostring(Selected)
+                
+                -- If open, update size immediately
+                if DropdownOpen then
+                    BuildList(CurrentOptions)
+                    local ListSize = (#CurrentOptions * 30)
+                    TweenService:Create(DropFrame, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 36 + ListSize)}):Play()
+                end
+            end
+            
+            function DropdownAPI:Set(value)
+                Selected = value
+                SelectedLabel.Text = tostring(Selected)
+                pcall(callback, Selected)
+            end
+
+            return DropdownAPI
         end
 
         function TabObj:Keybind(text, default, callback)
@@ -670,7 +698,6 @@ function SlenderWind.Window(config)
             end)
         end
 
-        --// NEW COMPONENT: COLOR PICKER (V7) //--
         function TabObj:ColorPicker(title, default, callback)
             local ColorVal = default or Color3.fromRGB(255, 255, 255)
             local PickerOpen = false
