@@ -1,13 +1,13 @@
 --[[ 
     SlenderWind UI - Library Source
-    Version: V5.1 (Production Build)
+    Version: V6.0 [Ultimate Architect Edition]
     Architect: SlenderHub Lead
     
     Features:
     - Secure Gateway (Key System)
     - Dynamic HUD (FPS/Ping/Time)
     - Search Engine
-    - Rayfield-like Components
+    - Components: Button, Toggle, Slider, Dropdown, Keybind, Input, Paragraph, Label
 ]]
 
 local SlenderWind = {}
@@ -650,6 +650,94 @@ function SlenderWind.Window(config)
                     pcall(callback, Binding)
                 end
             end)
+        end
+
+        --// NEW COMPONENTS (V6) //--
+
+        function TabObj:Input(title, placeholder, callback)
+            local InputFrame = Create("Frame", {
+                Parent = Page, BackgroundColor3 = Colors.Element,
+                Size = UDim2.new(1, 0, 0, 50)
+            })
+            Create("UICorner", {Parent = InputFrame, CornerRadius = UDim.new(0, 6)})
+            Create("UIStroke", {Parent = InputFrame, Color = Colors.Stroke, Thickness = 1})
+
+            Create("TextLabel", {
+                Name = "Title", Parent = InputFrame, Text = title, TextColor3 = Colors.Text, Font = Enum.Font.GothamMedium,
+                TextSize = 13, BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 8), Size = UDim2.new(1, -24, 0, 15), TextXAlignment = Enum.TextXAlignment.Left
+            })
+
+            local InputBoxFrame = Create("Frame", {
+                Parent = InputFrame, BackgroundColor3 = Color3.fromRGB(40, 40, 45),
+                Position = UDim2.new(0, 12, 0, 28), Size = UDim2.new(1, -24, 0, 16)
+            })
+            Create("UICorner", {Parent = InputBoxFrame, CornerRadius = UDim.new(0, 4)})
+
+            local InputBox = Create("TextBox", {
+                Parent = InputBoxFrame, Text = "", PlaceholderText = placeholder or "Type here...",
+                TextColor3 = Colors.SubText, PlaceholderColor3 = Color3.fromRGB(100, 100, 100),
+                Font = Enum.Font.Gotham, TextSize = 12, BackgroundTransparency = 1,
+                Size = UDim2.new(1, -8, 1, 0), Position = UDim2.new(0, 4, 0, 0),
+                TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false
+            })
+
+            InputBox.FocusLost:Connect(function(enterPressed)
+                if not enterPressed then return end
+                pcall(callback, InputBox.Text)
+                TweenService:Create(InputFrame.UIStroke, TweenInfo.new(0.2), {Color = Colors.Accent}):Play()
+                task.wait(0.2)
+                TweenService:Create(InputFrame.UIStroke, TweenInfo.new(0.5), {Color = Colors.Stroke}):Play()
+            end)
+        end
+
+        function TabObj:Paragraph(title, content)
+            local ParaFrame = Create("Frame", {
+                Parent = Page, BackgroundColor3 = Colors.Element,
+                Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y
+            })
+            Create("UICorner", {Parent = ParaFrame, CornerRadius = UDim.new(0, 6)})
+            Create("UIStroke", {Parent = ParaFrame, Color = Colors.Stroke, Thickness = 1})
+            Create("UIPadding", {Parent = ParaFrame, PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12)})
+
+            local ParaTitle = Create("TextLabel", {
+                Name = "Title", Parent = ParaFrame, Text = title, TextColor3 = Colors.Accent, Font = Enum.Font.GothamBold,
+                TextSize = 14, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 15), TextXAlignment = Enum.TextXAlignment.Left
+            })
+
+            local ParaContent = Create("TextLabel", {
+                Parent = ParaFrame, Text = content, TextColor3 = Colors.SubText, Font = Enum.Font.Gotham,
+                TextSize = 12, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), 
+                TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, AutomaticSize = Enum.AutomaticSize.Y,
+                Position = UDim2.new(0, 0, 0, 20)
+            })
+            
+            Create("Frame", {Parent = ParaFrame, BackgroundTransparency = 1, Size = UDim2.new(1,0,0,20), LayoutOrder = 100})
+        end
+
+        function TabObj:Label(text)
+            local LabelFrame = Create("Frame", {
+                Parent = Page, BackgroundColor3 = Colors.Element,
+                Size = UDim2.new(1, 0, 0, 26)
+            })
+            Create("UICorner", {Parent = LabelFrame, CornerRadius = UDim.new(0, 6)})
+
+            local LabelText = Create("TextLabel", {
+                Name = "Title", Parent = LabelFrame, Text = text, TextColor3 = Colors.SubText, Font = Enum.Font.Gotham,
+                TextSize = 12, BackgroundTransparency = 1, Size = UDim2.new(1, -20, 1, 0), Position = UDim2.new(0, 10, 0, 0),
+                TextXAlignment = Enum.TextXAlignment.Left
+            })
+            
+            Create("ImageLabel", {
+                Parent = LabelFrame, BackgroundTransparency = 1, Image = "rbxassetid://3926305904",
+                ImageRectOffset = Vector2.new(404, 644), ImageRectSize = Vector2.new(36, 36),
+                ImageColor3 = Colors.SubText, Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(1, -24, 0.5, -7)
+            })
+
+            local LabelFuncs = {}
+            function LabelFuncs:Set(newText)
+                LabelText.Text = newText
+            end
+            return LabelFuncs
         end
 
         return TabObj
