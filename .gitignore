@@ -1,11 +1,15 @@
 -- // ============================================================
--- // SlenderHub V2.1 | Internal Remote Spy & Visualizer
--- // Architecture: Hybrid Hook (Metamethod + Closure)
+-- // SlenderHub V2.1 | Internal Remote Spy
+-- // Architecture: Hybrid Hook + SlenderWind UI
 -- // Dev: SlenderHub Chief Architect
 -- // ============================================================
 
 if getgenv().SlenderHubSpyLoaded then 
-    warn("[SlenderHub] Spy Instance already running.")
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "SlenderHub",
+        Text = "Spy já está em execução!",
+        Duration = 3
+    })
     return 
 end
 getgenv().SlenderHubSpyLoaded = true
@@ -145,76 +149,72 @@ end
 local function DeepCompare(t1, t2)
     if type(t1) ~= type(t2) then return false end
     if type(t1) ~= "table" then return t1 == t2 end
-    
-    -- Simple check for performance (not perfect deep compare but good for spy)
     return #t1 == #t2 and tostring(t1[1]) == tostring(t2[1])
 end
 
 -- // ==========================================
--- // UI INTERFACE (Rayfield)
+-- // UI INTERFACE (SlenderWind)
 -- // ==========================================
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
 
-local Window = Rayfield:CreateWindow({
-    Name = "SlenderHub | V2.1 - Internal Spy",
-    LoadingTitle = "Injecting Hooks...",
-    ConfigurationSaving = {Enabled = false},
+local Window = SlenderWind.Window({
+    Name = "SlenderHub V2.1 | Spy",
     KeySystem = false,
-    Theme = "Default"
+    Theme = { Accent = Color3.fromRGB(0, 255, 100) }
 })
-
-local Tab = Window:CreateTab("Remote Monitor", 4483362458)
 
 -- UI State
 local SelectedLogIndex = nil
 local CurrentScriptBuffer = ""
 local CodeInput -- Forward declaration
+local RemoteDropdown -- Forward declaration
 
-Tab:CreateSection("Core Control")
-
-Tab:CreateToggle({
-    Name = "Enable Hybrid Hook",
-    CurrentValue = false,
-    Flag = "SpyEnabled",
+-- // SECTION: CONTROLS
+Window:Toggle({
+    Name = "Ativar Spy (Hybrid Hook)",
+    Default = false,
     Callback = function(Value)
         getgenv().SlenderSpy.Enabled = Value
-    end,
+    end
 })
 
-Tab:CreateButton({
-    Name = "🗑️ Clear Logs",
+Window:Button({
+    Name = "🗑️ Limpar Logs",
     Callback = function()
         getgenv().SlenderSpy.Logs = {}
         SelectedLogIndex = nil
         CurrentScriptBuffer = ""
-        if CodeInput then CodeInput:Set("") end
-        Rayfield:Notify({Title = "Memory Cleared", Content = "Logs wiped.", Duration = 1})
-    end,
-})
-
-Tab:CreateSection("Remote List")
-
-local LogDropdown = Tab:CreateDropdown({
-    Name = "Captured Remotes",
-    Options = {"None"},
-    CurrentOption = "None",
-    Flag = "RemoteList",
-    Callback = function(Option)
-        local StringVal = (type(Option) == "table") and Option[1] or Option
-        if StringVal == "None" then SelectedLogIndex = nil return end
+        if CodeInput and CodeInput.Set then CodeInput:Set("") end
         
-        local ID = tonumber(StringVal:match("^%[(%d+)%]"))
-        if ID then SelectedLogIndex = ID end
-    end,
+        -- Reset Dropdown
+        if RemoteDropdown and RemoteDropdown.Refresh then
+            RemoteDropdown:Refresh({"Nenhum"})
+        end
+    end
 })
 
-Tab:CreateButton({
-    Name = "🔄 Refresh List",
+-- // SECTION: REMOTE LIST
+RemoteDropdown = Window:Dropdown({
+    Name = "Lista de Remotes",
+    Options = {"Nenhum"},
+    Callback = function(Value)
+        if Value == "Nenhum" then 
+            SelectedLogIndex = nil 
+            return 
+        end
+        
+        local ID = tonumber(Value:match("^%[(%d+)%]"))
+        if ID then SelectedLogIndex = ID end
+    end
+})
+
+Window:Button({
+    Name = "🔄 Atualizar Lista",
     Callback = function()
         local Options = {}
         local Logs = getgenv().SlenderSpy.Logs
-        local Start = math.max(1, #Logs - 25) -- Show last 25
+        local Start = math.max(1, #Logs - 25) -- Mostra os últimos 25
         
         for i = #Logs, Start, -1 do
             local log = Logs[i]
@@ -223,74 +223,76 @@ Tab:CreateButton({
             table.insert(Options, Label)
         end
         
-        if #Options == 0 then Options = {"None"} end
-        LogDropdown:Refresh(Options)
-    end,
+        if #Options == 0 then Options = {"Nenhum"} end
+        
+        if RemoteDropdown and RemoteDropdown.Refresh then
+            RemoteDropdown:Refresh(Options)
+        end
+    end
 })
 
-Tab:CreateSection("Code Generator")
-
-Tab:CreateButton({
-    Name = "⬇️ GENERATE CODE ⬇️",
+-- // SECTION: GENERATOR
+Window:Button({
+    Name = "⬇️ GERAR CÓDIGO ⬇️",
     Callback = function()
         if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
             local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
             local Code = GenerateScript(Log)
             CurrentScriptBuffer = Code
             
-            if CodeInput then CodeInput:Set(Code) end
-            Rayfield:Notify({Title = "Success", Content = "Code Generated!", Duration = 1})
+            if CodeInput and CodeInput.Set then 
+                CodeInput:Set(Code) 
+            end
         else
-            Rayfield:Notify({Title = "Error", Content = "Select a remote first!", Duration = 2})
+            game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Erro", Text = "Selecione um remote!"})
         end
-    end,
+    end
 })
 
-CodeInput = Tab:CreateInput({
-    Name = "Script Output",
-    PlaceholderText = "Generated code will appear here...",
-    RemoveTextAfterFocusLost = false,
+CodeInput = Window:Input({
+    Name = "Output do Script",
+    Default = "",
     Callback = function(Text)
         CurrentScriptBuffer = Text
-    end,
+    end
 })
 
-Tab:CreateButton({
-    Name = "📋 Copy to Clipboard",
+Window:Button({
+    Name = "📋 Copiar para Clipboard",
     Callback = function()
         if CurrentScriptBuffer ~= "" then
             setclipboard(CurrentScriptBuffer)
-            Rayfield:Notify({Title = "Copied", Content = "Code in clipboard.", Duration = 1})
+            game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Sucesso", Text = "Copiado!"})
         end
-    end,
+    end
 })
 
-Tab:CreateButton({
-    Name = "▶ Execute Code",
+Window:Button({
+    Name = "▶ Executar Código",
     Callback = function()
         if CurrentScriptBuffer ~= "" then
             local success, err = pcall(function()
                 loadstring(CurrentScriptBuffer)()
             end)
             if not success then
-                Rayfield:Notify({Title = "Execution Error", Content = "Check console (F9)", Duration = 2})
                 warn(err)
+                game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Erro", Text = "Veja o console (F9)"})
             else
-                Rayfield:Notify({Title = "Executed", Content = "Script ran successfully.", Duration = 1})
+                game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Executado", Text = "Script rodou com sucesso."})
             end
         end
-    end,
+    end
 })
 
-Tab:CreateButton({
-    Name = "⛔ Block Selected Remote",
+Window:Button({
+    Name = "⛔ Bloquear Remote Selecionado",
     Callback = function()
         if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
             local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
             table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
-            Rayfield:Notify({Title = "Blocked", Content = Log.Name .. " added to blacklist.", Duration = 2})
+            game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Bloqueado", Text = Log.Name .. " adicionado à blacklist."})
         end
-    end,
+    end
 })
 
 -- // ==========================================
@@ -357,7 +359,7 @@ OldInvokeServer = hookfunction(Instance.new("RemoteFunction").InvokeServer, newc
     return OldInvokeServer(self, ...)
 end))
 
--- 3. UnreliableRemoteEvent Support (New Roblox Feature)
+-- 3. UnreliableRemoteEvent Support
 pcall(function()
     local Unreliable = Instance.new("UnreliableRemoteEvent")
     local OldUnreliableFire
@@ -367,4 +369,8 @@ pcall(function()
     end))
 end)
 
-Rayfield:Notify({Title = "SlenderHub V2.1", Content = "Spy Initialized Successfully.", Duration = 3})
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "SlenderHub V2.1",
+    Text = "Spy Initialized (SlenderWind UI)",
+    Duration = 5
+})
