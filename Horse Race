@@ -1,6 +1,6 @@
 --[[
-    SlenderHub | V1 - Horse Race (Premium OP Edition)
-    Architect: SlenderHub Team
+    SlenderHub | V1 - Horse Race (Architect Edition)
+    UI Library: SlenderWind V6 (Cloud Hosted)
     Access Level: Dynamic (Free/Premium)
 ]]
 
@@ -11,12 +11,12 @@ if getgenv().SlenderHubLoaded then
 end
 getgenv().SlenderHubLoaded = true
 
--- 2. Check Access Level (Defined by Key System)
+-- 2. Check Access Level
 local AccessLevel = getgenv().SlenderHubAccessLevel or "Free" 
 local IsPremium = (AccessLevel == "Premium")
 
--- 3. Load Library
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- 3. Load SlenderWind Library (GitHub)
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
 
 -- 4. Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -24,8 +24,9 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
 
--- 5. Remote Analysis & Retrieval (Knit Framework Hook)
+-- 5. Remote Analysis (Knit Framework Hook)
 local function GetRemote(ServiceName, RemoteName, IsFunction)
     local Remote = nil
     pcall(function()
@@ -50,335 +51,279 @@ local Flags = {
 }
 
 -- 7. UI Construction
-local HubTitle = "SlenderHub | V1 [" .. string.upper(AccessLevel) .. "]"
+local HubTitle = "SlenderHub | Horse Race [" .. string.upper(AccessLevel) .. "]"
 
-local Window = Rayfield:CreateWindow({
+local Window = Library.Window({
    Name = HubTitle,
-   LoadingTitle = "Authenticating...",
-   LoadingSubtitle = "Welcome, " .. LocalPlayer.Name,
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = "SlenderHub",
-      FileName = "HorseRaceConfig"
-   },
-   KeySystem = false
+   Keybind = Enum.KeyCode.RightControl,
+   KeySystem = false -- Defina como true se quiser ativar a Key no futuro
 })
 
-Rayfield:Notify({
-    Title = "Access Granted",
-    Content = "Logged in as: " .. AccessLevel .. " User",
-    Duration = 5
-})
+-- Ativar HUD
+Window:Watermark({ Enabled = true, Title = HubTitle })
 
 -- =================================================================
 -- TAB: PREMIUM OP (ONLY VISIBLE/ACTIVE FOR PREMIUM)
 -- =================================================================
 if IsPremium then
-    local TabOP = Window:CreateTab("Premium OP")
+    local TabOP = Window:Tab("Premium OP", "rbxassetid://3926305904")
     
-    TabOP:CreateSection("Blatant Farming")
+    TabOP:Section("Blatant Farming")
     
-    TabOP:CreateToggle({
-       Name = "⚡ SUPER Auto Win (5x Speed)",
-       CurrentValue = false,
-       Callback = function(Value)
-            Flags.AutoWinOP = Value
-            local Remote = GetRemote("FightService", "GetWinsEvent", false)
-            local Vector = Vector3.new(1811.09, 782.79, -689544.81)
-            
-            task.spawn(function()
-                while Flags.AutoWinOP do
-                    if Remote then 
-                        -- OP LOGIC: Fire multiple times per frame
-                        for i = 1, 5 do
-                            pcall(function() Remote:FireServer("WinGate_16", Vector) end)
-                        end
-                    else 
-                        Remote = GetRemote("FightService", "GetWinsEvent", false) 
+    TabOP:Toggle("⚡ SUPER Auto Win (5x Speed)", false, function(Value)
+        Flags.AutoWinOP = Value
+        local Remote = GetRemote("FightService", "GetWinsEvent", false)
+        local Vector = Vector3.new(1811.09, 782.79, -689544.81)
+        
+        task.spawn(function()
+            while Flags.AutoWinOP do
+                if Remote then 
+                    -- OP LOGIC: Fire multiple times per frame
+                    for i = 1, 5 do
+                        pcall(function() Remote:FireServer("WinGate_16", Vector) end)
                     end
-                    task.wait(0.01) -- Extreme Speed
+                else 
+                    Remote = GetRemote("FightService", "GetWinsEvent", false) 
                 end
-            end)
-       end,
-    })
+                task.wait(0.01) -- Extreme Speed
+            end
+        end)
+    end)
 
-    TabOP:CreateSection("Character Exploits")
+    TabOP:Section("Character Exploits")
 
-    TabOP:CreateToggle({
-       Name = "Speed Hack (Loop Bypass)",
-       CurrentValue = false,
-       Callback = function(Value)
-            Flags.SpeedHack = Value
-            task.spawn(function()
-                while Flags.SpeedHack and task.wait() do
-                    pcall(function()
+    TabOP:Toggle("Speed Hack (Loop Bypass)", false, function(Value)
+        Flags.SpeedHack = Value
+        task.spawn(function()
+            while Flags.SpeedHack and task.wait() do
+                pcall(function()
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
                         LocalPlayer.Character.Humanoid.WalkSpeed = Flags.WalkSpeedVal
-                    end)
-                end
-                pcall(function() LocalPlayer.Character.Humanoid.WalkSpeed = 16 end)
-            end)
-       end,
-    })
-
-    TabOP:CreateSlider({
-       Name = "Speed Value",
-       Range = {16, 500},
-       Increment = 1,
-       Suffix = "Speed",
-       CurrentValue = 100,
-       Callback = function(Value)
-           Flags.WalkSpeedVal = Value
-       end,
-    })
-
-    TabOP:CreateToggle({
-       Name = "Noclip (Walk Through Walls)",
-       CurrentValue = false,
-       Callback = function(Value)
-            Flags.Noclip = Value
-            if Flags.Noclip then
-                RunService:BindToRenderStep("SlenderNoclip", 1000, function()
-                    if LocalPlayer.Character then
-                        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                            if part:IsA("BasePart") then part.CanCollide = false end
-                        end
                     end
                 end)
-            else
-                RunService:UnbindFromRenderStep("SlenderNoclip")
             end
-       end,
-    })
+            pcall(function() LocalPlayer.Character.Humanoid.WalkSpeed = 16 end)
+        end)
+    end)
 
-    TabOP:CreateToggle({
-       Name = "Infinite Jump",
-       CurrentValue = false,
-       Callback = function(Value)
-            Flags.InfJump = Value
-            game:GetService("UserInputService").JumpRequest:Connect(function()
-                if Flags.InfJump and LocalPlayer.Character then
-                    LocalPlayer.Character:FindFirstChildOfClass('Humanoid'):ChangeState("Jumping")
+    TabOP:Slider("Speed Value", 16, 500, 100, function(Value)
+        Flags.WalkSpeedVal = Value
+    end)
+
+    TabOP:Toggle("Noclip (Walk Through Walls)", false, function(Value)
+        Flags.Noclip = Value
+        if Flags.Noclip then
+            RunService:BindToRenderStep("SlenderNoclip", 1000, function()
+                if LocalPlayer.Character then
+                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then part.CanCollide = false end
+                    end
                 end
             end)
-       end,
-    })
+        else
+            RunService:UnbindFromRenderStep("SlenderNoclip")
+        end
+    end)
+
+    TabOP:Toggle("Infinite Jump", false, function(Value)
+        Flags.InfJump = Value
+    end)
+    
+    -- Logic for InfJump (Connected once)
+    UserInputService.JumpRequest:Connect(function()
+        if Flags.InfJump and LocalPlayer.Character then
+            LocalPlayer.Character:FindFirstChildOfClass('Humanoid'):ChangeState("Jumping")
+        end
+    end)
+
 else
-    -- Placeholder for Free Users to see what they are missing
-    local TabOP = Window:CreateTab("Premium 🔒")
-    TabOP:CreateButton({
-        Name = "🔒 Unlock OP Features (Super Win, Speed)",
-        Callback = function()
-            Rayfield:Notify({Title="Premium Required", Content="Get a key at SlenderHub.shop", Duration=3})
-        end,
-    })
+    -- Placeholder for Free Users
+    local TabOP = Window:Tab("Premium 🔒", "rbxassetid://3926305904")
+    TabOP:Button("🔒 Unlock OP Features", function()
+        Library:Notify("Premium Required", "Get a key at SlenderHub.shop", 3)
+    end)
 end
 
 -- =================================================================
 -- TAB: FARM (NORMAL)
 -- =================================================================
-local TabFarm = Window:CreateTab("Farm")
+local TabFarm = Window:Tab("Farm", "rbxassetid://3926305904")
 
-TabFarm:CreateSection("Legit Farm")
-TabFarm:CreateToggle({
-   Name = "Auto Win (Normal Speed)",
-   CurrentValue = false,
-   Callback = function(Value)
-        Flags.AutoWin = Value
-        local Remote = GetRemote("FightService", "GetWinsEvent", false)
-        local Vector = Vector3.new(1811.09, 782.79, -689544.81)
-        
-        task.spawn(function()
-            while Flags.AutoWin and task.wait(0.1) do
-                if Remote then 
-                    pcall(function() Remote:FireServer("WinGate_16", Vector) end)
-                else 
-                    Remote = GetRemote("FightService", "GetWinsEvent", false) 
-                end
+TabFarm:Section("Legit Farm")
+TabFarm:Toggle("Auto Win (Normal Speed)", false, function(Value)
+    Flags.AutoWin = Value
+    local Remote = GetRemote("FightService", "GetWinsEvent", false)
+    local Vector = Vector3.new(1811.09, 782.79, -689544.81)
+    
+    task.spawn(function()
+        while Flags.AutoWin and task.wait(0.1) do
+            if Remote then 
+                pcall(function() Remote:FireServer("WinGate_16", Vector) end)
+            else 
+                Remote = GetRemote("FightService", "GetWinsEvent", false) 
             end
-        end)
-   end,
-})
+        end
+    end)
+end)
 
-TabFarm:CreateSection("Auto Train")
-TabFarm:CreateDropdown({
-    Name = "Mundo (World)", Options = {"1","2","3","4","5"}, CurrentOption = {"1"},
-    Callback = function(O) Flags.TrainWorld = O[1] end
-})
-TabFarm:CreateDropdown({
-    Name = "Máquina (Machine)", Options = {"1","2","3","4","5","6","7","8","9","10","11","12"}, CurrentOption = {"1"},
-    Callback = function(O) Flags.TrainMachine = O[1] end
-})
-TabFarm:CreateToggle({
-   Name = "Ativar Treino (Auto Train)",
-   CurrentValue = false,
-   Callback = function(Value)
-        Flags.AutoTrain = Value
-        local Remote = GetRemote("TrainService", "RunTrain", false)
-        task.spawn(function()
-            while Flags.AutoTrain and task.wait() do
-                if Remote then
-                    pcall(function() Remote:FireServer("Treadmill_"..Flags.TrainWorld.."_"..Flags.TrainMachine) end)
-                else Remote = GetRemote("TrainService", "RunTrain", false) end
-            end
-        end)
-   end,
-})
+TabFarm:Section("Auto Train")
+
+TabFarm:Dropdown("Mundo (World)", {"1","2","3","4","5"}, "1", function(val)
+    Flags.TrainWorld = val
+end)
+
+TabFarm:Dropdown("Máquina (Machine)", {"1","2","3","4","5","6","7","8","9","10","11","12"}, "1", function(val)
+    Flags.TrainMachine = val
+end)
+
+TabFarm:Toggle("Ativar Treino (Auto Train)", false, function(Value)
+    Flags.AutoTrain = Value
+    local Remote = GetRemote("TrainService", "RunTrain", false)
+    task.spawn(function()
+        while Flags.AutoTrain and task.wait() do
+            if Remote then
+                pcall(function() Remote:FireServer("Treadmill_"..Flags.TrainWorld.."_"..Flags.TrainMachine) end)
+            else Remote = GetRemote("TrainService", "RunTrain", false) end
+        end
+    end)
+end)
 
 -- =================================================================
 -- TAB: TELEPORT
 -- =================================================================
-local TabTP = Window:CreateTab("Teleport")
+local TabTP = Window:Tab("Teleport", "rbxassetid://3926305904")
 local Areas = { "Area_1", "Area_2", "Area_3", "Area_4", "Area_5", "Area_Christmas", "Area_Fruit" }
 
-TabTP:CreateSection("Zone Teleport")
-TabTP:CreateDropdown({
-    Name = "Selecionar Area", Options = Areas, CurrentOption = {"Area_1"},
-    Callback = function(Option) Flags.SelectedArea = Option[1] end,
-})
-TabTP:CreateButton({
-    Name = "Teleportar Agora",
-    Callback = function()
-        local TargetArea = Flags.SelectedArea
-        local Remote = GetRemote("AreaService", "UpdatePlayerCurrentArea", false)
-        if Remote then pcall(function() Remote:FireServer(TargetArea) end) end
+TabTP:Section("Zone Teleport")
 
-        pcall(function()
-            local Root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if Root then
-                local TargetObj = workspace:FindFirstChild(TargetArea) 
-                               or (workspace:FindFirstChild("Spawns") and workspace.Spawns:FindFirstChild(TargetArea))
-                               or (workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild(TargetArea))
-                if TargetObj then
-                    local TargetCFrame = TargetObj:IsA("Model") and TargetObj:GetPivot() or TargetObj.CFrame
-                    Root.CFrame = TargetCFrame + Vector3.new(0, 5, 0)
-                    Rayfield:Notify({Title="Teleport", Content="Teleportado para: " .. TargetArea, Duration=2})
-                end
+TabTP:Dropdown("Selecionar Area", Areas, "Area_1", function(val)
+    Flags.SelectedArea = val
+end)
+
+TabTP:Button("Teleportar Agora", function()
+    local TargetArea = Flags.SelectedArea
+    local Remote = GetRemote("AreaService", "UpdatePlayerCurrentArea", false)
+    if Remote then pcall(function() Remote:FireServer(TargetArea) end) end
+
+    pcall(function()
+        local Root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if Root then
+            local TargetObj = workspace:FindFirstChild(TargetArea) 
+                           or (workspace:FindFirstChild("Spawns") and workspace.Spawns:FindFirstChild(TargetArea))
+                           or (workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild(TargetArea))
+            if TargetObj then
+                local TargetCFrame = TargetObj:IsA("Model") and TargetObj:GetPivot() or TargetObj.CFrame
+                Root.CFrame = TargetCFrame + Vector3.new(0, 5, 0)
+                Library:Notify("Teleport", "Teleportado para: " .. TargetArea, 2)
             end
-        end)
-    end,
-})
+        end
+    end)
+end)
 
 -- =================================================================
 -- TAB: EGGS
 -- =================================================================
-local TabEggs = Window:CreateTab("Eggs")
+local TabEggs = Window:Tab("Eggs", "rbxassetid://3926305904")
 local EggIDs = { "Egg_1_1", "Egg_1_2", "Egg_1_3", "Egg_1_4", "Egg_2_1", "Egg_2_2", "Egg_2_3", "Egg_2_4", "Egg_3_1", "Egg_3_2", "Egg_3_3", "Egg_3_4", "Egg_4_1", "Egg_4_2", "Egg_4_3", "Egg_Tower_1", "Egg_Christmas" }
 
-TabEggs:CreateDropdown({
-    Name = "Escolher Ovo", Options = EggIDs, CurrentOption = {"Egg_1_1"},
-    Callback = function(O) Flags.SelectedEgg = O[1] end
-})
-TabEggs:CreateToggle({
-   Name = "Auto Hatch (Fast)",
-   CurrentValue = false,
-   Callback = function(Value)
-        Flags.AutoHatch = Value
-        local Remote = GetRemote("EggHatchService", "Hatch", false)
+TabEggs:Dropdown("Escolher Ovo", EggIDs, "Egg_1_1", function(val)
+    Flags.SelectedEgg = val
+end)
+
+TabEggs:Toggle("Auto Hatch (Fast)", false, function(Value)
+    Flags.AutoHatch = Value
+    local Remote = GetRemote("EggHatchService", "Hatch", false)
+    task.spawn(function()
+        while Flags.AutoHatch do
+            if Remote then pcall(function() Remote:FireServer(Flags.SelectedEgg, 1) end)
+            else Remote = GetRemote("EggHatchService", "Hatch", false) end
+            task.wait(0.25)
+        end
+    end)
+end)
+
+TabEggs:Section("Premium Rewards")
+if IsPremium then
+    TabEggs:Toggle("Auto Claim Exclusive Egg (OP)", false, function(Value)
+        Flags.AutoClaimExclusive = Value
+        local Remote = GetRemote("OnlineRewardService", "ClaimOnlineQuestReward", true)
         task.spawn(function()
-            while Flags.AutoHatch do
-                if Remote then pcall(function() Remote:FireServer(Flags.SelectedEgg, 1) end)
-                else Remote = GetRemote("EggHatchService", "Hatch", false) end
-                task.wait(0.25)
+            while Flags.AutoClaimExclusive do
+                if Remote then pcall(function() Remote:InvokeServer() end)
+                else Remote = GetRemote("OnlineRewardService", "ClaimOnlineQuestReward", true) end
+                task.wait(5)
             end
         end)
-   end,
-})
-
-TabEggs:CreateSection("Premium Rewards")
-if IsPremium then
-    TabEggs:CreateToggle({
-       Name = "Auto Claim Exclusive Egg (OP)",
-       CurrentValue = false,
-       Callback = function(Value)
-            Flags.AutoClaimExclusive = Value
-            local Remote = GetRemote("OnlineRewardService", "ClaimOnlineQuestReward", true)
-            task.spawn(function()
-                while Flags.AutoClaimExclusive do
-                    if Remote then pcall(function() Remote:InvokeServer() end)
-                    else Remote = GetRemote("OnlineRewardService", "ClaimOnlineQuestReward", true) end
-                    task.wait(5)
-                end
-            end)
-       end,
-    })
+    end)
 else
-    TabEggs:CreateButton({
-        Name = "🔒 Auto Exclusive Egg (PREMIUM)",
-        Callback = function() Rayfield:Notify({Title="Access Denied", Content="Premium Only", Duration=3}) end,
-    })
+    TabEggs:Button("🔒 Auto Exclusive Egg (PREMIUM)", function()
+        Library:Notify("Access Denied", "Premium Only", 3)
+    end)
 end
 
 -- =================================================================
 -- TAB: SHOP
 -- =================================================================
-local TabShop = Window:CreateTab("Shop")
+local TabShop = Window:Tab("Shop", "rbxassetid://3926305904")
 local VendingItems = { "WPN_101", "WPN_102", "Potion_DoubleWins", "Potion_SuperLucky", "KingSlime" }
 
-TabShop:CreateSection("Vending Machine")
-TabShop:CreateDropdown({
-    Name = "Item", Options = VendingItems, CurrentOption = {"WPN_101"},
-    Callback = function(O) Flags.VendingItem = O[1] end
-})
-TabShop:CreateToggle({
-   Name = "Auto Buy Item",
-   CurrentValue = false,
-   Callback = function(Value)
-       Flags.AutoBuy = Value
-       local Remote = GetRemote("PurchaseService", "PromptPurchase", false)
-       task.spawn(function()
-           while Flags.AutoBuy and task.wait(0.5) do
-               if Remote then pcall(function() Remote:Fire(Flags.VendingItem) end)
-               else Remote = GetRemote("PurchaseService", "PromptPurchase", false) end
-           end
-       end)
-   end,
-})
+TabShop:Section("Vending Machine")
 
-TabShop:CreateSection("Premium Crates")
+TabShop:Dropdown("Item", VendingItems, "WPN_101", function(val)
+    Flags.VendingItem = val
+end)
+
+TabShop:Toggle("Auto Buy Item", false, function(Value)
+    Flags.AutoBuy = Value
+    local Remote = GetRemote("PurchaseService", "PromptPurchase", false)
+    task.spawn(function()
+        while Flags.AutoBuy and task.wait(0.5) do
+            if Remote then pcall(function() Remote:Fire(Flags.VendingItem) end)
+            else Remote = GetRemote("PurchaseService", "PromptPurchase", false) end
+        end
+    end)
+end)
+
+TabShop:Section("Premium Crates")
 if IsPremium then
-    TabShop:CreateDropdown({
-        Name = "Select Crate", Options = {"Crate_1", "Crate_2"}, CurrentOption = {"Crate_1"},
-        Callback = function(O) Flags.SelectedCrate = O[1] end
-    })
-    TabShop:CreateToggle({
-       Name = "Auto Open Crate (OP)",
-       CurrentValue = false,
-       Callback = function(Value)
-           Flags.AutoCrate = Value
-           local Remote = GetRemote("ItemCrateService", "UnboxCrate", false)
-           task.spawn(function()
-               while Flags.AutoCrate and task.wait(0.5) do
-                   if Remote then pcall(function() Remote:FireServer(Flags.SelectedCrate) end)
-                   else Remote = GetRemote("ItemCrateService", "UnboxCrate", false) end
-               end
-           end)
-       end,
-    })
+    TabShop:Dropdown("Select Crate", {"Crate_1", "Crate_2"}, "Crate_1", function(val)
+        Flags.SelectedCrate = val
+    end)
+
+    TabShop:Toggle("Auto Open Crate (OP)", false, function(Value)
+        Flags.AutoCrate = Value
+        local Remote = GetRemote("ItemCrateService", "UnboxCrate", false)
+        task.spawn(function()
+            while Flags.AutoCrate and task.wait(0.5) do
+                if Remote then pcall(function() Remote:FireServer(Flags.SelectedCrate) end)
+                else Remote = GetRemote("ItemCrateService", "UnboxCrate", false) end
+            end
+        end)
+    end)
 else
-    TabShop:CreateButton({
-        Name = "🔒 Auto Open Crate (PREMIUM)",
-        Callback = function() Rayfield:Notify({Title="Access Denied", Content="Premium Only", Duration=3}) end,
-    })
+    TabShop:Button("🔒 Auto Open Crate (PREMIUM)", function()
+        Library:Notify("Access Denied", "Premium Only", 3)
+    end)
 end
 
 -- =================================================================
 -- TAB: MISC
 -- =================================================================
-local TabMisc = Window:CreateTab("Misc")
-TabMisc:CreateButton({
-    Name = "Anti-AFK (Low Render)",
-    Callback = function()
-        RunService:Set3dRenderingEnabled(false)
-        LocalPlayer.Idled:connect(function()
-            VirtualUser:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
-            wait(1)
-            VirtualUser:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
-        end)
-    end,
-})
-TabMisc:CreateButton({
-    Name = "Restore Rendering",
-    Callback = function() RunService:Set3dRenderingEnabled(true) end
-})
+local TabMisc = Window:Tab("Misc", "rbxassetid://3926305904")
 
-Rayfield:LoadConfiguration()
+TabMisc:Button("Anti-AFK (Low Render)", function()
+    RunService:Set3dRenderingEnabled(false)
+    LocalPlayer.Idled:connect(function()
+        VirtualUser:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+        wait(1)
+        VirtualUser:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+    end)
+    Library:Notify("Anti-AFK", "Enabled & Low Render Mode", 3)
+end)
+
+TabMisc:Button("Restore Rendering", function()
+    RunService:Set3dRenderingEnabled(true)
+    Library:Notify("Graphics", "Rendering Restored", 3)
+end)
+
+Library:Notify("SlenderHub", "Script Loaded Successfully", 5)
