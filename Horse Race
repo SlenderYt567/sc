@@ -1,46 +1,52 @@
+--!strict
 --[[
-    SlenderHub | V1 - Horse Race (Architect Edition)
-    UI Library: SlenderWind V6 (Cloud Hosted)
+    SlenderHub | V1 - Horse Race (Architect Edition V2)
+    UI Library: SlenderWind V7 (Updated)
     Access Level: Dynamic (Free/Premium)
 ]]
 
--- 1. SlenderHub Singleton Pattern
-if getgenv().SlenderHubLoaded then 
-    warn("SlenderHub V1 Already Running") 
+--// 1. SlenderHub Singleton Pattern
+if getgenv().SlenderHubGameLoaded then 
+    warn("SlenderHub Game Script Already Running") 
     return 
 end
-getgenv().SlenderHubLoaded = true
+getgenv().SlenderHubGameLoaded = true
 
--- 2. Check Access Level
+--// 2. Check Access Level
 local AccessLevel = getgenv().SlenderHubAccessLevel or "Free" 
 local IsPremium = (AccessLevel == "Premium")
 
--- 3. Load SlenderWind Library (GitHub)
+--// 3. Load SlenderWind Library
+-- Certifique-se que este link contém o código da V7 que te passei
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
 
--- 4. Services
+--// 4. Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualUser = game:GetService("VirtualUser")
-local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
 
--- 5. Remote Analysis (Knit Framework Hook)
+--// 5. Remote Analysis (Knit Framework Hook)
 local function GetRemote(ServiceName, RemoteName, IsFunction)
     local Remote = nil
-    pcall(function()
-        local Knit = ReplicatedStorage.Packages._Index["sleitnick_knit@1.5.1"].knit.Services
+    local success, err = pcall(function()
+        local Knit = ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.5.1"):WaitForChild("knit"):WaitForChild("Services")
         local Service = Knit:FindFirstChild(ServiceName)
         if Service then
             local Folder = Service:FindFirstChild(IsFunction and "RF" or "RE")
             if Folder then Remote = Folder:FindFirstChild(RemoteName) end
         end
     end)
+    if not Remote then 
+        -- Silent warn for debugging if needed
+        -- warn("Remote not found: " .. ServiceName .. "/" .. RemoteName) 
+    end
     return Remote
 end
 
--- 6. Control Variables
+--// 6. Control Variables
 local Flags = {
     AutoWin = false, AutoWinOP = false, AutoTrain = false, AutoHatch = false, AutoBuy = false, 
     AutoClaimExclusive = false, AutoCrate = false, SpeedHack = false, Noclip = false, InfJump = false,
@@ -50,21 +56,30 @@ local Flags = {
     WalkSpeedVal = 100
 }
 
--- 7. UI Construction
+--// 7. UI Construction (V7 Theme Integration)
+local SlenderTheme = {
+    MainBg = Color3.fromRGB(15, 15, 20),
+    Sidebar = Color3.fromRGB(20, 20, 25),
+    Accent = Color3.fromRGB(0, 255, 128), -- Slender Green
+    Text = Color3.fromRGB(240, 240, 240),
+    Stroke = Color3.fromRGB(40, 40, 45)
+}
+
 local HubTitle = "SlenderHub | Horse Race [" .. string.upper(AccessLevel) .. "]"
 
 local Window = Library.Window({
    Name = HubTitle,
    Keybind = Enum.KeyCode.RightControl,
-   KeySystem = false -- Defina como true se quiser ativar a Key no futuro
+   KeySystem = false,
+   Theme = SlenderTheme -- V7 Feature
 })
 
 -- Ativar HUD
 Window:Watermark({ Enabled = true, Title = HubTitle })
 
--- =================================================================
--- TAB: PREMIUM OP (ONLY VISIBLE/ACTIVE FOR PREMIUM)
--- =================================================================
+--// =================================================================
+--// TAB: PREMIUM OP (ONLY VISIBLE/ACTIVE FOR PREMIUM)
+--// =================================================================
 if IsPremium then
     local TabOP = Window:Tab("Premium OP", "rbxassetid://3926305904")
     
@@ -140,13 +155,13 @@ else
     -- Placeholder for Free Users
     local TabOP = Window:Tab("Premium 🔒", "rbxassetid://3926305904")
     TabOP:Button("🔒 Unlock OP Features", function()
-        Library:Notify("Premium Required", "Get a key at SlenderHub.shop", 3)
+        Window:Notify("Premium Required", "Get a key at SlenderHub.shop", 3)
     end)
 end
 
--- =================================================================
--- TAB: FARM (NORMAL)
--- =================================================================
+--// =================================================================
+--// TAB: FARM (NORMAL)
+--// =================================================================
 local TabFarm = Window:Tab("Farm", "rbxassetid://3926305904")
 
 TabFarm:Section("Legit Farm")
@@ -188,9 +203,9 @@ TabFarm:Toggle("Ativar Treino (Auto Train)", false, function(Value)
     end)
 end)
 
--- =================================================================
--- TAB: TELEPORT
--- =================================================================
+--// =================================================================
+--// TAB: TELEPORT
+--// =================================================================
 local TabTP = Window:Tab("Teleport", "rbxassetid://3926305904")
 local Areas = { "Area_1", "Area_2", "Area_3", "Area_4", "Area_5", "Area_Christmas", "Area_Fruit" }
 
@@ -214,15 +229,15 @@ TabTP:Button("Teleportar Agora", function()
             if TargetObj then
                 local TargetCFrame = TargetObj:IsA("Model") and TargetObj:GetPivot() or TargetObj.CFrame
                 Root.CFrame = TargetCFrame + Vector3.new(0, 5, 0)
-                Library:Notify("Teleport", "Teleportado para: " .. TargetArea, 2)
+                Window:Notify("Teleport", "Teleportado para: " .. TargetArea, 2)
             end
         end
     end)
 end)
 
--- =================================================================
--- TAB: EGGS
--- =================================================================
+--// =================================================================
+--// TAB: EGGS
+--// =================================================================
 local TabEggs = Window:Tab("Eggs", "rbxassetid://3926305904")
 local EggIDs = { "Egg_1_1", "Egg_1_2", "Egg_1_3", "Egg_1_4", "Egg_2_1", "Egg_2_2", "Egg_2_3", "Egg_2_4", "Egg_3_1", "Egg_3_2", "Egg_3_3", "Egg_3_4", "Egg_4_1", "Egg_4_2", "Egg_4_3", "Egg_Tower_1", "Egg_Christmas" }
 
@@ -257,13 +272,13 @@ if IsPremium then
     end)
 else
     TabEggs:Button("🔒 Auto Exclusive Egg (PREMIUM)", function()
-        Library:Notify("Access Denied", "Premium Only", 3)
+        Window:Notify("Access Denied", "Premium Only", 3)
     end)
 end
 
--- =================================================================
--- TAB: SHOP
--- =================================================================
+--// =================================================================
+--// TAB: SHOP
+--// =================================================================
 local TabShop = Window:Tab("Shop", "rbxassetid://3926305904")
 local VendingItems = { "WPN_101", "WPN_102", "Potion_DoubleWins", "Potion_SuperLucky", "KingSlime" }
 
@@ -302,13 +317,13 @@ if IsPremium then
     end)
 else
     TabShop:Button("🔒 Auto Open Crate (PREMIUM)", function()
-        Library:Notify("Access Denied", "Premium Only", 3)
+        Window:Notify("Access Denied", "Premium Only", 3)
     end)
 end
 
--- =================================================================
--- TAB: MISC
--- =================================================================
+--// =================================================================
+--// TAB: MISC
+--// =================================================================
 local TabMisc = Window:Tab("Misc", "rbxassetid://3926305904")
 
 TabMisc:Button("Anti-AFK (Low Render)", function()
@@ -318,12 +333,12 @@ TabMisc:Button("Anti-AFK (Low Render)", function()
         wait(1)
         VirtualUser:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
     end)
-    Library:Notify("Anti-AFK", "Enabled & Low Render Mode", 3)
+    Window:Notify("Anti-AFK", "Enabled & Low Render Mode", 3)
 end)
 
 TabMisc:Button("Restore Rendering", function()
     RunService:Set3dRenderingEnabled(true)
-    Library:Notify("Graphics", "Rendering Restored", 3)
+    Window:Notify("Graphics", "Rendering Restored", 3)
 end)
 
-Library:Notify("SlenderHub", "Script Loaded Successfully", 5)
+Window:Notify("SlenderHub", "Script Loaded Successfully", 5)
