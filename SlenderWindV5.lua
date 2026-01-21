@@ -1,13 +1,13 @@
 --[[ 
     SlenderWind UI - Library Source
-    Version: V6.0 [Ultimate Architect Edition]
+    Version: V7.0 [Ultimate Architect Edition]
     Architect: SlenderHub Lead
     
-    Features:
-    - Secure Gateway (Key System)
-    - Dynamic HUD (FPS/Ping/Time)
-    - Search Engine
-    - Components: Button, Toggle, Slider, Dropdown, Keybind, Input, Paragraph, Label
+    Changelog V7:
+    + Added ColorPicker Component (RGB + Rainbow)
+    + Added Dynamic Theme Support (Custom Colors)
+    + Optimized Tweening
+    + Improved Dropdown Logic
 ]]
 
 local SlenderWind = {}
@@ -38,7 +38,7 @@ local function MakeDraggable(topbar, object)
     local function Update(input)
         local Delta = input.Position - DragStart
         local Target = UDim2.new(StartPos.X.Scale, StartPos.X.Offset + Delta.X, StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y)
-        TweenService:Create(object, TweenInfo.new(0.15), {Position = Target}):Play()
+        TweenService:Create(object, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = Target}):Play()
     end
     topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -66,9 +66,9 @@ function SlenderWind.Window(config)
     Self.Keybind = config.Keybind or Enum.KeyCode.RightControl
     Self.KeySystem = config.KeySystem or false
     Self.KeySettings = config.KeySettings or {} 
-
-    -- Theme Colors
-    local Colors = {
+    
+    -- Dynamic Theme System
+    local DefaultTheme = {
         MainBg = Color3.fromRGB(18, 18, 22),
         Sidebar = Color3.fromRGB(23, 23, 27),
         Content = Color3.fromRGB(18, 18, 22),
@@ -81,6 +81,9 @@ function SlenderWind.Window(config)
         Hover = Color3.fromRGB(40, 40, 46),
         Error = Color3.fromRGB(255, 85, 85)
     }
+
+    Self.Theme = setmetatable(config.Theme or {}, {__index = DefaultTheme})
+    local Colors = Self.Theme
 
     -- GUI Setup
     local ParentTarget = (RunService:IsStudio() and Players.LocalPlayer.PlayerGui or CoreGui)
@@ -98,7 +101,7 @@ function SlenderWind.Window(config)
     })
     Create("UIListLayout", {Parent = NotifyContainer, SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Bottom, Padding = UDim.new(0, 5)})
 
-    -- Main Container (Hidden initially if KeySystem is on)
+    -- Main Container
     local Main = Create("Frame", {
         Name = "Main", Parent = ScreenGui, BackgroundColor3 = Colors.MainBg,
         Position = UDim2.new(0.5, -325, 0.5, -210), Size = UDim2.new(0, 650, 0, 420),
@@ -153,20 +156,15 @@ function SlenderWind.Window(config)
         Create("UICorner", {Parent = LinkBtn, CornerRadius = UDim.new(0, 6)})
         Create("UIStroke", {Parent = LinkBtn, Color = Colors.Stroke, Thickness = 1})
 
-        -- Key Logic
         CheckBtn.MouseButton1Click:Connect(function()
             if KeyInput.Text == Self.KeySettings.Key then
-                -- Success
                 TweenService:Create(KeyFrame, TweenInfo.new(0.5), {Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1}):Play()
                 task.wait(0.5)
                 KeyFrame:Destroy()
                 Main.Visible = true
                 TweenService:Create(Main, TweenInfo.new(0.5), {BackgroundTransparency = 0}):Play()
-                
-                -- Notify
                 Self:Notify("Access Granted", "Welcome to SlenderHub.", 3)
             else
-                -- Fail
                 TweenService:Create(KeyInput.UIStroke, TweenInfo.new(0.1), {Color = Colors.Error}):Play()
                 KeyInput.Text = "Invalid Key"
                 task.wait(1)
@@ -181,8 +179,6 @@ function SlenderWind.Window(config)
                 LinkBtn.Text = "Copied!"
                 task.wait(1)
                 LinkBtn.Text = "Get Key"
-            else
-                Self:Notify("Error", "Your executor does not support setclipboard", 3)
             end
         end)
     end
@@ -206,13 +202,11 @@ function SlenderWind.Window(config)
             Size = UDim2.new(1, 0, 1, 0)
         })
 
-        -- Update Loop
         task.spawn(function()
             while HudFrame.Parent do
                 local FPS = math.floor(workspace:GetRealPhysicsFPS())
                 local Ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
                 local Time = os.date("%H:%M:%S")
-                
                 HudText.Text = string.format("%s | FPS: %d | Ping: %dms | %s", settings.Title or "SlenderHub", FPS, Ping, Time)
                 task.wait(1)
             end
@@ -220,8 +214,6 @@ function SlenderWind.Window(config)
     end
 
     --// MAIN UI CONSTRUCTION //--
-    
-    -- Sidebar (Left)
     local Sidebar = Create("Frame", {
         Parent = Main, BackgroundColor3 = Colors.Sidebar,
         Size = UDim2.new(0, 190, 1, 0), BorderSizePixel = 0
@@ -229,13 +221,11 @@ function SlenderWind.Window(config)
     Create("UICorner", {Parent = Sidebar, CornerRadius = UDim.new(0, 10)})
     Create("Frame", {Parent = Sidebar, BackgroundColor3 = Colors.Sidebar, Size = UDim2.new(0, 10, 1, 0), Position = UDim2.new(1, -10, 0, 0), BorderSizePixel = 0})
 
-    -- Vertical Separator Line
     local Separator = Create("Frame", {
         Parent = Main, BackgroundColor3 = Colors.Separator,
         Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(0, 190, 0, 0), BorderSizePixel = 0, ZIndex = 5
     })
 
-    -- Controls
     local Controls = Create("Frame", {Parent = Sidebar, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 50)})
     local CloseBtn = Create("TextButton", {Parent = Controls, Text = "", BackgroundColor3 = Color3.fromRGB(255, 95, 87), Position = UDim2.new(0, 15, 0, 18), Size = UDim2.new(0, 12, 0, 12), AutoButtonColor = false})
     Create("UICorner", {Parent = CloseBtn, CornerRadius = UDim.new(1, 0)})
@@ -244,7 +234,6 @@ function SlenderWind.Window(config)
     local MaxBtn = Create("Frame", {Parent = Controls, BackgroundColor3 = Color3.fromRGB(39, 201, 63), Position = UDim2.new(0, 55, 0, 18), Size = UDim2.new(0, 12, 0, 12)})
     Create("UICorner", {Parent = MaxBtn, CornerRadius = UDim.new(1, 0)})
 
-    -- Title
     Create("TextLabel", {
         Parent = Controls, Text = Self.Name, TextColor3 = Colors.Text,
         Font = Enum.Font.GothamBold, TextSize = 14, BackgroundTransparency = 1,
@@ -252,7 +241,6 @@ function SlenderWind.Window(config)
         TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd
     })
 
-    -- Search Bar
     local SearchFrame = Create("Frame", {
         Parent = Sidebar, BackgroundColor3 = Colors.MainBg,
         Position = UDim2.new(0, 12, 0, 55), Size = UDim2.new(1, -24, 0, 30)
@@ -268,7 +256,6 @@ function SlenderWind.Window(config)
         ClearTextOnFocus = false
     })
 
-    -- Tab Container
     local TabHolder = Create("ScrollingFrame", {
         Parent = Sidebar, BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 95), Size = UDim2.new(1, 0, 1, -100),
         ScrollBarThickness = 0, CanvasSize = UDim2.new(0,0,0,0)
@@ -276,13 +263,11 @@ function SlenderWind.Window(config)
     Create("UIListLayout", {Parent = TabHolder, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 5)})
     Create("UIPadding", {Parent = TabHolder, PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)})
 
-    -- Content Area
     local ContentArea = Create("Frame", {
         Parent = Main, BackgroundTransparency = 1,
         Position = UDim2.new(0, 205, 0, 15), Size = UDim2.new(1, -220, 1, -30)
     })
 
-    -- Mobile/Minimize Icon
     local OpenBtn = Create("TextButton", {
         Parent = ScreenGui, Text = "SH", TextColor3 = Colors.Accent, BackgroundColor3 = Colors.Sidebar,
         Size = UDim2.new(0, 45, 0, 45), Position = UDim2.new(0, 20, 0.5, 0),
@@ -292,7 +277,6 @@ function SlenderWind.Window(config)
     Create("UIStroke", {Parent = OpenBtn, Color = Colors.Stroke, Thickness = 2})
     MakeDraggable(OpenBtn, OpenBtn)
 
-    -- Logic
     MakeDraggable(Sidebar, Main)
 
     local function ToggleUI()
@@ -308,7 +292,6 @@ function SlenderWind.Window(config)
         if not gp and input.KeyCode == Self.Keybind then ToggleUI() end
     end)
 
-    -- Notification Function
     function Self:Notify(title, text, duration)
         local Notif = Create("Frame", {
             Parent = NotifyContainer, BackgroundColor3 = Colors.Sidebar,
@@ -344,7 +327,6 @@ function SlenderWind.Window(config)
         end)
     end
 
-    -- Tab System
     local Tabs = {}
     local CurrentTab = nil
 
@@ -652,8 +634,6 @@ function SlenderWind.Window(config)
             end)
         end
 
-        --// NEW COMPONENTS (V6) //--
-
         function TabObj:Input(title, placeholder, callback)
             local InputFrame = Create("Frame", {
                 Parent = Page, BackgroundColor3 = Colors.Element,
@@ -687,6 +667,89 @@ function SlenderWind.Window(config)
                 TweenService:Create(InputFrame.UIStroke, TweenInfo.new(0.2), {Color = Colors.Accent}):Play()
                 task.wait(0.2)
                 TweenService:Create(InputFrame.UIStroke, TweenInfo.new(0.5), {Color = Colors.Stroke}):Play()
+            end)
+        end
+
+        --// NEW COMPONENT: COLOR PICKER (V7) //--
+        function TabObj:ColorPicker(title, default, callback)
+            local ColorVal = default or Color3.fromRGB(255, 255, 255)
+            local PickerOpen = false
+            local RainbowMode = false
+            
+            local PickerFrame = Create("Frame", {
+                Parent = Page, BackgroundColor3 = Colors.Element,
+                Size = UDim2.new(1, 0, 0, 36), ClipsDescendants = true
+            })
+            Create("UICorner", {Parent = PickerFrame, CornerRadius = UDim.new(0, 6)})
+            Create("UIStroke", {Parent = PickerFrame, Color = Colors.Stroke, Thickness = 1})
+
+            Create("TextLabel", {
+                Name = "Title", Parent = PickerFrame, Text = title, TextColor3 = Colors.Text, Font = Enum.Font.GothamMedium,
+                TextSize = 13, BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 0), Size = UDim2.new(1, -12, 0, 36), TextXAlignment = Enum.TextXAlignment.Left
+            })
+
+            local Preview = Create("TextButton", {
+                Parent = PickerFrame, Text = "", BackgroundColor3 = ColorVal,
+                Position = UDim2.new(1, -45, 0, 8), Size = UDim2.new(0, 35, 0, 20), AutoButtonColor = false
+            })
+            Create("UICorner", {Parent = Preview, CornerRadius = UDim.new(0, 4)})
+            Create("UIStroke", {Parent = Preview, Color = Colors.Stroke, Thickness = 1})
+
+            -- Expanded Area
+            local SettingsFrame = Create("Frame", {
+                Parent = PickerFrame, BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 36), Size = UDim2.new(1, 0, 0, 65)
+            })
+            
+            local function CreateRGBInput(name, pos, getVal, setVal)
+                local Box = Create("TextBox", {
+                    Parent = SettingsFrame, Text = tostring(getVal()), PlaceholderText = name,
+                    BackgroundColor3 = Color3.fromRGB(40, 40, 45), TextColor3 = Colors.SubText,
+                    Font = Enum.Font.Gotham, TextSize = 12, Position = pos, Size = UDim2.new(0, 40, 0, 25)
+                })
+                Create("UICorner", {Parent = Box, CornerRadius = UDim.new(0, 4)})
+                Box.FocusLost:Connect(function()
+                    local num = tonumber(Box.Text)
+                    if num then setVal(math.clamp(num, 0, 255)) end
+                    Box.Text = tostring(getVal())
+                    Preview.BackgroundColor3 = ColorVal
+                    pcall(callback, ColorVal)
+                end)
+                return Box
+            end
+
+            local RBox = CreateRGBInput("R", UDim2.new(0, 12, 0, 5), function() return math.floor(ColorVal.R*255) end, function(v) ColorVal = Color3.fromRGB(v, ColorVal.G*255, ColorVal.B*255) end)
+            local GBox = CreateRGBInput("G", UDim2.new(0, 60, 0, 5), function() return math.floor(ColorVal.G*255) end, function(v) ColorVal = Color3.fromRGB(ColorVal.R*255, v, ColorVal.B*255) end)
+            local BBox = CreateRGBInput("B", UDim2.new(0, 108, 0, 5), function() return math.floor(ColorVal.B*255) end, function(v) ColorVal = Color3.fromRGB(ColorVal.R*255, ColorVal.G*255, v) end)
+
+            local RainbowBtn = Create("TextButton", {
+                Parent = SettingsFrame, Text = "Rainbow", BackgroundColor3 = Color3.fromRGB(40, 40, 45),
+                TextColor3 = Colors.SubText, Font = Enum.Font.Gotham, TextSize = 11,
+                Position = UDim2.new(1, -70, 0, 5), Size = UDim2.new(0, 60, 0, 25)
+            })
+            Create("UICorner", {Parent = RainbowBtn, CornerRadius = UDim.new(0, 4)})
+
+            RainbowBtn.MouseButton1Click:Connect(function()
+                RainbowMode = not RainbowMode
+                RainbowBtn.TextColor3 = RainbowMode and Colors.Accent or Colors.SubText
+                if RainbowMode then
+                    task.spawn(function()
+                        while RainbowMode and PickerFrame.Parent do
+                            local hue = tick() % 5 / 5
+                            ColorVal = Color3.fromHSV(hue, 1, 1)
+                            Preview.BackgroundColor3 = ColorVal
+                            RBox.Text = math.floor(ColorVal.R*255)
+                            GBox.Text = math.floor(ColorVal.G*255)
+                            BBox.Text = math.floor(ColorVal.B*255)
+                            pcall(callback, ColorVal)
+                            task.wait()
+                        end
+                    end)
+                end
+            end)
+
+            Preview.MouseButton1Click:Connect(function()
+                PickerOpen = not PickerOpen
+                TweenService:Create(PickerFrame, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, PickerOpen and 80 or 36)}):Play()
             end)
         end
 
