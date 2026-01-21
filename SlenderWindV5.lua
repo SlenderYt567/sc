@@ -1,12 +1,14 @@
 --[[ 
     SlenderWind UI - Library Source
-    Version: V7.1 [Refresh Update]
+    Version: V8.0 [Ultimate Architect Edition]
     Architect: SlenderHub Lead
     
-    Changelog V7.1:
-    + Added :Refresh(options, default) to Dropdown
-    + Added :Set(value) to Dropdown
-    + Fixed Dropdown ZIndex/Layout issues
+    Features:
+    + Dynamic Theme System
+    + Advanced Dropdown (Refresh/Set)
+    + Advanced Input (Set)
+    + ColorPicker (RGB/Rainbow)
+    + Optimized Animations
 ]]
 
 local SlenderWind = {}
@@ -17,7 +19,7 @@ local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local Stats = game:GetService("Stats")
 
---// SlenderHub Standards: Singleton Check
+--// Singleton Check
 if getgenv().SlenderWindLoaded then
     -- Optional: Warn user
 end
@@ -531,7 +533,7 @@ function SlenderWind.Window(config)
             end)
         end
 
-        --// UPDATED DROPDOWN (V7.1) //--
+        --// DROPDOWN (V8.0 - Refresh/Set API) //--
         function TabObj:Dropdown(text, options, default, callback)
             local DropdownOpen = false
             local Selected = default or options[1]
@@ -605,7 +607,6 @@ function SlenderWind.Window(config)
                 Selected = newDefault or newOptions[1]
                 SelectedLabel.Text = tostring(Selected)
                 
-                -- If open, update size immediately
                 if DropdownOpen then
                     BuildList(CurrentOptions)
                     local ListSize = (#CurrentOptions * 30)
@@ -662,6 +663,7 @@ function SlenderWind.Window(config)
             end)
         end
 
+        --// INPUT (V8.0 - Set API) //--
         function TabObj:Input(title, placeholder, callback)
             local InputFrame = Create("Frame", {
                 Parent = Page, BackgroundColor3 = Colors.Element,
@@ -696,8 +698,17 @@ function SlenderWind.Window(config)
                 task.wait(0.2)
                 TweenService:Create(InputFrame.UIStroke, TweenInfo.new(0.5), {Color = Colors.Stroke}):Play()
             end)
+
+            -- API Return
+            return {
+                Set = function(self, text)
+                    InputBox.Text = text
+                    pcall(callback, text)
+                end
+            }
         end
 
+        --// COLOR PICKER (V8.0) //--
         function TabObj:ColorPicker(title, default, callback)
             local ColorVal = default or Color3.fromRGB(255, 255, 255)
             local PickerOpen = false
