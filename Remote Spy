@@ -1,415 +1,466 @@
--- // ============================================================
--- // SlenderHub V2.1 | Internal Remote Spy (Obsidian Edition)
--- // Architecture: SlenderWind V10 Native
--- // Dev: SlenderHub Chief Architect
--- // ============================================================
+-- // SlenderHub V1.5.3 | Architecture: Singleton Pattern
+-- // Patched by SlenderHub Architect (Path Generator Fix + UI Stability)
+-- // SlenderHub V2.1 | Architecture: Hybrid Hook + Visualizer
+-- // Features: Code Preview for Obfuscated Games
 
--- [[ 1. SLENDERWIND V10 LIBRARY LOADER ]] --
-local SlenderWind = (function()
-    -- Cole a Library V10 aqui ou use este loader encapsulado
-    -- (Estou usando o código que você forneceu encapsulado para não poluir)
-    
-    local SlenderWind = {}
-    local TweenService = game:GetService("TweenService")
-    local UserInputService = game:GetService("UserInputService")
-    local RunService = game:GetService("RunService")
-    local Players = game:GetService("Players")
-    local CoreGui = game:GetService("CoreGui")
-    local Stats = game:GetService("Stats")
-    local HttpService = game:GetService("HttpService")
-    local TextService = game:GetService("TextService")
-
-    if getgenv().SlenderWindLoaded then end
-    getgenv().SlenderWindLoaded = true
-
-    local function Create(class, props)
-        local inst = Instance.new(class)
-        for k, v in pairs(props) do inst[k] = v end
-        return inst
-    end
-
-    local function MakeDraggable(topbar, object)
-        local Dragging, DragInput, DragStart, StartPos
-        local function Update(input)
-            local Delta = input.Position - DragStart
-            local Target = UDim2.new(StartPos.X.Scale, StartPos.X.Offset + Delta.X, StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y)
-            TweenService:Create(object, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = Target}):Play()
-        end
-        topbar.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                Dragging = true; DragStart = input.Position; StartPos = object.Position
-                input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then Dragging = false end end)
-            end
-        end)
-        topbar.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then DragInput = input end
-        end)
-        UserInputService.InputChanged:Connect(function(input) if input == DragInput and Dragging then Update(input) end end)
-    end
-
-    function SlenderWind.Window(config)
-        local Self = {}
-        Self.Config = config or {}
-        Self.Name = config.Name or "Slender Hub"
-        Self.Keybind = config.Keybind or Enum.KeyCode.RightControl
-        Self.KeySystem = config.KeySystem or false
-        Self.Flags = {}; Self.Elements = {}
-        
-        local DefaultTheme = {
-            MainBg = Color3.fromRGB(18, 18, 22), Sidebar = Color3.fromRGB(23, 23, 27),
-            Content = Color3.fromRGB(18, 18, 22), Element = Color3.fromRGB(30, 30, 36),
-            Text = Color3.fromRGB(240, 240, 240), SubText = Color3.fromRGB(160, 160, 160),
-            Accent = Color3.fromRGB(60, 130, 250), Stroke = Color3.fromRGB(45, 45, 50),
-            Separator = Color3.fromRGB(35, 35, 40), Hover = Color3.fromRGB(40, 40, 46),
-            Success = Color3.fromRGB(60, 250, 100), Warning = Color3.fromRGB(250, 180, 60), Error = Color3.fromRGB(255, 85, 85)
-        }
-        Self.Theme = setmetatable(config.Theme or {}, {__index = DefaultTheme})
-        local Colors = Self.Theme
-
-        local ParentTarget = (RunService:IsStudio() and Players.LocalPlayer.PlayerGui or CoreGui)
-        if ParentTarget:FindFirstChild("SlenderWind") then ParentTarget.SlenderWind:Destroy() end
-        local ScreenGui = Create("ScreenGui", {Name = "SlenderWind", Parent = ParentTarget, ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling})
-
-        -- Tooltip
-        local TooltipLabel = Create("TextLabel", {Parent = ScreenGui, BackgroundColor3 = Colors.Sidebar, TextColor3 = Colors.Text, Font = Enum.Font.Gotham, TextSize = 12, Size = UDim2.new(0, 0, 0, 20), Visible = false, ZIndex = 200})
-        Create("UICorner", {Parent = TooltipLabel, CornerRadius = UDim.new(0, 4)}); Create("UIStroke", {Parent = TooltipLabel, Color = Colors.Stroke, Thickness = 1})
-        local function AddTooltip(element, text)
-            if not text then return end
-            element.MouseEnter:Connect(function() TooltipLabel.Visible = true; TooltipLabel.Text = text; TooltipLabel.Size = UDim2.new(0, TextService:GetTextSize(text, 12, Enum.Font.Gotham, Vector2.new(1000, 20)).X + 10, 0, 24) end)
-            element.MouseLeave:Connect(function() TooltipLabel.Visible = false end)
-            element.MouseMoved:Connect(function() TooltipLabel.Position = UDim2.new(0, UserInputService:GetMouseLocation().X + 15, 0, UserInputService:GetMouseLocation().Y + 15) end)
-        end
-
-        local NotifyContainer = Create("Frame", {Parent = ScreenGui, BackgroundTransparency = 1, Position = UDim2.new(1, -320, 1, -20), Size = UDim2.new(0, 300, 1, 0), AnchorPoint = Vector2.new(0, 1)})
-        Create("UIListLayout", {Parent = NotifyContainer, SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Bottom, Padding = UDim.new(0, 5)})
-
-        local Main = Create("Frame", {Name = "Main", Parent = ScreenGui, BackgroundColor3 = Colors.MainBg, BackgroundTransparency = 0.05, Position = UDim2.new(0.5, -325, 0.5, -210), Size = UDim2.new(0, 650, 0, 420), ClipsDescendants = true, Visible = true})
-        Create("UICorner", {Parent = Main, CornerRadius = UDim.new(0, 10)}); Create("UIStroke", {Parent = Main, Color = Colors.Stroke, Thickness = 1})
-
-        -- Sidebar & Structure
-        local Sidebar = Create("Frame", {Parent = Main, BackgroundColor3 = Colors.Sidebar, Size = UDim2.new(0, 190, 1, 0)}); Create("UICorner", {Parent = Sidebar, CornerRadius = UDim.new(0, 10)})
-        Create("Frame", {Parent = Sidebar, BackgroundColor3 = Colors.Sidebar, Size = UDim2.new(0, 10, 1, 0), Position = UDim2.new(1, -10, 0, 0), BorderSizePixel = 0})
-        Create("Frame", {Parent = Main, BackgroundColor3 = Colors.Separator, Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(0, 190, 0, 0), BorderSizePixel = 0, ZIndex = 5})
-        
-        local Controls = Create("Frame", {Parent = Sidebar, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 50)})
-        Create("TextLabel", {Parent = Controls, Text = Self.Name, TextColor3 = Colors.Text, Font = Enum.Font.GothamBold, TextSize = 14, BackgroundTransparency = 1, Position = UDim2.new(0, 20, 0, 0), Size = UDim2.new(1, -20, 1, 0), TextXAlignment = Enum.TextXAlignment.Left})
-        
-        local TabHolder = Create("ScrollingFrame", {Parent = Sidebar, BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 60), Size = UDim2.new(1, 0, 1, -70), ScrollBarThickness = 0, CanvasSize = UDim2.new(0,0,0,0)})
-        Create("UIListLayout", {Parent = TabHolder, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 5)}); Create("UIPadding", {Parent = TabHolder, PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)})
-        local ContentArea = Create("Frame", {Parent = Main, BackgroundTransparency = 1, Position = UDim2.new(0, 205, 0, 15), Size = UDim2.new(1, -220, 1, -30)})
-        
-        MakeDraggable(Sidebar, Main)
-        
-        function Self:Notify(title, text, duration, type)
-            local TypeColor = (type == "Success" and Colors.Success) or (type == "Error" and Colors.Error) or Colors.Accent
-            local Notif = Create("Frame", {Parent = NotifyContainer, BackgroundColor3 = Colors.Sidebar, Size = UDim2.new(1, 0, 0, 60), BackgroundTransparency = 0.1})
-            Create("UICorner", {Parent = Notif, CornerRadius = UDim.new(0, 8)}); Create("UIStroke", {Parent = Notif, Color = TypeColor, Thickness = 1})
-            Create("TextLabel", {Parent = Notif, Text = title, TextColor3 = TypeColor, Font = Enum.Font.GothamBold, TextSize = 14, Position = UDim2.new(0, 10, 0, 8), Size = UDim2.new(1, -20, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, BackgroundTransparency = 1})
-            Create("TextLabel", {Parent = Notif, Text = text, TextColor3 = Colors.Text, Font = Enum.Font.Gotham, TextSize = 12, Position = UDim2.new(0, 10, 0, 28), Size = UDim2.new(1, -20, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, BackgroundTransparency = 1})
-            task.delay(duration or 3, function() Notif:Destroy() end)
-        end
-
-        local Tabs = {}
-        function Self:Tab(name, iconId)
-            local TabObj = {}
-            local TabBtn = Create("TextButton", {Parent = TabHolder, Text = "", BackgroundColor3 = Colors.Sidebar, Size = UDim2.new(1, 0, 0, 34), AutoButtonColor = false}); Create("UICorner", {Parent = TabBtn, CornerRadius = UDim.new(0, 6)})
-            local TabLabel = Create("TextLabel", {Parent = TabBtn, Text = name, TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 13, BackgroundTransparency = 1, Position = UDim2.new(0, 10, 0, 0), Size = UDim2.new(1, -10, 1, 0), TextXAlignment = Enum.TextXAlignment.Left})
-            local Page = Create("ScrollingFrame", {Parent = ContentArea, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), ScrollBarThickness = 3, Visible = false, CanvasSize = UDim2.new(0, 0, 0, 0)}); Create("UIListLayout", {Parent = Page, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8)})
-            
-            Page.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() Page.CanvasSize = UDim2.new(0, 0, 0, Page.UIListLayout.AbsoluteContentSize.Y + 10) end)
-            
-            TabBtn.MouseButton1Click:Connect(function()
-                for _, t in pairs(Tabs) do t.Btn.BackgroundColor3 = Colors.Sidebar; t.Txt.TextColor3 = Colors.SubText; t.Page.Visible = false end
-                TabBtn.BackgroundColor3 = Colors.Hover; TabLabel.TextColor3 = Colors.Text; Page.Visible = true
-            end)
-            if #Tabs == 0 then TabBtn.BackgroundColor3 = Colors.Hover; TabLabel.TextColor3 = Colors.Text; Page.Visible = true end
-            table.insert(Tabs, {Btn = TabBtn, Txt = TabLabel, Page = Page})
-
-            function TabObj:Section(text) Create("TextLabel", {Parent = Page, Text = text, TextColor3 = Colors.SubText, Font = Enum.Font.GothamBold, TextSize = 11, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 25), TextXAlignment = Enum.TextXAlignment.Left}) end
-            
-            function TabObj:Button(text, tooltip, callback)
-                local cb = callback or tooltip; if type(tooltip) == "function" then tooltip = nil end
-                local Btn = Create("TextButton", {Parent = Page, Text = "", BackgroundColor3 = Colors.Element, Size = UDim2.new(1, 0, 0, 36), AutoButtonColor = false}); Create("UICorner", {Parent = Btn, CornerRadius = UDim.new(0, 6)}); Create("UIStroke", {Parent = Btn, Color = Colors.Stroke, Thickness = 1})
-                Create("TextLabel", {Parent = Btn, Text = text, TextColor3 = Colors.Text, Font = Enum.Font.GothamMedium, TextSize = 13, BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 0), Size = UDim2.new(1, -12, 1, 0), TextXAlignment = Enum.TextXAlignment.Left})
-                AddTooltip(Btn, tooltip)
-                Btn.MouseButton1Click:Connect(function() pcall(cb) end)
-            end
-
-            function TabObj:Toggle(text, default, flag, tooltip, callback)
-                local cb = callback or tooltip; if type(tooltip) == "function" then tooltip = nil end
-                local Enabled = default or false
-                local Tog = Create("TextButton", {Parent = Page, Text = "", BackgroundColor3 = Colors.Element, Size = UDim2.new(1, 0, 0, 36), AutoButtonColor = false}); Create("UICorner", {Parent = Tog, CornerRadius = UDim.new(0, 6)}); Create("UIStroke", {Parent = Tog, Color = Colors.Stroke, Thickness = 1})
-                Create("TextLabel", {Parent = Tog, Text = text, TextColor3 = Colors.Text, Font = Enum.Font.GothamMedium, TextSize = 13, BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 0), Size = UDim2.new(1, -60, 1, 0), TextXAlignment = Enum.TextXAlignment.Left})
-                local Switch = Create("Frame", {Parent = Tog, BackgroundColor3 = (Enabled and Colors.Accent) or Color3.fromRGB(50, 50, 55), Size = UDim2.new(0, 36, 0, 20), Position = UDim2.new(1, -46, 0.5, -10)}); Create("UICorner", {Parent = Switch, CornerRadius = UDim.new(1, 0)})
-                local Knob = Create("Frame", {Parent = Switch, BackgroundColor3 = Color3.fromRGB(255, 255, 255), Size = UDim2.new(0, 16, 0, 16), Position = UDim2.new(0, (Enabled and 18) or 2, 0.5, -8)}); Create("UICorner", {Parent = Knob, CornerRadius = UDim.new(1, 0)})
-                AddTooltip(Tog, tooltip)
-                local function Update(val) Enabled = val; TweenService:Create(Knob, TweenInfo.new(0.2), {Position = UDim2.new(0, (Enabled and 18) or 2, 0.5, -8)}):Play(); TweenService:Create(Switch, TweenInfo.new(0.2), {BackgroundColor3 = (Enabled and Colors.Accent) or Color3.fromRGB(50, 50, 55)}):Play(); pcall(cb, Enabled) end
-                Tog.MouseButton1Click:Connect(function() Update(not Enabled) end)
-            end
-
-            function TabObj:Dropdown(text, options, default, flag, tooltip, callback)
-                local cb = callback or tooltip; if type(tooltip) == "function" then tooltip = nil end
-                local Selected = default or options[1]; local Open = false; local CurrentOpts = options
-                local Frame = Create("Frame", {Parent = Page, BackgroundColor3 = Colors.Element, Size = UDim2.new(1, 0, 0, 36), ClipsDescendants = true}); Create("UICorner", {Parent = Frame, CornerRadius = UDim.new(0, 6)}); Create("UIStroke", {Parent = Frame, Color = Colors.Stroke, Thickness = 1})
-                local Btn = Create("TextButton", {Parent = Frame, Text = "", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 36)})
-                Create("TextLabel", {Parent = Frame, Text = text, TextColor3 = Colors.Text, Font = Enum.Font.GothamMedium, TextSize = 13, BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 0), Size = UDim2.new(1, -12, 0, 36), TextXAlignment = Enum.TextXAlignment.Left})
-                local ValLbl = Create("TextLabel", {Parent = Frame, Text = Selected, TextColor3 = Colors.SubText, Font = Enum.Font.Gotham, TextSize = 12, BackgroundTransparency = 1, Position = UDim2.new(1, -130, 0, 0), Size = UDim2.new(0, 100, 0, 36), TextXAlignment = Enum.TextXAlignment.Right})
-                local List = Create("Frame", {Parent = Frame, BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 36), Size = UDim2.new(1, 0, 0, 0)}); Create("UIListLayout", {Parent = List, SortOrder = Enum.SortOrder.LayoutOrder})
-                AddTooltip(Frame, tooltip)
-                
-                local function Build()
-                    for _,v in pairs(List:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
-                    for _,opt in pairs(CurrentOpts) do
-                        local B = Create("TextButton", {Parent = List, Text = opt, TextColor3 = Colors.SubText, Font = Enum.Font.Gotham, TextSize = 12, BackgroundColor3 = Colors.Element, Size = UDim2.new(1, 0, 0, 30), AutoButtonColor = false})
-                        B.MouseButton1Click:Connect(function() Selected = opt; ValLbl.Text = tostring(Selected); pcall(cb, Selected); Btn.Fire() end)
-                    end
-                end
-                Btn.MouseButton1Click:Connect(function() Open = not Open; if Open then Build() end; TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, Open and (36 + (#CurrentOpts * 30)) or 36)}):Play() end)
-                Build()
-                return { Refresh = function(self, newOpts, newDef) CurrentOpts = newOpts; Selected = newDef or newOpts[1]; ValLbl.Text = tostring(Selected); if Open then Build(); TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 36 + (#CurrentOpts * 30))}):Play() end end }
-            end
-
-            function TabObj:Input(title, placeholder, flag, tooltip, callback)
-                local cb = callback or tooltip; if type(tooltip) == "function" then tooltip = nil end
-                local Frame = Create("Frame", {Parent = Page, BackgroundColor3 = Colors.Element, Size = UDim2.new(1, 0, 0, 50)}); Create("UICorner", {Parent = Frame, CornerRadius = UDim.new(0, 6)}); Create("UIStroke", {Parent = Frame, Color = Colors.Stroke, Thickness = 1})
-                Create("TextLabel", {Parent = Frame, Text = title, TextColor3 = Colors.Text, Font = Enum.Font.GothamMedium, TextSize = 13, BackgroundTransparency = 1, Position = UDim2.new(0, 12, 0, 8), Size = UDim2.new(1, -24, 0, 15), TextXAlignment = Enum.TextXAlignment.Left})
-                local BoxFrame = Create("Frame", {Parent = Frame, BackgroundColor3 = Color3.fromRGB(40, 40, 45), Position = UDim2.new(0, 12, 0, 28), Size = UDim2.new(1, -24, 0, 16)}); Create("UICorner", {Parent = BoxFrame, CornerRadius = UDim.new(0, 4)})
-                local Box = Create("TextBox", {Parent = BoxFrame, Text = "", PlaceholderText = placeholder, TextColor3 = Colors.SubText, Font = Enum.Font.Gotham, TextSize = 12, BackgroundTransparency = 1, Size = UDim2.new(1, -8, 1, 0), Position = UDim2.new(0, 4, 0, 0), TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false})
-                AddTooltip(Frame, tooltip)
-                Box.FocusLost:Connect(function() pcall(cb, Box.Text) end)
-                return { Set = function(self, txt) Box.Text = txt; pcall(cb, txt) end }
-            end
-
-            return TabObj
-        end
-        return Self
-    end
-    return SlenderWind
-end)()
-
--- // ==========================================
--- // 2. SLENDERHUB SPY LOGIC (BACKEND)
--- // ==========================================
-
-if getgenv().SlenderHubSpyLoaded then 
-    warn("Spy já carregado.")
+if getgenv().SlenderHubLoaded then 
+    warn("SlenderHub V1 Já está em execução.") 
+    -- return -- Descomente em produção
+    warn("SlenderHub V2.1 Já está em execução.")
     -- return 
 end
-getgenv().SlenderHubSpyLoaded = true
+getgenv().SlenderHubLoaded = true
 
+-- // Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+
+-- // SlenderHub Global State
 getgenv().SlenderSpy = {
-    Enabled = false,
-    Logs = {},
-    Blocked = {
-        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", 
-        "GetServerTime", "TouchHeartbeat", "MainRemote", "ClientPulse"
-    }
+Enabled = false,
+Logs = {}, 
+Blocked = { 
+        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat"
+        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat", "MainRemote"
+}
 }
 
--- [SERIALIZATION ENGINE]
+-- // ==========================================
+-- // ENGINE: SERIALIZATION & PATH GENERATION (FIXED)
+-- // ENGINE: ADVANCED SERIALIZATION
+-- // ==========================================
+
 local function GetPath(Obj)
-    if not Obj or not Obj.Parent then return "nil" end
-    if Obj == game then return "game" end
-    local Hierarchy = {}
-    local Current = Obj
-    while Current.Parent ~= nil and Current.Parent ~= game do
-        table.insert(Hierarchy, 1, Current)
-        Current = Current.Parent
-    end
-    local Service = Current
-    table.insert(Hierarchy, 1, Service)
-    local PathStr = "game"
-    for i, v in ipairs(Hierarchy) do
-        if i == 1 then PathStr = PathStr .. ':GetService("' .. v.ClassName .. '")'
-        else
-            if v.Name:match("^[%a_][%w_]*$") then PathStr = PathStr .. "." .. v.Name
-            else PathStr = PathStr .. '["' .. v.Name:gsub('"', '\\"') .. '"]' end
-        end
-    end
-    return PathStr
+@@ -33,25 +34,20 @@ local function GetPath(Obj)
+local Hierarchy = {}
+local Current = Obj
+
+    -- [FIX V1.5.3] Navega até encontrar o filho direto do game (O Serviço)
+while Current.Parent ~= nil and Current.Parent ~= game do
+table.insert(Hierarchy, 1, Current)
+Current = Current.Parent
 end
 
-local function SerializeType(v)
-    local T = typeof(v)
-    if T == "string" then return '"' .. v:gsub('"', '\\"') .. '"'
-    elseif T == "number" then return tostring(v)
-    elseif T == "boolean" then return tostring(v)
-    elseif T == "Instance" then return GetPath(v)
-    elseif T == "Vector3" then return string.format("Vector3.new(%s, %s, %s)", v.X, v.Y, v.Z)
-    elseif T == "CFrame" then return string.format("CFrame.new(%s)", tostring(v))
-    elseif T == "Color3" then return string.format("Color3.new(%s, %s, %s)", v.R, v.G, v.B)
-    else return "nil" end
+    -- Adiciona o Serviço (ex: ReplicatedStorage) na hierarquia
+local Service = Current
+table.insert(Hierarchy, 1, Service)
+
+local PathStr = "game"
+
+for i, v in ipairs(Hierarchy) do
+if i == 1 then
+            -- [FIX] Garante o uso de GetService para o container principal
+            -- Isso corrige o erro "Packages is not a valid member of DataModel"
+PathStr = PathStr .. ':GetService("' .. v.ClassName .. '")'
+else
+            -- Trata os filhos
+if v.Name:match("^[%a_][%w_]*$") then
+PathStr = PathStr .. "." .. v.Name
+else
+@@ -67,7 +63,11 @@ local function SerializeType(v)
+local T = typeof(v)
+if T == "string" then
+return '"' .. v .. '"'
+    elseif T == "number" or T == "boolean" then
+    elseif T == "number" then
+        if v == math.huge then return "math.huge" end
+        if v == -math.huge then return "-math.huge" end
+        return tostring(v)
+    elseif T == "boolean" then
+return tostring(v)
+elseif T == "Instance" then
+return GetPath(v)
+@@ -88,7 +88,11 @@ local function SerializeType(v)
+end
 end
 
+local function SerializeTable(tbl, indent)
 local function SerializeTable(tbl, indent, seen)
     seen = seen or {}
-    if seen[tbl] then return '"--[[Cyclic]]"' end
+    if seen[tbl] then return "--[[Cyclic Reference]]" end
     seen[tbl] = true
-    indent = indent or 0
-    local result = "{\n"
-    local padding = string.rep("    ", indent + 1)
-    for k, v in pairs(tbl) do
-        local key = (type(k) == "string" and k:match("^[%a_][%w_]*$")) and k or "[" .. SerializeType(k) .. "]"
-        local value = (type(v) == "table") and SerializeTable(v, indent + 1, seen) or SerializeType(v)
-        result = result .. padding .. key .. " = " .. value .. ",\n"
-    end
-    result = result .. string.rep("    ", indent) .. "}"
-    return result
+    
+indent = indent or 0
+local result = "{\n"
+local padding = string.rep("    ", indent + 1)
+@@ -105,7 +109,7 @@ local function SerializeTable(tbl, indent)
+
+local value
+if type(v) == "table" then
+            value = SerializeTable(v, indent + 1)
+            value = SerializeTable(v, indent + 1, seen)
+else
+value = SerializeType(v)
+end
+@@ -118,13 +122,15 @@ local function SerializeTable(tbl, indent)
 end
 
 local function GenerateScript(Log)
-    if not Log then return "-- Error" end
-    local Path = GetPath(Log.Instance)
-    local ArgsStr = SerializeTable(Log.Args)
-    local Script = "-- // SlenderHub V2.1 Generated\n"
-    Script = Script .. "-- Remote: " .. Log.Name .. "\n"
-    Script = Script .. "local args = " .. ArgsStr .. "\n\n"
-    if Log.Method == "FireServer" then Script = Script .. Path .. ":FireServer(unpack(args))"
-    elseif Log.Method == "InvokeServer" then Script = Script .. Path .. ":InvokeServer(unpack(args))" end
-    return Script
+    if not Log then return "-- Erro: Log não encontrado ou inválido" end
+    if not Log then return "-- Erro: Log inválido" end
+
+local Path = GetPath(Log.Instance)
+local ArgsStr = SerializeTable(Log.Args)
+    local SourceInfo = Log.Source and ("-- Calling Script: " .. Log.Source) or "-- Calling Script: Unknown"
+
+    local Script = "-- // SlenderHub Generated Code\n"
+    local Script = "-- // SlenderHub V2.1 Generated Code\n"
+Script = Script .. "-- Remote: " .. Log.Name .. "\n"
+    Script = Script .. SourceInfo .. "\n"
+Script = Script .. "-- Execuções Agrupadas: " .. Log.Count .. "\n\n"
+Script = Script .. "local args = " .. ArgsStr .. "\n\n"
+
+@@ -137,20 +143,11 @@ local function GenerateScript(Log)
+return Script
 end
+
+-- // ==========================================
+-- // ENGINE: COMPARISON (Deduplication)
+-- // ==========================================
 
 local function DeepCompare(t1, t2)
-    if type(t1) ~= type(t2) then return false end
-    if type(t1) ~= "table" then return t1 == t2 end
-    return #t1 == #t2 and tostring(t1[1]) == tostring(t2[1])
+if type(t1) ~= type(t2) then return false end
+if type(t1) ~= "table" then return t1 == t2 end
+    
+    for k, v in pairs(t1) do
+        if not DeepCompare(v, t2[k]) then return false end
+    end
+    for k, v in pairs(t2) do
+        if not DeepCompare(v, t1[k]) then return false end
+    end
+    for k, v in pairs(t1) do if not DeepCompare(v, t2[k]) then return false end end
+    for k, v in pairs(t2) do if not DeepCompare(v, t1[k]) then return false end end
+return true
 end
 
--- // ==========================================
--- // 3. UI IMPLEMENTATION (V10 NATIVE)
--- // ==========================================
+@@ -161,8 +158,8 @@ end
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-local Window = SlenderWind.Window({
-    Name = "SlenderHub V2.1 | Spy",
-    Theme = { Accent = Color3.fromRGB(0, 255, 100) }
+local Window = Rayfield:CreateWindow({
+    Name = "SlenderHub | V1.5.3 - Pro Spy",
+    LoadingTitle = "Carregando Engine...",
+    Name = "SlenderHub | V2.1 - Visualizer",
+    LoadingTitle = "Initializing Hybrid Hooks...",
+ConfigurationSaving = {Enabled = false},
+KeySystem = false,
+})
+@@ -172,12 +169,13 @@ local Tab = Window:CreateTab("Spy Monitor", 4483362458)
+-- // UI STATE
+local SelectedLogIndex = nil
+local CurrentScriptBuffer = "" 
+local CodeInput -- Referência futura para o Input
+
+-- // UI ELEMENTS
+Tab:CreateSection("Controle Principal")
+
+Tab:CreateToggle({
+    Name = "Ativar Spy (Hook)",
+    Name = "Ativar Spy (Hybrid Hook)",
+CurrentValue = false,
+Flag = "SpyEnabled",
+Callback = function(Value)
+@@ -186,15 +184,26 @@ Tab:CreateToggle({
 })
 
-local Tab = Window:Tab("Remote Spy")
+Tab:CreateButton({
+    Name = "🗑️ Limpar Tudo",
+    Name = "🗑️ Limpar Logs",
+Callback = function()
+getgenv().SlenderSpy.Logs = {}
+SelectedLogIndex = nil
+CurrentScriptBuffer = ""
+        if CodeInput then CodeInput:Set("") end
+Rayfield:Notify({Title = "SlenderHub", Content = "Memória Limpa", Duration = 1})
+end,
+})
 
--- UI State
-local SelectedLogIndex = nil
-local CurrentScriptBuffer = ""
-local CodeInputAPI -- Para usar :Set()
-local DropdownAPI -- Para usar :Refresh()
+Tab:CreateButton({
+    Name = "🚫 Resetar Blacklist",
+    Callback = function()
+        getgenv().SlenderSpy.Blocked = { 
+            "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat", "MainRemote"
+        }
+        Rayfield:Notify({Title = "SlenderHub", Content = "Blacklist Resetada", Duration = 1})
+    end,
+})
 
-Tab:Section("Controles Principais")
+Tab:CreateSection("Visualizador de Remotes")
 
-Tab:Toggle("Ativar Spy (Hybrid Hook)", false, "SpyEnabled", "Captura chamadas de remotes", function(Value)
-    getgenv().SlenderSpy.Enabled = Value
-    Window:Notify("Spy", Value and "Ativado" or "Desativado", 2, "Success")
-end)
+local LogDropdown = Tab:CreateDropdown({
+@@ -205,16 +214,9 @@ local LogDropdown = Tab:CreateDropdown({
+Flag = "RemoteList",
+Callback = function(Option)
+local StringVal = (type(Option) == "table") and Option[1] or Option
+        
+        if StringVal == "Nenhum" then 
+            SelectedLogIndex = nil
+            return 
+        end
 
-Tab:Button("🗑️ Limpar Logs", "Limpa a memória do spy", function()
-    getgenv().SlenderSpy.Logs = {}
-    SelectedLogIndex = nil
-    CurrentScriptBuffer = ""
-    if CodeInputAPI then CodeInputAPI:Set("") end
-    if DropdownAPI then DropdownAPI:Refresh({"Nenhum"}, "Nenhum") end
-    Window:Notify("SlenderHub", "Logs limpos.", 2, "Success")
-end)
+        if StringVal == "Nenhum" then SelectedLogIndex = nil return end
+local ID = tonumber(StringVal:match("^%[(%d+)%]"))
+        if ID then
+            SelectedLogIndex = ID
+        end
+        if ID then SelectedLogIndex = ID end
+end,
+})
 
-Tab:Section("Visualizador")
+@@ -223,78 +225,90 @@ Tab:CreateButton({
+Callback = function()
+local Options = {}
+local Logs = getgenv().SlenderSpy.Logs
+        local Start = math.max(1, #Logs - 20)
+        local Start = math.max(1, #Logs - 25)
 
-DropdownAPI = Tab:Dropdown("Lista de Remotes", {"Nenhum"}, "Nenhum", "RemoteList", "Selecione um remote capturado", function(Value)
-    if Value == "Nenhum" then SelectedLogIndex = nil; return end
-    local ID = tonumber(Value:match("^%[(%d+)%]"))
-    if ID then SelectedLogIndex = ID end
-end)
+for i = #Logs, Start, -1 do
+local log = Logs[i]
+            local Label = string.format("[%d] %s (x%d)", i, log.Name, log.Count)
+            -- Adicionei o Método (Fire/Invoke) para ajudar na identificação
+            local MethodShort = (log.Method == "FireServer") and "Fire" or "Invoke"
+            local Label = string.format("[%d] %s (%s) x%d", i, log.Name, MethodShort, log.Count)
+table.insert(Options, Label)
+end
 
-Tab:Button("🔄 Atualizar Lista", "Carrega novos remotes capturados", function()
-    local Options = {}
-    local Logs = getgenv().SlenderSpy.Logs
-    local Start = math.max(1, #Logs - 25)
-    
-    for i = #Logs, Start, -1 do
-        local log = Logs[i]
-        local MethodShort = (log.Method == "FireServer") and "Fire" or "Invoke"
-        local Label = string.format("[%d] %s (%s) x%d", i, log.Name, MethodShort, log.Count)
-        table.insert(Options, Label)
-    end
-    
-    if #Options == 0 then Options = {"Nenhum"} end
-    DropdownAPI:Refresh(Options, Options[1])
-end)
+if #Options == 0 then Options = {"Nenhum"} end
+        
+LogDropdown:Refresh(Options)
+Rayfield:Notify({Title = "SlenderHub", Content = "Lista Atualizada", Duration = 1})
+end,
+})
 
-Tab:Section("Gerador de Código")
+-- // UI: Geração e Execução
+-- Organizei a ordem para evitar erros de referência
+Tab:CreateSection("Ferramentas Avançadas")
 
-Tab:Button("⬇️ GERAR CÓDIGO ⬇️", "Converte o remote selecionado em script", function()
-    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-        local Code = GenerateScript(Log)
-        CurrentScriptBuffer = Code
-        if CodeInputAPI then CodeInputAPI:Set(Code) end
-        Window:Notify("Sucesso", "Código gerado!", 2, "Success")
-    else
-        Window:Notify("Erro", "Selecione um remote primeiro.", 2, "Error")
-    end
-end)
+Tab:CreateButton({
+    Name = "⬇️ GERAR CÓDIGO ⬇️",
+    Name = "⛔ Bloquear Selecionado",
+Callback = function()
+if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+            local Code = GenerateScript(Log)
+            
+            CurrentScriptBuffer = Code
+            Rayfield:Notify({Title = "Sucesso", Content = "Código Gerado! Veja abaixo.", Duration = 1})
+            table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
+            Rayfield:Notify({Title = "Bloqueado", Content = Log.Name .. " adicionado à blacklist.", Duration = 2})
+else
+            Rayfield:Notify({Title = "Erro", Content = "Selecione um remote na lista!", Duration = 2})
+            Rayfield:Notify({Title = "Erro", Content = "Selecione um remote!", Duration = 2})
+end
+end,
+})
 
-CodeInputAPI = Tab:Input("Output do Script", "O código aparecerá aqui...", "CodeOutput", nil, function(Text)
-    CurrentScriptBuffer = Text
-end)
-
-Tab:Button("📋 Copiar para Clipboard", nil, function()
-    if CurrentScriptBuffer ~= "" then
-        setclipboard(CurrentScriptBuffer)
-        Window:Notify("Sucesso", "Copiado para a área de transferência.", 2, "Success")
-    end
-end)
-
-Tab:Button("▶ Executar Código", "Testa o script gerado", function()
-    if CurrentScriptBuffer ~= "" then
-        local success, err = pcall(function() loadstring(CurrentScriptBuffer)() end)
-        if not success then
-            warn(err)
-            Window:Notify("Erro", "Falha na execução (F9)", 3, "Error")
+-- Input apenas para visualização/edição (não controla a execução diretamente, usamos o buffer)
+local CodeInput = Tab:CreateInput({
+    Name = "Script Output (Visual)",
+    PlaceholderText = "Clique em GERAR para ver o código...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text) 
+        CurrentScriptBuffer = Text
+Tab:CreateButton({
+    Name = "⚡ Replay Instantâneo",
+    Callback = function()
+        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+            if Log.Instance then
+                if Log.Method == "FireServer" then
+                    Log.Instance:FireServer(unpack(Log.Args))
+                elseif Log.Method == "InvokeServer" then
+                    task.spawn(function() Log.Instance:InvokeServer(unpack(Log.Args)) end)
+                end
+                Rayfield:Notify({Title = "Disparado", Content = "Remote executado novamente.", Duration = 1})
+            end
         else
-            Window:Notify("Executado", "Script rodou com sucesso.", 2, "Success")
+            Rayfield:Notify({Title = "Erro", Content = "Selecione um remote!", Duration = 2})
+        end
+end,
+})
+
+-- Loop para atualizar o Input visualmente quando o buffer mudar (Gambiarra necessária para Rayfield)
+task.spawn(function()
+    while task.wait(0.5) do
+        if CodeInput and CurrentScriptBuffer ~= "" and CodeInput.CurrentValue ~= CurrentScriptBuffer then
+            -- Só atualiza se o usuário não estiver digitando (difícil detectar, então forçamos apenas se gerado)
+            -- Na verdade, Rayfield :Set() é melhor chamado no botão.
+            -- Vou deixar o botão atualizar o input via :Set() na próxima interação se possível, 
+            -- mas como não temos referência fácil, o usuário clica em Gerar e o texto aparece.
+            -- O botão "Gerar" acima não tem acesso ao CodeInput porque foi criado antes.
+            -- Vamos corrigir isso com uma função global simples.
         end
     end
 end)
 
-Tab:Button("⛔ Bloquear Remote", "Adiciona à blacklist", function()
-    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-        table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
-        Window:Notify("Bloqueado", Log.Name .. " ignorado.", 2, "Warning")
-    end
+-- [FIX FINAL DE UI] Recriando o botão Gerar DEPOIS do Input para ter acesso ao :Set()
+-- Rayfield renderiza na ordem, então vamos fazer: Input -> Botão Gerar (Invertido mas funcional) ou...
+-- Vamos usar o Buffer. O usuário clica em Gerar, o Buffer enche. Ele clica em Copiar/Executar e funciona.
+-- Para ver o código, ele terá que clicar no Input? Não.
+-- Vamos adicionar um botão "Ver Código no Input" se necessário, mas o ideal é:
+Tab:CreateSection("Geração e Visualização")
+
+Tab:CreateButton({
+    Name = "👀 Mostrar Código no Input",
+    Name = "⬇️ GERAR E VISUALIZAR ⬇️",
+Callback = function()
+        if CurrentScriptBuffer ~= "" then
+            CodeInput:Set(CurrentScriptBuffer)
+        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+            local Code = GenerateScript(Log)
+            
+            CurrentScriptBuffer = Code
+            
+            -- [VISUALIZER] Atualiza a caixa de texto
+            if CodeInput then
+                CodeInput:Set(Code)
+            end
+            
+            Rayfield:Notify({Title = "Sucesso", Content = "Código Gerado!", Duration = 1})
+        else
+            Rayfield:Notify({Title = "Erro", Content = "Selecione um remote!", Duration = 2})
+end
+end,
+})
+
+-- [VISUALIZER] Caixa de Texto Reintroduzida
+CodeInput = Tab:CreateInput({
+    Name = "Script Preview",
+    PlaceholderText = "O código aparecerá aqui...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        -- Permite editar o código manualmente antes de executar
+        CurrentScriptBuffer = Text
+    end,
+})
+
+Tab:CreateButton({
+Name = "📋 Copiar para Clipboard",
+Callback = function()
+@@ -308,15 +322,14 @@ Tab:CreateButton({
+})
+
+Tab:CreateButton({
+    Name = "▶ Executar (Testar)",
+    Name = "▶ Executar Código Gerado",
+Callback = function()
+if CurrentScriptBuffer ~= "" then
+local success, result = pcall(function()
+local func, syntaxErr = loadstring(CurrentScriptBuffer)
+if not func then error(syntaxErr) end
+func()
 end)
 
+if success then
+Rayfield:Notify({Title = "Executado", Content = "Script rodou com sucesso.", Duration = 1})
+else
+@@ -330,9 +343,43 @@ Tab:CreateButton({
+})
+
 -- // ==========================================
--- // 4. HOOK LOGIC (HYBRID)
+-- // CORE LOGIC: METATABLE HOOK
+-- // CORE LOGIC: HYBRID HOOK SYSTEM
 -- // ==========================================
 
 local function ProcessLog(Instance, Method, Args)
     if not getgenv().SlenderSpy.Enabled then return end
+    
     local RemoteName = Instance.Name
-    for _, v in pairs(getgenv().SlenderSpy.Blocked) do if RemoteName == v then return end end
+    for _, v in pairs(getgenv().SlenderSpy.Blocked) do
+        if RemoteName == v then return end
+    end
+
+    local SrcScript = getcallingscript and getcallingscript()
+    local SrcPath = "Unknown"
+    if SrcScript then
+        SrcPath = SrcScript:GetFullName()
+    end
 
     local Logs = getgenv().SlenderSpy.Logs
     local LastLog = Logs[#Logs]
 
     if LastLog and LastLog.Instance == Instance and DeepCompare(LastLog.Args, Args) then
         LastLog.Count = LastLog.Count + 1
+        LastLog.Time = os.date("%X")
     else
         table.insert(Logs, {
-            Name = RemoteName, Instance = Instance, Method = Method, Args = Args, Count = 1
+            Name = RemoteName,
+            Instance = Instance,
+            Method = Method,
+            Args = Args,
+            Source = SrcPath,
+            Time = os.date("%X"),
+            Count = 1
         })
     end
 end
 
+-- 1. Hook Metamethod (__namecall)
 local mt = getrawmetatable(game)
 local oldNamecall = mt.__namecall
 setreadonly(mt, false)
+@@ -341,35 +388,36 @@ mt.__namecall = newcclosure(function(self, ...)
+local method = getnamecallmethod()
+local args = {...}
 
-mt.__namecall = newcclosure(function(self, ...)
-    local method = getnamecallmethod()
+    if getgenv().SlenderSpy.Enabled and (method == "FireServer" or method == "InvokeServer") then
+        local remoteName = self.Name
+        local ignore = false
+
+        for _, v in pairs(getgenv().SlenderSpy.Blocked) do
+            if remoteName == v then ignore = true break end
+        end
+
+        if not ignore then
+            local Logs = getgenv().SlenderSpy.Logs
+            local LastLog = Logs[#Logs]
+            
+            if LastLog and LastLog.Instance == self and DeepCompare(LastLog.Args, args) then
+                LastLog.Count = LastLog.Count + 1
+                LastLog.Time = os.date("%X")
+            else
+                table.insert(Logs, {
+                    Name = remoteName,
+                    Instance = self,
+                    Method = method,
+                    Args = args,
+                    Time = os.date("%X"),
+                    Count = 1
+                })
+            end
+        end
     if (method == "FireServer" or method == "InvokeServer") then
-        ProcessLog(self, method, {...})
-    end
-    return oldNamecall(self, ...)
+        ProcessLog(self, method, args)
+end
+
+return oldNamecall(self, ...)
 end)
 
 setreadonly(mt, true)
 
-Window:Notify("SlenderHub", "Spy V2.1 (V10 UI) Carregado.", 5, "Success")
+-- 2. Hook Function (Direct Calls & UnreliableRemoteEvent)
+local OldFireServer
+local OldInvokeServer
+
+OldFireServer = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
+    ProcessLog(self, "FireServer", {...})
+    return OldFireServer(self, ...)
+end))
+
+OldInvokeServer = hookfunction(Instance.new("RemoteFunction").InvokeServer, newcclosure(function(self, ...)
+    ProcessLog(self, "InvokeServer", {...})
+    return OldInvokeServer(self, ...)
+end))
+
+pcall(function()
+    local Unreliable = Instance.new("UnreliableRemoteEvent")
+    local OldUnreliableFire
+    OldUnreliableFire = hookfunction(Unreliable.FireServer, newcclosure(function(self, ...)
+        ProcessLog(self, "FireServer", {...})
+        return OldUnreliableFire(self, ...)
+    end))
+end)
+
+Rayfield:Notify({Title = "SlenderHub V2.1", Content = "Visualizer Active.", Duration = 3})
