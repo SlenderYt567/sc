@@ -1,62 +1,52 @@
--- // ==============================================================================
--- // SLENDERHUB V10 | ARCHITECTURE: INTERNAL SPY & SUITE
--- // DEVELOPED BY: CHIEF ARCHITECT
--- // UI LIBRARY: SLENDERWIND V10 (INTERNAL)
--- // ==============================================================================
+-- // SlenderHub V2.1 | Architecture: Hybrid Hook + Visualizer
+-- // UI Framework: SlenderWind V5 (Internal)
+-- // Developed by SlenderHub Architect
 
--- // 1. SINGLETON PATTERN & ENVIRONMENT CHECK
-if getgenv().SlenderHubV10_Loaded then
-    warn("[SlenderHub] System already active. Reloading UI...")
-    -- In a real internal DLL, we might unload here. For Lua, we just warn.
+if getgenv().SlenderHubLoaded then 
+    warn("SlenderHub V2.1 Já está em execução.")
+    -- return 
 end
-getgenv().SlenderHubV10_Loaded = true
+getgenv().SlenderHubLoaded = true
 
--- // 2. SERVICES
+-- // Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
-local HttpService = game:GetService("HttpService")
 
--- // 3. GLOBAL STATE
+-- // SlenderHub Global State
 getgenv().SlenderSpy = {
     Enabled = false,
-    Logs = {},
-    Blocked = {
-        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", 
-        "GetServerTime", "TouchHeartbeat", "MainRemote", "SetCameraTarget"
+    Logs = {}, 
+    Blocked = { 
+        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat", "MainRemote"
     }
 }
 
--- // ==============================================================================
--- // ENGINE: SERIALIZATION & PATH GENERATION (CORE)
--- // ==============================================================================
+-- // ==========================================
+-- // ENGINE: ADVANCED SERIALIZATION
+-- // ==========================================
 
 local function GetPath(Obj)
-    if not Obj or not Obj.Parent then return "nil" end
-    if Obj == game then return "game" end
+    if not Obj or not Obj.Parent then return "nil --[[Destroyed/Nil]]" end
     
     local Hierarchy = {}
     local Current = Obj
-    
-    -- Traverse up to game
+
     while Current.Parent ~= nil and Current.Parent ~= game do
         table.insert(Hierarchy, 1, Current)
         Current = Current.Parent
     end
-    
-    -- Add the Service
+
     local Service = Current
     table.insert(Hierarchy, 1, Service)
-    
+
     local PathStr = "game"
-    
+
     for i, v in ipairs(Hierarchy) do
         if i == 1 then
-            -- Handle Service safely
             PathStr = PathStr .. ':GetService("' .. v.ClassName .. '")'
         else
-            -- Handle Children
             if v.Name:match("^[%a_][%w_]*$") then
                 PathStr = PathStr .. "." .. v.Name
             else
@@ -64,14 +54,14 @@ local function GetPath(Obj)
             end
         end
     end
-    
+
     return PathStr
 end
 
 local function SerializeType(v)
     local T = typeof(v)
     if T == "string" then
-        return '"' .. v:gsub('"', '\\"') .. '"'
+        return '"' .. v .. '"'
     elseif T == "number" then
         if v == math.huge then return "math.huge" end
         if v == -math.huge then return "-math.huge" end
@@ -86,8 +76,6 @@ local function SerializeType(v)
         return string.format("CFrame.new(%s)", tostring(v))
     elseif T == "Color3" then
         return string.format("Color3.fromRGB(%d, %d, %d)", v.R*255, v.G*255, v.B*255)
-    elseif T == "nil" then
-        return "nil"
     else
         return "nil --[[" .. T .. "]]"
     end
@@ -101,73 +89,77 @@ local function SerializeTable(tbl, indent, seen)
     indent = indent or 0
     local result = "{\n"
     local padding = string.rep("    ", indent + 1)
-    
+
     for k, v in pairs(tbl) do
         local key
         if type(k) == "string" and k:match("^[%a_][%w_]*$") then
             key = k
         elseif type(k) == "number" then
-            key = nil -- Implicit index
+            key = nil 
         else
             key = "[" .. SerializeType(k) .. "]"
         end
-        
+
         local value
         if type(v) == "table" then
             value = SerializeTable(v, indent + 1, seen)
         else
             value = SerializeType(v)
         end
-        
+
         if key then
             result = result .. padding .. key .. " = " .. value .. ",\n"
         else
             result = result .. padding .. value .. ",\n"
         end
     end
-    
-    result = result .. string.rep("    ", indent) .. "}"
-    return result
+
+    return result .. string.rep("    ", indent) .. "}"
 end
 
 local function GenerateScript(Log)
-    if not Log then return "-- Error: Invalid Log" end
-    
+    if not Log then return "-- Erro: Log inválido" end
+
     local Path = GetPath(Log.Instance)
     local ArgsStr = SerializeTable(Log.Args)
     local SourceInfo = Log.Source and ("-- Calling Script: " .. Log.Source) or "-- Calling Script: Unknown"
-    
-    local Script = "-- // SlenderHub V10 Generated Code\n"
-    Script = Script .. "-- Remote: " .. Log.Name .. " (" .. Log.Method .. ")\n"
+
+    local Script = "-- // SlenderHub V2.1 Generated Code\n"
+    Script = Script .. "-- Remote: " .. Log.Name .. "\n"
     Script = Script .. SourceInfo .. "\n"
-    Script = Script .. "-- Executions: " .. Log.Count .. "\n\n"
+    Script = Script .. "-- Execuções Agrupadas: " .. Log.Count .. "\n\n"
     Script = Script .. "local args = " .. ArgsStr .. "\n\n"
-    
+
     if Log.Method == "FireServer" then
         Script = Script .. Path .. ":FireServer(unpack(args))"
     elseif Log.Method == "InvokeServer" then
         Script = Script .. "return " .. Path .. ":InvokeServer(unpack(args))"
     end
-    
+
     return Script
 end
 
 local function DeepCompare(t1, t2)
     if type(t1) ~= type(t2) then return false end
     if type(t1) ~= "table" then return t1 == t2 end
-    for k, v in pairs(t1) do if not DeepCompare(v, t2[k]) then return false end end
-    for k, v in pairs(t2) do if not DeepCompare(v, t1[k]) then return false end end
+    
+    for k, v in pairs(t1) do
+        if not DeepCompare(v, t2[k]) then return false end
+    end
+    for k, v in pairs(t2) do
+        if not DeepCompare(v, t1[k]) then return false end
+    end
     return true
 end
 
--- // ==============================================================================
--- // UI: SLENDERWIND V10 IMPLEMENTATION
--- // ==============================================================================
+-- // ==========================================
+-- // UI: SLENDERWIND V5 INTERFACE
+-- // ==========================================
 
 local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
 
 local Window = SlenderWind.Window({
-    Name = "SlenderHub V10 | Internal Spy",
+    Name = "SlenderHub | V2.1 - Visualizer",
     KeySystem = false,
     Theme = {
         Accent = Color3.fromRGB(0, 255, 128), -- SlenderHub Green
@@ -175,52 +167,53 @@ local Window = SlenderWind.Window({
     }
 })
 
--- // TABS
-local MonitorTab = Window:Tab("Monitor")
-local GeneratorTab = Window:Tab("Generator")
-local SettingsTab = Window:Tab("Settings")
+local Tab = Window:Tab("Spy Monitor")
 
--- // STATE VARIABLES
+-- // UI STATE
 local SelectedLogIndex = nil
-local CurrentScriptBuffer = ""
-local RemoteDropdownObj = nil -- To store the UI object for refreshing
-local CodeInputObj = nil      -- To store the UI object for setting text
+local CurrentScriptBuffer = "" 
+local LogDropdown -- Objeto Dropdown
+local CodeInput -- Objeto Input
 
--- // --- MONITOR TAB ---
+-- // UI ELEMENTS
 
-MonitorTab:Label("Main Controls")
+Tab:Label("Controle Principal")
 
-MonitorTab:Toggle("Enable Hybrid Hook", false, "SpyEnabled", "Hooks __namecall and functions", function(val)
-    getgenv().SlenderSpy.Enabled = val
+Tab:Toggle("Ativar Spy (Hybrid Hook)", false, "SpyEnabled", "Captura remotes via Namecall e Closure", function(Value)
+    getgenv().SlenderSpy.Enabled = Value
 end)
 
-MonitorTab:Button("🗑️ Clear Logs", "Wipes memory", function()
+Tab:Button("🗑️ Limpar Logs", "Limpa a memória e o visualizador", function()
     getgenv().SlenderSpy.Logs = {}
     SelectedLogIndex = nil
     CurrentScriptBuffer = ""
-    if CodeInputObj then CodeInputObj:Set("") end
-    if RemoteDropdownObj then RemoteDropdownObj:Refresh({"None"}, "None") end
+    if CodeInput then CodeInput.Set("") end
+    if LogDropdown then LogDropdown.Refresh({"Nenhum"}, "Nenhum") end
 end)
 
-MonitorTab:Label("Remote Selection")
+Tab:Button("🚫 Resetar Blacklist", "Restaura filtros padrão", function()
+    getgenv().SlenderSpy.Blocked = { 
+        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat", "MainRemote"
+    }
+end)
 
--- Dropdown Logic
-RemoteDropdownObj = MonitorTab:Dropdown("Select Remote", {"None"}, "None", "RemoteList", "Select a captured remote", function(val)
-    if val == "None" then 
-        SelectedLogIndex = nil 
+Tab:Label("Visualizador de Remotes")
+
+-- Dropdown Object Capture
+LogDropdown = Tab:Dropdown("Selecione um Remote", {"Nenhum"}, "Nenhum", "RemoteList", "Lista de remotes capturados", function(Option)
+    if Option == "Nenhum" then 
+        SelectedLogIndex = nil
         return 
     end
-    
-    local ID = tonumber(val:match("^%[(%d+)%]"))
-    if ID then
-        SelectedLogIndex = ID
-    end
+
+    local ID = tonumber(Option:match("^%[(%d+)%]"))
+    if ID then SelectedLogIndex = ID end
 end)
 
-MonitorTab:Button("🔄 Refresh List", "Update dropdown", function()
+Tab:Button("🔄 Atualizar Lista", "Carrega novos logs no dropdown", function()
     local Options = {}
     local Logs = getgenv().SlenderSpy.Logs
-    local Start = math.max(1, #Logs - 50) -- Show last 50 logs for performance
+    local Start = math.max(1, #Logs - 25)
 
     for i = #Logs, Start, -1 do
         local log = Logs[i]
@@ -229,55 +222,47 @@ MonitorTab:Button("🔄 Refresh List", "Update dropdown", function()
         table.insert(Options, Label)
     end
 
-    if #Options == 0 then Options = {"None"} end
+    if #Options == 0 then Options = {"Nenhum"} end
     
-    -- SlenderWind V10 API: Refresh(NewOptions, DefaultOption)
-    RemoteDropdownObj:Refresh(Options, Options[1])
+    -- SlenderWind Refresh Method
+    LogDropdown.Refresh(Options, "Nenhum")
 end)
 
--- // --- GENERATOR TAB ---
+Tab:Label("Geração e Visualização")
 
-GeneratorTab:Label("Code Generation")
-
-GeneratorTab:Button("⬇️ Generate Code", "Converts args to Lua", function()
+Tab:Button("⬇️ GERAR E VISUALIZAR ⬇️", "Converte o log em script Lua", function()
     if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
         local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
         local Code = GenerateScript(Log)
         
         CurrentScriptBuffer = Code
         
-        -- Update the Input Box programmatically
-        if CodeInputObj then
-            CodeInputObj:Set(Code)
+        -- SlenderWind Set Method
+        if CodeInput then
+            CodeInput.Set(Code)
         end
-    else
-        -- SlenderWind doesn't have built-in Notify in V5 public, using print/warn or custom
-        warn("[SlenderHub] No remote selected.")
     end
 end)
 
-CodeInputObj = GeneratorTab:Input("Script Preview", "Code appears here...", "CodeOut", "Edit or Copy", function(text)
-    CurrentScriptBuffer = text
+Tab:Button("⛔ Bloquear Selecionado", "Adiciona à blacklist", function()
+    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+        table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
+    end
 end)
 
-GeneratorTab:Button("📋 Copy to Clipboard", "Copy buffer", function()
-    if setclipboard then
+-- Input Object Capture
+CodeInput = Tab:Input("Script Preview", "O código aparecerá aqui...", "CodeOut", "Edite ou copie o código", function(Text)
+    CurrentScriptBuffer = Text
+end)
+
+Tab:Button("📋 Copiar para Clipboard", "Copia o código atual", function()
+    if CurrentScriptBuffer ~= "" then
         setclipboard(CurrentScriptBuffer)
     end
 end)
 
-GeneratorTab:Button("▶ Execute Script", "Run generated code", function()
-    if CurrentScriptBuffer ~= "" then
-        local success, err = pcall(function()
-            local func, syntaxErr = loadstring(CurrentScriptBuffer)
-            if not func then error(syntaxErr) end
-            func()
-        end)
-        if not success then warn("[Execution Error]:", err) end
-    end
-end)
-
-GeneratorTab:Button("⚡ Instant Replay", "Fire with original args", function()
+Tab:Button("⚡ Replay Instantâneo", "Executa o remote novamente", function()
     if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
         local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
         if Log.Instance then
@@ -290,25 +275,23 @@ GeneratorTab:Button("⚡ Instant Replay", "Fire with original args", function()
     end
 end)
 
--- // --- SETTINGS TAB ---
+Tab:Button("▶ Executar Código Gerado", "Testa o script gerado", function()
+    if CurrentScriptBuffer ~= "" then
+        local success, result = pcall(function()
+            local func, syntaxErr = loadstring(CurrentScriptBuffer)
+            if not func then error(syntaxErr) end
+            func()
+        end)
 
-SettingsTab:Button("🚫 Reset Blacklist", "Restore default filters", function()
-    getgenv().SlenderSpy.Blocked = { 
-        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", 
-        "GetServerTime", "TouchHeartbeat", "MainRemote", "SetCameraTarget"
-    }
-end)
-
-SettingsTab:Button("⛔ Block Selected", "Add current remote to blacklist", function()
-    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-        table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
+        if not success then
+            warn("Erro na execução: " .. tostring(result))
+        end
     end
 end)
 
--- // ==============================================================================
+-- // ==========================================
 -- // CORE LOGIC: HYBRID HOOK SYSTEM
--- // ==============================================================================
+-- // ==========================================
 
 local function ProcessLog(Instance, Method, Args)
     if not getgenv().SlenderSpy.Enabled then return end
@@ -319,12 +302,14 @@ local function ProcessLog(Instance, Method, Args)
     end
 
     local SrcScript = getcallingscript and getcallingscript()
-    local SrcPath = SrcScript and SrcScript:GetFullName() or "Unknown"
+    local SrcPath = "Unknown"
+    if SrcScript then
+        SrcPath = SrcScript:GetFullName()
+    end
 
     local Logs = getgenv().SlenderSpy.Logs
     local LastLog = Logs[#Logs]
 
-    -- Deduplication Logic
     if LastLog and LastLog.Instance == Instance and DeepCompare(LastLog.Args, Args) then
         LastLog.Count = LastLog.Count + 1
         LastLog.Time = os.date("%X")
@@ -341,7 +326,7 @@ local function ProcessLog(Instance, Method, Args)
     end
 end
 
--- 1. Metatable Hook (__namecall)
+-- 1. Hook Metamethod (__namecall)
 local mt = getrawmetatable(game)
 local oldNamecall = mt.__namecall
 setreadonly(mt, false)
@@ -359,7 +344,7 @@ end)
 
 setreadonly(mt, true)
 
--- 2. Function Hook (Direct Calls & UnreliableRemoteEvent)
+-- 2. Hook Function (Direct Calls & UnreliableRemoteEvent)
 local OldFireServer
 local OldInvokeServer
 
@@ -373,7 +358,6 @@ OldInvokeServer = hookfunction(Instance.new("RemoteFunction").InvokeServer, newc
     return OldInvokeServer(self, ...)
 end))
 
--- Optional: UnreliableRemoteEvent Hook (New Roblox Feature)
 pcall(function()
     local Unreliable = Instance.new("UnreliableRemoteEvent")
     local OldUnreliableFire
@@ -382,5 +366,3 @@ pcall(function()
         return OldUnreliableFire(self, ...)
     end))
 end)
-
-warn("SlenderHub V10 Loaded. UI: SlenderWind Internal.")
