@@ -1,6 +1,6 @@
 -- // SlenderHub V2.1 | Architecture: Hybrid Hook + Visualizer
+-- // UI Framework: SlenderWind V5 (Internal)
 -- // Developed by SlenderHub Architect
--- // Features: Hybrid Hook (Namecall/Closure), Cyclic Protection, Source Detection
 
 if getgenv().SlenderHubLoaded then 
     warn("SlenderHub V2.1 Já está em execução.")
@@ -33,13 +33,11 @@ local function GetPath(Obj)
     local Hierarchy = {}
     local Current = Obj
 
-    -- Navega até encontrar o filho direto do game (O Serviço)
     while Current.Parent ~= nil and Current.Parent ~= game do
         table.insert(Hierarchy, 1, Current)
         Current = Current.Parent
     end
 
-    -- Adiciona o Serviço (ex: ReplicatedStorage) na hierarquia
     local Service = Current
     table.insert(Hierarchy, 1, Service)
 
@@ -47,10 +45,8 @@ local function GetPath(Obj)
 
     for i, v in ipairs(Hierarchy) do
         if i == 1 then
-            -- Garante o uso de GetService para o container principal
             PathStr = PathStr .. ':GetService("' .. v.ClassName .. '")'
         else
-            -- Trata os filhos
             if v.Name:match("^[%a_][%w_]*$") then
                 PathStr = PathStr .. "." .. v.Name
             else
@@ -99,7 +95,7 @@ local function SerializeTable(tbl, indent, seen)
         if type(k) == "string" and k:match("^[%a_][%w_]*$") then
             key = k
         elseif type(k) == "number" then
-            key = nil -- Array style
+            key = nil 
         else
             key = "[" .. SerializeType(k) .. "]"
         end
@@ -143,10 +139,6 @@ local function GenerateScript(Log)
     return Script
 end
 
--- // ==========================================
--- // ENGINE: COMPARISON (Deduplication)
--- // ==========================================
-
 local function DeepCompare(t1, t2)
     if type(t1) ~= type(t2) then return false end
     if type(t1) ~= "table" then return t1 == t2 end
@@ -161,194 +153,141 @@ local function DeepCompare(t1, t2)
 end
 
 -- // ==========================================
--- // UI: RAYFIELD INTERFACE
+-- // UI: SLENDERWIND V5 INTERFACE
 -- // ==========================================
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
 
-local Window = Rayfield:CreateWindow({
+local Window = SlenderWind.Window({
     Name = "SlenderHub | V2.1 - Visualizer",
-    LoadingTitle = "Initializing Hybrid Hooks...",
-    ConfigurationSaving = {Enabled = false},
     KeySystem = false,
+    Theme = {
+        Accent = Color3.fromRGB(0, 255, 128), -- SlenderHub Green
+        Background = Color3.fromRGB(20, 20, 20)
+    }
 })
 
-local Tab = Window:CreateTab("Spy Monitor", 4483362458)
+local Tab = Window:Tab("Spy Monitor")
 
 -- // UI STATE
 local SelectedLogIndex = nil
 local CurrentScriptBuffer = "" 
-local CodeInput -- Referência futura para o Input
+local LogDropdown -- Objeto Dropdown
+local CodeInput -- Objeto Input
 
 -- // UI ELEMENTS
-Tab:CreateSection("Controle Principal")
 
-Tab:CreateToggle({
-    Name = "Ativar Spy (Hybrid Hook)",
-    CurrentValue = false,
-    Flag = "SpyEnabled",
-    Callback = function(Value)
-        getgenv().SlenderSpy.Enabled = Value
-    end,
-})
+Tab:Label("Controle Principal")
 
-Tab:CreateButton({
-    Name = "🗑️ Limpar Logs",
-    Callback = function()
-        getgenv().SlenderSpy.Logs = {}
+Tab:Toggle("Ativar Spy (Hybrid Hook)", false, "SpyEnabled", "Captura remotes via Namecall e Closure", function(Value)
+    getgenv().SlenderSpy.Enabled = Value
+end)
+
+Tab:Button("🗑️ Limpar Logs", "Limpa a memória e o visualizador", function()
+    getgenv().SlenderSpy.Logs = {}
+    SelectedLogIndex = nil
+    CurrentScriptBuffer = ""
+    if CodeInput then CodeInput.Set("") end
+    if LogDropdown then LogDropdown.Refresh({"Nenhum"}, "Nenhum") end
+end)
+
+Tab:Button("🚫 Resetar Blacklist", "Restaura filtros padrão", function()
+    getgenv().SlenderSpy.Blocked = { 
+        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat", "MainRemote"
+    }
+end)
+
+Tab:Label("Visualizador de Remotes")
+
+-- Dropdown Object Capture
+LogDropdown = Tab:Dropdown("Selecione um Remote", {"Nenhum"}, "Nenhum", "RemoteList", "Lista de remotes capturados", function(Option)
+    if Option == "Nenhum" then 
         SelectedLogIndex = nil
-        CurrentScriptBuffer = ""
-        if CodeInput then CodeInput:Set("") end
-        Rayfield:Notify({Title = "SlenderHub", Content = "Memória Limpa", Duration = 1})
-    end,
-})
+        return 
+    end
 
-Tab:CreateButton({
-    Name = "🚫 Resetar Blacklist",
-    Callback = function()
-        getgenv().SlenderSpy.Blocked = { 
-            "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat", "MainRemote"
-        }
-        Rayfield:Notify({Title = "SlenderHub", Content = "Blacklist Resetada", Duration = 1})
-    end,
-})
+    local ID = tonumber(Option:match("^%[(%d+)%]"))
+    if ID then SelectedLogIndex = ID end
+end)
 
-Tab:CreateSection("Visualizador de Remotes")
+Tab:Button("🔄 Atualizar Lista", "Carrega novos logs no dropdown", function()
+    local Options = {}
+    local Logs = getgenv().SlenderSpy.Logs
+    local Start = math.max(1, #Logs - 25)
 
-local LogDropdown = Tab:CreateDropdown({
-    Name = "Selecione um Remote",
-    Options = {"Nenhum"},
-    CurrentOption = "Nenhum",
-    Flag = "RemoteList",
-    Callback = function(Option)
-        local StringVal = (type(Option) == "table") and Option[1] or Option
+    for i = #Logs, Start, -1 do
+        local log = Logs[i]
+        local MethodShort = (log.Method == "FireServer") and "Fire" or "Invoke"
+        local Label = string.format("[%d] %s (%s) x%d", i, log.Name, MethodShort, log.Count)
+        table.insert(Options, Label)
+    end
+
+    if #Options == 0 then Options = {"Nenhum"} end
+    
+    -- SlenderWind Refresh Method
+    LogDropdown.Refresh(Options, "Nenhum")
+end)
+
+Tab:Label("Geração e Visualização")
+
+Tab:Button("⬇️ GERAR E VISUALIZAR ⬇️", "Converte o log em script Lua", function()
+    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+        local Code = GenerateScript(Log)
         
-        if StringVal == "Nenhum" then 
-            SelectedLogIndex = nil
-            return 
-        end
-
-        local ID = tonumber(StringVal:match("^%[(%d+)%]"))
-        if ID then SelectedLogIndex = ID end
-    end,
-})
-
-Tab:CreateButton({
-    Name = "🔄 Atualizar Lista",
-    Callback = function()
-        local Options = {}
-        local Logs = getgenv().SlenderSpy.Logs
-        local Start = math.max(1, #Logs - 25)
-
-        for i = #Logs, Start, -1 do
-            local log = Logs[i]
-            -- Adicionei o Método (Fire/Invoke) para ajudar na identificação
-            local MethodShort = (log.Method == "FireServer") and "Fire" or "Invoke"
-            local Label = string.format("[%d] %s (%s) x%d", i, log.Name, MethodShort, log.Count)
-            table.insert(Options, Label)
-        end
-
-        if #Options == 0 then Options = {"Nenhum"} end
+        CurrentScriptBuffer = Code
         
-        LogDropdown:Refresh(Options)
-        Rayfield:Notify({Title = "SlenderHub", Content = "Lista Atualizada", Duration = 1})
-    end,
-})
-
--- // UI: Geração e Execução
-Tab:CreateSection("Geração e Visualização")
-
-Tab:CreateButton({
-    Name = "⬇️ GERAR E VISUALIZAR ⬇️",
-    Callback = function()
-        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-            local Code = GenerateScript(Log)
-            
-            CurrentScriptBuffer = Code
-            
-            -- [VISUALIZER] Atualiza a caixa de texto
-            if CodeInput then
-                CodeInput:Set(Code)
-            end
-            
-            Rayfield:Notify({Title = "Sucesso", Content = "Código Gerado!", Duration = 1})
-        else
-            Rayfield:Notify({Title = "Erro", Content = "Selecione um remote!", Duration = 2})
+        -- SlenderWind Set Method
+        if CodeInput then
+            CodeInput.Set(Code)
         end
-    end,
-})
+    end
+end)
 
-Tab:CreateButton({
-    Name = "⛔ Bloquear Selecionado",
-    Callback = function()
-        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-            table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
-            Rayfield:Notify({Title = "Bloqueado", Content = Log.Name .. " adicionado à blacklist.", Duration = 2})
-        end
-    end,
-})
+Tab:Button("⛔ Bloquear Selecionado", "Adiciona à blacklist", function()
+    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+        table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
+    end
+end)
 
--- [VISUALIZER] Caixa de Texto
-CodeInput = Tab:CreateInput({
-    Name = "Script Preview",
-    PlaceholderText = "O código aparecerá aqui...",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(Text)
-        -- Permite editar o código manualmente antes de executar
-        CurrentScriptBuffer = Text
-    end,
-})
+-- Input Object Capture
+CodeInput = Tab:Input("Script Preview", "O código aparecerá aqui...", "CodeOut", "Edite ou copie o código", function(Text)
+    CurrentScriptBuffer = Text
+end)
 
-Tab:CreateButton({
-    Name = "📋 Copiar para Clipboard",
-    Callback = function()
-        if CurrentScriptBuffer ~= "" then
-            setclipboard(CurrentScriptBuffer)
-            Rayfield:Notify({Title = "Copiado", Content = "Script copiado para a área de transferência.", Duration = 1})
-        end
-    end,
-})
+Tab:Button("📋 Copiar para Clipboard", "Copia o código atual", function()
+    if CurrentScriptBuffer ~= "" then
+        setclipboard(CurrentScriptBuffer)
+    end
+end)
 
-Tab:CreateButton({
-    Name = "⚡ Replay Instantâneo",
-    Callback = function()
-        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-            if Log.Instance then
-                if Log.Method == "FireServer" then
-                    Log.Instance:FireServer(unpack(Log.Args))
-                elseif Log.Method == "InvokeServer" then
-                    task.spawn(function() Log.Instance:InvokeServer(unpack(Log.Args)) end)
-                end
-                Rayfield:Notify({Title = "Disparado", Content = "Remote executado novamente.", Duration = 1})
-            end
-        else
-            Rayfield:Notify({Title = "Erro", Content = "Selecione um remote!", Duration = 2})
-        end
-    end,
-})
-
-Tab:CreateButton({
-    Name = "▶ Executar Código Gerado",
-    Callback = function()
-        if CurrentScriptBuffer ~= "" then
-            local success, result = pcall(function()
-                local func, syntaxErr = loadstring(CurrentScriptBuffer)
-                if not func then error(syntaxErr) end
-                func()
-            end)
-
-            if success then
-                Rayfield:Notify({Title = "Executado", Content = "Script rodou com sucesso.", Duration = 1})
-            else
-                warn(result)
-                Rayfield:Notify({Title = "Erro", Content = "Verifique o console (F9).", Duration = 2})
+Tab:Button("⚡ Replay Instantâneo", "Executa o remote novamente", function()
+    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+        if Log.Instance then
+            if Log.Method == "FireServer" then
+                Log.Instance:FireServer(unpack(Log.Args))
+            elseif Log.Method == "InvokeServer" then
+                task.spawn(function() Log.Instance:InvokeServer(unpack(Log.Args)) end)
             end
         end
-    end,
-})
+    end
+end)
+
+Tab:Button("▶ Executar Código Gerado", "Testa o script gerado", function()
+    if CurrentScriptBuffer ~= "" then
+        local success, result = pcall(function()
+            local func, syntaxErr = loadstring(CurrentScriptBuffer)
+            if not func then error(syntaxErr) end
+            func()
+        end)
+
+        if not success then
+            warn("Erro na execução: " .. tostring(result))
+        end
+    end
+end)
 
 -- // ==========================================
 -- // CORE LOGIC: HYBRID HOOK SYSTEM
@@ -362,7 +301,6 @@ local function ProcessLog(Instance, Method, Args)
         if RemoteName == v then return end
     end
 
-    -- Tenta detectar o script que chamou (Anti-Cheat Bypass Intel)
     local SrcScript = getcallingscript and getcallingscript()
     local SrcPath = "Unknown"
     if SrcScript then
@@ -407,7 +345,6 @@ end)
 setreadonly(mt, true)
 
 -- 2. Hook Function (Direct Calls & UnreliableRemoteEvent)
--- Isso captura scripts que usam "local fire = Remote.FireServer" para evitar namecall hooks
 local OldFireServer
 local OldInvokeServer
 
@@ -421,7 +358,6 @@ OldInvokeServer = hookfunction(Instance.new("RemoteFunction").InvokeServer, newc
     return OldInvokeServer(self, ...)
 end))
 
--- Suporte para UnreliableRemoteEvent (Novo Networking do Roblox)
 pcall(function()
     local Unreliable = Instance.new("UnreliableRemoteEvent")
     local OldUnreliableFire
@@ -430,5 +366,3 @@ pcall(function()
         return OldUnreliableFire(self, ...)
     end))
 end)
-
-Rayfield:Notify({Title = "SlenderHub V2.1", Content = "Visualizer Active.", Duration = 3})
