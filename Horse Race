@@ -1,24 +1,24 @@
 --!strict
 --[[
-    SlenderHub | V1 - Horse Race (Architect Edition V2)
-    UI Library: SlenderWind V7 (Updated)
+    SlenderHub | V1 - Horse Race (Architect Edition V10)
+    UI Library: SlenderWind Internal (V10 Standard)
     Access Level: Dynamic (Free/Premium)
+    Refactored by: Chief Architect
 ]]
 
 --// 1. SlenderHub Singleton Pattern
 if getgenv().SlenderHubGameLoaded then 
-    warn("SlenderHub Game Script Already Running") 
+    warn("[SlenderHub] Instance already active.") 
     return 
 end
 getgenv().SlenderHubGameLoaded = true
 
---// 2. Check Access Level
+--// 2. Access Control
 local AccessLevel = getgenv().SlenderHubAccessLevel or "Free" 
 local IsPremium = (AccessLevel == "Premium")
 
---// 3. Load SlenderWind Library
--- Certifique-se que este link contém o código da V7 que te passei
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
+--// 3. Load SlenderWind V10 (Internal Standard)
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
 
 --// 4. Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -39,14 +39,10 @@ local function GetRemote(ServiceName, RemoteName, IsFunction)
             if Folder then Remote = Folder:FindFirstChild(RemoteName) end
         end
     end)
-    if not Remote then 
-        -- Silent warn for debugging if needed
-        -- warn("Remote not found: " .. ServiceName .. "/" .. RemoteName) 
-    end
     return Remote
 end
 
---// 6. Control Variables
+--// 6. Control Variables (Flags)
 local Flags = {
     AutoWin = false, AutoWinOP = false, AutoTrain = false, AutoHatch = false, AutoBuy = false, 
     AutoClaimExclusive = false, AutoCrate = false, SpeedHack = false, Noclip = false, InfJump = false,
@@ -56,36 +52,26 @@ local Flags = {
     WalkSpeedVal = 100
 }
 
---// 7. UI Construction (V7 Theme Integration)
-local SlenderTheme = {
-    MainBg = Color3.fromRGB(15, 15, 20),
-    Sidebar = Color3.fromRGB(20, 20, 25),
-    Accent = Color3.fromRGB(0, 255, 128), -- Slender Green
-    Text = Color3.fromRGB(240, 240, 240),
-    Stroke = Color3.fromRGB(40, 40, 45)
-}
-
-local HubTitle = "SlenderHub | Horse Race [" .. string.upper(AccessLevel) .. "]"
-
-local Window = Library.Window({
-   Name = HubTitle,
-   Keybind = Enum.KeyCode.RightControl,
-   KeySystem = false,
-   Theme = SlenderTheme -- V7 Feature
+--// 7. UI Construction (V10)
+local Window = SlenderWind.Window({
+    Name = "SlenderHub | Horse Race [" .. string.upper(AccessLevel) .. "]",
+    KeySystem = false,
+    Theme = { 
+        Accent = Color3.fromRGB(0, 255, 128),
+        Background = Color3.fromRGB(15, 15, 20),
+        Text = Color3.fromRGB(240, 240, 240)
+    } 
 })
 
--- Ativar HUD
-Window:Watermark({ Enabled = true, Title = HubTitle })
+--// =================================================================
+--// TAB: PREMIUM OP
+--// =================================================================
+local TabOP = Window:Tab("Premium OP")
 
---// =================================================================
---// TAB: PREMIUM OP (ONLY VISIBLE/ACTIVE FOR PREMIUM)
---// =================================================================
 if IsPremium then
-    local TabOP = Window:Tab("Premium OP", "rbxassetid://3926305904")
+    TabOP:Label("--- Blatant Farming ---")
     
-    TabOP:Section("Blatant Farming")
-    
-    TabOP:Toggle("⚡ SUPER Auto Win (5x Speed)", false, function(Value)
+    TabOP:Toggle("⚡ SUPER Auto Win (5x)", false, "AutoWinOP", "Extreme speed win farming", function(Value)
         Flags.AutoWinOP = Value
         local Remote = GetRemote("FightService", "GetWinsEvent", false)
         local Vector = Vector3.new(1811.09, 782.79, -689544.81)
@@ -93,21 +79,20 @@ if IsPremium then
         task.spawn(function()
             while Flags.AutoWinOP do
                 if Remote then 
-                    -- OP LOGIC: Fire multiple times per frame
                     for i = 1, 5 do
                         pcall(function() Remote:FireServer("WinGate_16", Vector) end)
                     end
                 else 
                     Remote = GetRemote("FightService", "GetWinsEvent", false) 
                 end
-                task.wait(0.01) -- Extreme Speed
+                task.wait(0.01)
             end
         end)
     end)
 
-    TabOP:Section("Character Exploits")
+    TabOP:Label("--- Character Exploits ---")
 
-    TabOP:Toggle("Speed Hack (Loop Bypass)", false, function(Value)
+    TabOP:Toggle("Speed Hack", false, "SpeedHack", "Bypasses loop checks", function(Value)
         Flags.SpeedHack = Value
         task.spawn(function()
             while Flags.SpeedHack and task.wait() do
@@ -121,11 +106,11 @@ if IsPremium then
         end)
     end)
 
-    TabOP:Slider("Speed Value", 16, 500, 100, function(Value)
+    TabOP:Slider("Speed Value", 16, 500, 100, "WalkSpeedVal", "Adjust movement speed", function(Value)
         Flags.WalkSpeedVal = Value
     end)
 
-    TabOP:Toggle("Noclip (Walk Through Walls)", false, function(Value)
+    TabOP:Toggle("Noclip", false, "Noclip", "Walk through walls", function(Value)
         Flags.Noclip = Value
         if Flags.Noclip then
             RunService:BindToRenderStep("SlenderNoclip", 1000, function()
@@ -140,11 +125,10 @@ if IsPremium then
         end
     end)
 
-    TabOP:Toggle("Infinite Jump", false, function(Value)
+    TabOP:Toggle("Infinite Jump", false, "InfJump", "Jump in mid-air", function(Value)
         Flags.InfJump = Value
     end)
     
-    -- Logic for InfJump (Connected once)
     UserInputService.JumpRequest:Connect(function()
         if Flags.InfJump and LocalPlayer.Character then
             LocalPlayer.Character:FindFirstChildOfClass('Humanoid'):ChangeState("Jumping")
@@ -152,20 +136,21 @@ if IsPremium then
     end)
 
 else
-    -- Placeholder for Free Users
-    local TabOP = Window:Tab("Premium 🔒", "rbxassetid://3926305904")
-    TabOP:Button("🔒 Unlock OP Features", function()
-        Window:Notify("Premium Required", "Get a key at SlenderHub.shop", 3)
+    TabOP:Label("--- LOCKED ---")
+    TabOP:Button("🔒 Unlock OP Features", "Requires Premium Key", function()
+        -- Notification handled by UI lib usually, or print
+        print("Visit SlenderHub.shop")
     end)
 end
 
 --// =================================================================
---// TAB: FARM (NORMAL)
+--// TAB: FARM
 --// =================================================================
-local TabFarm = Window:Tab("Farm", "rbxassetid://3926305904")
+local TabFarm = Window:Tab("Farm")
 
-TabFarm:Section("Legit Farm")
-TabFarm:Toggle("Auto Win (Normal Speed)", false, function(Value)
+TabFarm:Label("--- Legit Farm ---")
+
+TabFarm:Toggle("Auto Win (Legit)", false, "AutoWin", "Normal speed farming", function(Value)
     Flags.AutoWin = Value
     local Remote = GetRemote("FightService", "GetWinsEvent", false)
     local Vector = Vector3.new(1811.09, 782.79, -689544.81)
@@ -181,17 +166,17 @@ TabFarm:Toggle("Auto Win (Normal Speed)", false, function(Value)
     end)
 end)
 
-TabFarm:Section("Auto Train")
+TabFarm:Label("--- Auto Train ---")
 
-TabFarm:Dropdown("Mundo (World)", {"1","2","3","4","5"}, "1", function(val)
+TabFarm:Dropdown("World", {"1","2","3","4","5"}, "1", "TrainWorld", "Select Training World", function(val)
     Flags.TrainWorld = val
 end)
 
-TabFarm:Dropdown("Máquina (Machine)", {"1","2","3","4","5","6","7","8","9","10","11","12"}, "1", function(val)
+TabFarm:Dropdown("Machine", {"1","2","3","4","5","6","7","8","9","10","11","12"}, "1", "TrainMachine", "Select Machine Tier", function(val)
     Flags.TrainMachine = val
 end)
 
-TabFarm:Toggle("Ativar Treino (Auto Train)", false, function(Value)
+TabFarm:Toggle("Enable Auto Train", false, "AutoTrain", "Start training loop", function(Value)
     Flags.AutoTrain = Value
     local Remote = GetRemote("TrainService", "RunTrain", false)
     task.spawn(function()
@@ -206,16 +191,16 @@ end)
 --// =================================================================
 --// TAB: TELEPORT
 --// =================================================================
-local TabTP = Window:Tab("Teleport", "rbxassetid://3926305904")
+local TabTP = Window:Tab("Teleport")
 local Areas = { "Area_1", "Area_2", "Area_3", "Area_4", "Area_5", "Area_Christmas", "Area_Fruit" }
 
-TabTP:Section("Zone Teleport")
+TabTP:Label("--- Zone Teleport ---")
 
-TabTP:Dropdown("Selecionar Area", Areas, "Area_1", function(val)
+TabTP:Dropdown("Select Area", Areas, "Area_1", "SelectedArea", "Destination", function(val)
     Flags.SelectedArea = val
 end)
 
-TabTP:Button("Teleportar Agora", function()
+TabTP:Button("Teleport Now", "Instant TP to selected area", function()
     local TargetArea = Flags.SelectedArea
     local Remote = GetRemote("AreaService", "UpdatePlayerCurrentArea", false)
     if Remote then pcall(function() Remote:FireServer(TargetArea) end) end
@@ -229,7 +214,6 @@ TabTP:Button("Teleportar Agora", function()
             if TargetObj then
                 local TargetCFrame = TargetObj:IsA("Model") and TargetObj:GetPivot() or TargetObj.CFrame
                 Root.CFrame = TargetCFrame + Vector3.new(0, 5, 0)
-                Window:Notify("Teleport", "Teleportado para: " .. TargetArea, 2)
             end
         end
     end)
@@ -238,14 +222,14 @@ end)
 --// =================================================================
 --// TAB: EGGS
 --// =================================================================
-local TabEggs = Window:Tab("Eggs", "rbxassetid://3926305904")
+local TabEggs = Window:Tab("Eggs")
 local EggIDs = { "Egg_1_1", "Egg_1_2", "Egg_1_3", "Egg_1_4", "Egg_2_1", "Egg_2_2", "Egg_2_3", "Egg_2_4", "Egg_3_1", "Egg_3_2", "Egg_3_3", "Egg_3_4", "Egg_4_1", "Egg_4_2", "Egg_4_3", "Egg_Tower_1", "Egg_Christmas" }
 
-TabEggs:Dropdown("Escolher Ovo", EggIDs, "Egg_1_1", function(val)
+TabEggs:Dropdown("Select Egg", EggIDs, "Egg_1_1", "SelectedEgg", "Egg to hatch", function(val)
     Flags.SelectedEgg = val
 end)
 
-TabEggs:Toggle("Auto Hatch (Fast)", false, function(Value)
+TabEggs:Toggle("Auto Hatch", false, "AutoHatch", "Fast hatch mode", function(Value)
     Flags.AutoHatch = Value
     local Remote = GetRemote("EggHatchService", "Hatch", false)
     task.spawn(function()
@@ -257,9 +241,10 @@ TabEggs:Toggle("Auto Hatch (Fast)", false, function(Value)
     end)
 end)
 
-TabEggs:Section("Premium Rewards")
+TabEggs:Label("--- Premium Rewards ---")
+
 if IsPremium then
-    TabEggs:Toggle("Auto Claim Exclusive Egg (OP)", false, function(Value)
+    TabEggs:Toggle("Auto Claim Exclusive", false, "AutoClaimExclusive", "Claims online rewards", function(Value)
         Flags.AutoClaimExclusive = Value
         local Remote = GetRemote("OnlineRewardService", "ClaimOnlineQuestReward", true)
         task.spawn(function()
@@ -271,24 +256,22 @@ if IsPremium then
         end)
     end)
 else
-    TabEggs:Button("🔒 Auto Exclusive Egg (PREMIUM)", function()
-        Window:Notify("Access Denied", "Premium Only", 3)
-    end)
+    TabEggs:Button("🔒 Auto Exclusive Egg", "Premium Only", function() end)
 end
 
 --// =================================================================
 --// TAB: SHOP
 --// =================================================================
-local TabShop = Window:Tab("Shop", "rbxassetid://3926305904")
+local TabShop = Window:Tab("Shop")
 local VendingItems = { "WPN_101", "WPN_102", "Potion_DoubleWins", "Potion_SuperLucky", "KingSlime" }
 
-TabShop:Section("Vending Machine")
+TabShop:Label("--- Vending Machine ---")
 
-TabShop:Dropdown("Item", VendingItems, "WPN_101", function(val)
+TabShop:Dropdown("Item", VendingItems, "WPN_101", "VendingItem", "Item to buy", function(val)
     Flags.VendingItem = val
 end)
 
-TabShop:Toggle("Auto Buy Item", false, function(Value)
+TabShop:Toggle("Auto Buy Item", false, "AutoBuy", "Spam purchase", function(Value)
     Flags.AutoBuy = Value
     local Remote = GetRemote("PurchaseService", "PromptPurchase", false)
     task.spawn(function()
@@ -299,13 +282,14 @@ TabShop:Toggle("Auto Buy Item", false, function(Value)
     end)
 end)
 
-TabShop:Section("Premium Crates")
+TabShop:Label("--- Premium Crates ---")
+
 if IsPremium then
-    TabShop:Dropdown("Select Crate", {"Crate_1", "Crate_2"}, "Crate_1", function(val)
+    TabShop:Dropdown("Select Crate", {"Crate_1", "Crate_2"}, "Crate_1", "SelectedCrate", "Crate type", function(val)
         Flags.SelectedCrate = val
     end)
 
-    TabShop:Toggle("Auto Open Crate (OP)", false, function(Value)
+    TabShop:Toggle("Auto Open Crate", false, "AutoCrate", "OP Unboxing", function(Value)
         Flags.AutoCrate = Value
         local Remote = GetRemote("ItemCrateService", "UnboxCrate", false)
         task.spawn(function()
@@ -316,29 +300,26 @@ if IsPremium then
         end)
     end)
 else
-    TabShop:Button("🔒 Auto Open Crate (PREMIUM)", function()
-        Window:Notify("Access Denied", "Premium Only", 3)
-    end)
+    TabShop:Button("🔒 Auto Open Crate", "Premium Only", function() end)
 end
 
 --// =================================================================
 --// TAB: MISC
 --// =================================================================
-local TabMisc = Window:Tab("Misc", "rbxassetid://3926305904")
+local TabMisc = Window:Tab("Misc")
 
-TabMisc:Button("Anti-AFK (Low Render)", function()
+TabMisc:Button("Anti-AFK (Low Render)", "Prevents kick & lowers CPU", function()
     RunService:Set3dRenderingEnabled(false)
     LocalPlayer.Idled:connect(function()
         VirtualUser:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
         wait(1)
         VirtualUser:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
     end)
-    Window:Notify("Anti-AFK", "Enabled & Low Render Mode", 3)
 end)
 
-TabMisc:Button("Restore Rendering", function()
+TabMisc:Button("Restore Rendering", "Fixes graphics", function()
     RunService:Set3dRenderingEnabled(true)
-    Window:Notify("Graphics", "Rendering Restored", 3)
 end)
 
-Window:Notify("SlenderHub", "Script Loaded Successfully", 5)
+--// End
+print("[SlenderHub] V10 Loaded.")
