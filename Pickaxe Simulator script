@@ -1,6 +1,7 @@
 --[[
-    SlenderHub - Pickaxe Simulator [V60.3 TITANIUM - PREMIUM SHOP EDITION]
-    Architect: BloxMinds AI
+    SlenderHub - Pickaxe Simulator [V60.3 TITANIUM - SLENDERWIND EDITION]
+    Architect: SlenderHub Chief Architect
+    Framework: SlenderWind V5 (Internal)
     
     =========== [ INSTRUCTIONS ] ===========
     getgenv().SlenderHubAccessLevel = "Free"    -- Standard Features
@@ -10,7 +11,11 @@
 
 -- [ 0. SAFETY SINGLETON ] --
 if getgenv().SlenderHubLoaded then 
-    warn("⛔ SlenderHub is already running!")
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "SlenderHub Security",
+        Text = "Instance already running.",
+        Duration = 5
+    })
     return 
 end
 getgenv().SlenderHubLoaded = true
@@ -30,12 +35,13 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
 
--- UI Library
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- [ 2. UI LIBRARY INJECTION ] --
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
 
--- [ 2. INTERNAL DATABASE ] --
+-- [ 3. INTERNAL DATABASE ] --
 getgenv().Flags = {
     MiningSpeed = 1,
     Egg = "Basic Egg",
@@ -86,20 +92,20 @@ local SpoofedStats = {
     "VIP", "Teleport", "Double Gems", "Double Coins"
 }
 
--- [ 3. INITIALIZATION & HOOKS ] --
+-- [ 4. INITIALIZATION & HOOKS ] --
 local function Initialize()
     local s, e = pcall(function()
-        -- 3.1 Load Framework
+        -- 4.1 Load Framework
         GameData.Paper = require(ReplicatedStorage:WaitForChild("Paper", 10))
         
-        -- 3.2 Hook Remotes
+        -- 4.2 Hook Remotes
         local R = ReplicatedStorage.Paper:FindFirstChild("Remotes")
         if R then
             GameData.Remotes.Funct = R:FindFirstChild("__remotefunction")
             GameData.Remotes.Event = R:FindFirstChild("__remoteevent")
         end
 
-        -- 3.3 Hook MineClient (Garbage Collection Scan)
+        -- 4.3 Hook MineClient (Garbage Collection Scan)
         task.spawn(function()
             local attempts = 0
             while not GameData.MineClient and attempts < 20 do
@@ -114,7 +120,7 @@ local function Initialize()
             end
         end)
 
-        -- 3.4 Load Game Tables
+        -- 4.4 Load Game Tables
         local T = ReplicatedStorage:WaitForChild("Tables", 5)
         if T then
             local ET = require(T:WaitForChild("Eggs"))
@@ -133,11 +139,11 @@ local function Initialize()
             table.sort(GameData.Tables.Upgrades)
         end
     end)
-    if not s then warn("Init Failed: " .. tostring(e)) end
+    if not s then warn("SlenderHub Init Failed: " .. tostring(e)) end
 end
 Initialize()
 
--- [ 4. TASK MANAGER ] --
+-- [ 5. TASK MANAGER ] --
 local TaskManager = {}
 local Connections = {} 
 
@@ -161,9 +167,17 @@ local function NetworkCall(type, method, ...)
     end
 end
 
--- [ 5. CORE LOGIC ] --
+local function Notify(title, text)
+    StarterGui:SetCore("SendNotification", {
+        Title = title,
+        Text = text,
+        Duration = 3
+    })
+end
 
--- 5.0 SHOP BYPASS SYSTEM (PREMIUM ONLY)
+-- [ 6. CORE LOGIC ] --
+
+-- 6.0 SHOP BYPASS SYSTEM (PREMIUM ONLY)
 local function ToggleShopBypass(state)
     if not GameData.Paper or not GameData.Paper.Stats then return end
 
@@ -202,7 +216,7 @@ local function ToggleShopBypass(state)
     end)
 end
 
--- 5.1 MINING SYSTEM
+-- 6.1 MINING SYSTEM
 local function EnableMining(bool)
     StopTask("Mining")
     if bool then
@@ -225,7 +239,7 @@ local function EnableMining(bool)
     end
 end
 
--- 5.2 EVENT VACUUM
+-- 6.2 EVENT VACUUM
 local function EnableEventVacuum(bool)
     StopTask("EventVacuum")
     if bool then
@@ -255,7 +269,7 @@ local function EnableEventVacuum(bool)
     end
 end
 
--- 5.3 FARM LOGIC
+-- 6.3 FARM LOGIC
 local function FarmLogic()
     local W = Workspace.Worlds:FindFirstChild("Stud World") or Workspace.Worlds:FindFirstChild("Farm")
     if W and W:FindFirstChild("Farm") then
@@ -277,7 +291,7 @@ local function FarmLogic()
     NetworkCall("Invoke", "Upgrade Farm")
 end
 
--- 5.4 BULK CRAFTING
+-- 6.4 BULK CRAFTING
 local function BulkCraft(tier)
     if not GameData.Paper then return end
     local pets = GameData.Paper.Stats.Get("Pets").Value
@@ -297,276 +311,185 @@ local function BulkCraft(tier)
     end
 end
 
--- [ 6. UI INTERFACE ] --
-local Window = Rayfield:CreateWindow({
-   Name = IsPremium and "SlenderHub | TITANIUM V60.3 💎" or "SlenderHub | FREE V60.3 ⚠️",
-   LoadingTitle = "Loading Modules...",
-   LoadingSubtitle = "By BloxMinds AI",
-   ConfigurationSaving = { Enabled = true, FileName = "SlenderHubV60_3" },
-   KeySystem = false,
+-- [ 7. SLENDERWIND UI CONSTRUCTION ] --
+
+local Window = SlenderWind.Window({
+    Name = IsPremium and "SlenderHub | TITANIUM V60.3" or "SlenderHub | FREE V60.3",
+    KeySystem = false,
+    Theme = { 
+        Accent = IsPremium and Color3.fromRGB(0, 255, 213) or Color3.fromRGB(255, 170, 0) 
+    }
 })
 
--- ==== TAB: SHOP (PREMIUM PROTECTED) ==== --
-local TabShop = Window:CreateTab("Shop 🛒", "shopping-cart")
+-- ==== TAB: SHOP ==== --
+local TabShop = Window:Tab("Shop")
 
-TabShop:CreateSection("Client Bypass (Visual/Equip)")
+TabShop:Label("Client Bypass (Visual/Equip)")
 
-TabShop:CreateToggle({
-    Name = "Unlock All Gamepasses & Items (Premium)",
-    CurrentValue = false,
-    Flag = "UnlockPasses",
-    Callback = function(Value)
-        -- [ PREMIUM CHECK ] --
-        if not IsPremium then
-            Rayfield:Notify({
-                Title = "ACCESS DENIED 🔒",
-                Content = "This feature is restricted to Premium users.",
-                Duration = 5,
-                Image = "lock"
-            })
-            return -- Stops execution here
-        end
-        
-        -- Execute Bypass if Premium
-        ToggleShopBypass(Value)
-        if Value then
-            Rayfield:Notify({Title = "Bypass Active", Content = "Items unlocked locally.", Duration = 4})
-        end
-    end,
-})
+TabShop:Toggle("Unlock All Gamepasses (Premium)", false, "UnlockPasses", "Requires Premium Access", function(Value)
+    if not IsPremium then
+        Notify("ACCESS DENIED", "This feature is restricted to Premium users.")
+        -- We cannot force the toggle off visually in SlenderWind easily without a refresh, 
+        -- but the logic below prevents execution.
+        return 
+    end
+    
+    ToggleShopBypass(Value)
+    if Value then Notify("Bypass Active", "Items unlocked locally.") end
+end)
 
-TabShop:CreateButton({
-    Name = "Force Update Shop UI",
-    Callback = function()
-        pcall(function()
-            require(ReplicatedStorage.Modules.Client.UI).Shop.UpdateShop(LocalPlayer)
-        end)
-    end,
-})
+TabShop:Button("Force Update Shop UI", "Refreshes the shop interface", function()
+    pcall(function()
+        require(ReplicatedStorage.Modules.Client.UI).Shop.UpdateShop(LocalPlayer)
+    end)
+end)
 
-TabShop:CreateSection("Performance")
+TabShop:Label("Performance")
 
-TabShop:CreateButton({
-    Name = "Remove 'Buy' Boards (FPS Boost)",
-    Callback = function()
-        local targets = {"ExclusiveStands", "Passes", "EggBoard"}
-        for _, t in pairs(targets) do
-            local obj = Workspace:FindFirstChild(t)
-            if obj then obj:Destroy() end
-        end
-        Rayfield:Notify({Title = "Cleaned", Content = "Removed purchase boards.", Duration = 3})
-    end,
-})
+TabShop:Button("Remove 'Buy' Boards", "Boosts FPS by removing billboards", function()
+    local targets = {"ExclusiveStands", "Passes", "EggBoard"}
+    for _, t in pairs(targets) do
+        local obj = Workspace:FindFirstChild(t)
+        if obj then obj:Destroy() end
+    end
+    Notify("Cleaned", "Removed purchase boards.")
+end)
 
 -- ==== TAB: MINE ==== --
-local TabMine = Window:CreateTab("Mine ⛏️", 4483345998)
+local TabMine = Window:Tab("Mine")
 
-TabMine:CreateSection(IsPremium and "GOD MODE CONTROLS" or "LEGIT CONTROLS")
+TabMine:Label(IsPremium and "GOD MODE CONTROLS" or "LEGIT CONTROLS")
 
-TabMine:CreateSlider({
-    Name = "Mining Speed Multiplier",
-    Range = {1, Config.SpeedLimit},
-    Increment = IsPremium and 1 or 0.5,
-    Suffix = "x",
-    CurrentValue = 1,
-    Callback = function(Value)
-        getgenv().Flags.MiningSpeed = Value
-        if LocalPlayer and LocalPlayer:GetAttribute("SPEED_HACK") then
-            LocalPlayer:SetAttribute("SPEED_HACK", Value)
-        end
+TabMine:Slider("Mining Speed Multiplier", 1, Config.SpeedLimit, 1, "MineSpeed", "Speed Hack Value", function(Value)
+    getgenv().Flags.MiningSpeed = Value
+    if LocalPlayer and LocalPlayer:GetAttribute("SPEED_HACK") then
+        LocalPlayer:SetAttribute("SPEED_HACK", Value)
     end
-})
+end)
 
-TabMine:CreateToggle({
-    Name = IsPremium and "Enable Hyper Mine (Heartbeat)" or "Enable Auto Mine (Standard)",
-    CurrentValue = false,
-    Callback = function(v) EnableMining(v) end
-})
+TabMine:Toggle(IsPremium and "Enable Hyper Mine" or "Enable Auto Mine", false, "AutoMine", "Mines ores automatically", function(v) 
+    EnableMining(v) 
+end)
 
-TabMine:CreateToggle({
-    Name = "Auto Buy Miner",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then StartTask("Miner", function() while true do NetworkCall("Invoke", "Buy Miner") task.wait(2) end end)
-        else StopTask("Miner") end
-    end
-})
+TabMine:Toggle("Auto Buy Miner", false, "BuyMiner", "Buys miners automatically", function(v)
+    if v then StartTask("Miner", function() while true do NetworkCall("Invoke", "Buy Miner") task.wait(2) end end)
+    else StopTask("Miner") end
+end)
 
-TabMine:CreateToggle({
-    Name = "Auto Enchant Pickaxe",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then StartTask("Ench", function() while true do NetworkCall("Invoke", "Enchant Pickaxe") task.wait(3) end end)
-        else StopTask("Ench") end
-    end
-})
+TabMine:Toggle("Auto Enchant Pickaxe", false, "AutoEnchant", "Enchants automatically", function(v)
+    if v then StartTask("Ench", function() while true do NetworkCall("Invoke", "Enchant Pickaxe") task.wait(3) end end)
+    else StopTask("Ench") end
+end)
 
 -- ==== TAB: EGGS ==== --
-local TabEggs = Window:CreateTab("Eggs 🥚", 4483362458)
+local TabEggs = Window:Tab("Eggs")
 
-TabEggs:CreateDropdown({
-    Name = "Select Egg",
-    Options = GameData.Tables.Eggs,
-    CurrentOption = {"Basic Egg"},
-    Callback = function(O) getgenv().Flags.Egg = O[1] end
-})
+TabEggs:Dropdown("Select Egg", GameData.Tables.Eggs, "Basic Egg", "EggSelect", "Choose egg to hatch", function(val)
+    getgenv().Flags.Egg = val
+end)
 
-TabEggs:CreateDropdown({
-    Name = "Hatch Amount",
-    Options = {"1", "3", "Max"},
-    CurrentOption = {"1"},
-    Callback = function(O) getgenv().Flags.HatchMode = O[1] end
-})
+TabEggs:Dropdown("Hatch Amount", {"1", "3", "Max"}, "1", "HatchMode", "Amount per hatch", function(val)
+    getgenv().Flags.HatchMode = val
+end)
 
-TabEggs:CreateToggle({
-    Name = IsPremium and "FLASH HATCH (No Delay)" or "Auto Hatch (Anim Delay)",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then
-            StartTask("Hatch", function()
-                while true do
-                    local mode = getgenv().Flags.HatchMode
-                    local amt = (mode == "Max" and "Max" or tonumber(mode))
-                    NetworkCall("Invoke", "Hatch Egg", getgenv().Flags.Egg, amt)
-                    task.wait(IsPremium and 0.05 or 0.6)
-                end
-            end)
-        else StopTask("Hatch") end
-    end
-})
+TabEggs:Toggle(IsPremium and "FLASH HATCH (No Delay)" or "Auto Hatch", false, "AutoHatch", "Hatches eggs", function(v)
+    if v then
+        StartTask("Hatch", function()
+            while true do
+                local mode = getgenv().Flags.HatchMode
+                local amt = (mode == "Max" and "Max" or tonumber(mode))
+                NetworkCall("Invoke", "Hatch Egg", getgenv().Flags.Egg, amt)
+                task.wait(IsPremium and 0.05 or 0.6)
+            end
+        end)
+    else StopTask("Hatch") end
+end)
 
 -- ==== TAB: FARM/PETS ==== --
-local TabFP = Window:CreateTab("Farm/Pets 🐾", 4483362458)
+local TabFP = Window:Tab("Farm")
 
-TabFP:CreateToggle({
-    Name = "Auto Plant & Harvest & Upgrade",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then StartTask("Farm", function() while true do FarmLogic() task.wait(IsPremium and 1 or 3) end end)
-        else StopTask("Farm") end
-    end
-})
+TabFP:Toggle("Auto Plant/Harvest/Upgrade", false, "AutoFarm", "Manages farm completely", function(v)
+    if v then StartTask("Farm", function() while true do FarmLogic() task.wait(IsPremium and 1 or 3) end end)
+    else StopTask("Farm") end
+end)
 
-TabFP:CreateToggle({
-    Name = "Auto Craft All (Golden & Rainbow)",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then
-            StartTask("Craft", function()
-                while true do
-                    BulkCraft(1) -- Gold
-                    task.wait(0.2)
-                    BulkCraft(2) -- Rainbow
-                    task.wait(2)
-                end
-            end)
-        else StopTask("Craft") end
-    end
-})
+TabFP:Toggle("Auto Craft All (Gold/Rainbow)", false, "AutoCraft", "Crafts pets automatically", function(v)
+    if v then
+        StartTask("Craft", function()
+            while true do
+                BulkCraft(1) -- Gold
+                task.wait(0.2)
+                BulkCraft(2) -- Rainbow
+                task.wait(2)
+            end
+        end)
+    else StopTask("Craft") end
+end)
 
 -- ==== TAB: UPGRADES ==== --
-local TabUpg = Window:CreateTab("Upgrades 📈", 4483362458)
+local TabUpg = Window:Tab("Upgrades")
 
-TabUpg:CreateDropdown({
-    Name = "Rebirth Amount",
-    Options = GameData.Tables.Rebirths,
-    CurrentOption = {"1"},
-    Callback = function(O) getgenv().Flags.RebirthMode = O[1] end
-})
+TabUpg:Dropdown("Rebirth Amount", GameData.Tables.Rebirths, "1", "RebirthMode", "Rebirth target", function(val)
+    getgenv().Flags.RebirthMode = val
+end)
 
-TabUpg:CreateToggle({
-    Name = "Auto Rebirth",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then StartTask("Reb", function() 
-            while true do 
-                local r = getgenv().Flags.RebirthMode
-                NetworkCall("Invoke", "Rebirth", (r=="Max" and "Max" or tonumber(r))) 
-                task.wait(1) 
-            end end)
-        else StopTask("Reb") end
-    end
-})
+TabUpg:Toggle("Auto Rebirth", false, "AutoRebirth", "Rebirths automatically", function(v)
+    if v then StartTask("Reb", function() 
+        while true do 
+            local r = getgenv().Flags.RebirthMode
+            NetworkCall("Invoke", "Rebirth", (r=="Max" and "Max" or tonumber(r))) 
+            task.wait(1) 
+        end end)
+    else StopTask("Reb") end
+end)
 
-TabUpg:CreateDropdown({
-    Name = "Select Upgrades",
-    Options = GameData.Tables.Upgrades,
-    CurrentOption = {"More Gems"},
-    MultipleOptions = true,
-    Callback = function(O) getgenv().Flags.SelectedUpg = O end
-})
+TabUpg:MultiDropdown("Select Upgrades", GameData.Tables.Upgrades, {"More Gems"}, "SelectUpg", "Upgrades to buy", function(val)
+    getgenv().Flags.SelectedUpg = val
+end)
 
-TabUpg:CreateToggle({
-    Name = "Auto Buy Upgrades",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then StartTask("BuyUpg", function() while true do for _,u in pairs(getgenv().Flags.SelectedUpg) do NetworkCall("Invoke", "Upgrade", u) end task.wait(2) end end)
-        else StopTask("BuyUpg") end
-    end
-})
+TabUpg:Toggle("Auto Buy Upgrades", false, "BuyUpg", "Buys selected upgrades", function(v)
+    if v then StartTask("BuyUpg", function() while true do for _,u in pairs(getgenv().Flags.SelectedUpg) do NetworkCall("Invoke", "Upgrade", u) end task.wait(2) end end)
+    else StopTask("BuyUpg") end
+end)
 
 -- ==== TAB: EVENT ==== --
-local TabEvent = Window:CreateTab("Event 👑", 4483362458)
+local TabEvent = Window:Tab("Event")
 
-TabEvent:CreateSection("35M / Royal Event")
+TabEvent:Label("35M / Royal Event")
 
-TabEvent:CreateToggle({
-    Name = IsPremium and "EVENT VACUUM (Instant Teleport)" or "Auto Farm Drops (Scan Loop)",
-    CurrentValue = false,
-    Callback = function(v) EnableEventVacuum(v) end
-})
+TabEvent:Toggle(IsPremium and "EVENT VACUUM (Instant)" or "Auto Farm Drops", false, "EventVac", "Collects drops", function(v) 
+    EnableEventVacuum(v) 
+end)
 
-TabEvent:CreateSection("Event Merchant")
+TabEvent:Label("Event Merchant")
 
-TabEvent:CreateDropdown({
-    Name = "Merchant Items",
-    Options = GameData.Tables.EventItems,
-    CurrentOption = {"Luck Potion"},
-    MultipleOptions = true,
-    Callback = function(O) getgenv().Flags.SelectedMerch = O end
-})
+TabEvent:MultiDropdown("Merchant Items", GameData.Tables.EventItems, {"Luck Potion"}, "MerchItems", "Items to buy", function(val)
+    getgenv().Flags.SelectedMerch = val
+end)
 
-TabEvent:CreateToggle({
-    Name = "Auto Buy Merchant Items",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then StartTask("Merch", function() while true do for _, item in pairs(getgenv().Flags.SelectedMerch) do NetworkCall("Invoke", "Buy Event Merchant", item) end task.wait(3) end end)
-        else StopTask("Merch") end
-    end
-})
+TabEvent:Toggle("Auto Buy Merchant Items", false, "BuyMerch", "Buys merchant items", function(v)
+    if v then StartTask("Merch", function() while true do for _, item in pairs(getgenv().Flags.SelectedMerch) do NetworkCall("Invoke", "Buy Event Merchant", item) end task.wait(3) end end)
+    else StopTask("Merch") end
+end)
 
-TabEvent:CreateSection("Event Upgrades")
+TabEvent:Label("Event Upgrades")
 
-TabEvent:CreateDropdown({
-    Name = "Select Event Upgrades",
-    Options = GameData.Tables.EventUpgrades,
-    CurrentOption = {"More Crowns"},
-    MultipleOptions = true,
-    Callback = function(O) getgenv().Flags.SelectedEventUpg = O end
-})
+TabEvent:MultiDropdown("Select Event Upgrades", GameData.Tables.EventUpgrades, {"More Crowns"}, "EventUpgList", "Upgrades to buy", function(val)
+    getgenv().Flags.SelectedEventUpg = val
+end)
 
-TabEvent:CreateToggle({
-    Name = "Auto Buy Event Upgrades",
-    CurrentValue = false,
-    Callback = function(v)
-        if v then 
-            StartTask("EventUpg", function() 
-                while true do 
-                    for _, u in pairs(getgenv().Flags.SelectedEventUpg) do 
-                        NetworkCall("Invoke", "Buy Event Upgrade", u) 
-                        NetworkCall("Invoke", "Upgrade Event", u) 
-                    end 
-                    task.wait(2) 
+TabEvent:Toggle("Auto Buy Event Upgrades", false, "BuyEventUpg", "Buys event upgrades", function(v)
+    if v then 
+        StartTask("EventUpg", function() 
+            while true do 
+                for _, u in pairs(getgenv().Flags.SelectedEventUpg) do 
+                    NetworkCall("Invoke", "Buy Event Upgrade", u) 
+                    NetworkCall("Invoke", "Upgrade Event", u) 
                 end 
-            end)
-        else StopTask("EventUpg") end
-    end
-})
+                task.wait(2) 
+            end 
+        end)
+    else StopTask("EventUpg") end
+end)
 
-Rayfield:LoadConfiguration()
-Rayfield:Notify({
-    Title = "SlenderHub Loaded",
-    Content = IsPremium and "Premium Active: Shop Bypass Unlocked!" or "Free Version Active",
-    Duration = 5,
-    Image = 4483345998,
-})
+Notify("SlenderHub Loaded", IsPremium and "Titanium Edition Active" or "Free Edition Active")
