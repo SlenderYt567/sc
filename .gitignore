@@ -11,7 +11,7 @@ local RunService = game:GetService("RunService")
 local ScriptVersion = "2.1.0"
 local KeyFileName = "SlenderHub_Velink_Key.txt"
 local VelinkAPI = "https://velink.to/api/public/check/key?key="
-local GetKeyURL = "https://velink.to/get-key/YOUR-ID-HERE" -- Configure isso no Dashboard da Velink
+local GetKeyURL = "https://velink.to/u/678807" -- [[ UPDATED LINK ]]
 
 -- // UI LIBRARY (SlenderWind V5)
 local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
@@ -48,8 +48,6 @@ function Auth.ValidateKey(inputKey)
     -- // VELINK LOGIC CHECK
     -- Check: expired === false
     if data.expired == false then
-        -- Opcional: Validar unlockerId se necessário
-        -- local unlockerId = data.unlockerId 
         return true, "Key Válida"
     else
         return false, "Key Expirada ou Inválida"
@@ -458,7 +456,6 @@ local function StartAuthFlow()
         if isValid then
             Auth.SaveKey(KeyInputStr)
             -- Destroy Auth UI (SlenderWind doesn't have a clean destroy, so we hide/remove)
-            -- Assuming SlenderWind creates a ScreenGui named "SlenderWind"
             local Core = game:GetService("CoreGui")
             if Core:FindFirstChild("SlenderWind") then
                 Core.SlenderWind:Destroy()
