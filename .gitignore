@@ -1,368 +1,489 @@
--- // SlenderHub V2.1 | Architecture: Hybrid Hook + Visualizer
--- // UI Framework: SlenderWind V5 (Internal)
--- // Developed by SlenderHub Architect
+-- // ==========================================
+-- // SLENDERHUB V2.1 | SECURITY LAYER
+-- // Architecture: Velink API Integration + Hybrid Hook
+-- // ==========================================
 
-if getgenv().SlenderHubLoaded then 
-    warn("SlenderHub V2.1 Já está em execução.")
-    -- return 
-end
-getgenv().SlenderHubLoaded = true
-
--- // Services
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
 
--- // SlenderHub Global State
-getgenv().SlenderSpy = {
-    Enabled = false,
-    Logs = {}, 
-    Blocked = { 
-        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat", "MainRemote"
-    }
-}
+-- // CONFIGURATION
+local ScriptVersion = "2.1.0"
+local KeyFileName = "SlenderHub_Velink_Key.txt"
+local VelinkAPI = "https://velink.to/api/public/check/key?key="
+local GetKeyURL = "https://velink.to/get-key/YOUR-ID-HERE" -- Configure isso no Dashboard da Velink
 
--- // ==========================================
--- // ENGINE: ADVANCED SERIALIZATION
--- // ==========================================
-
-local function GetPath(Obj)
-    if not Obj or not Obj.Parent then return "nil --[[Destroyed/Nil]]" end
-    
-    local Hierarchy = {}
-    local Current = Obj
-
-    while Current.Parent ~= nil and Current.Parent ~= game do
-        table.insert(Hierarchy, 1, Current)
-        Current = Current.Parent
-    end
-
-    local Service = Current
-    table.insert(Hierarchy, 1, Service)
-
-    local PathStr = "game"
-
-    for i, v in ipairs(Hierarchy) do
-        if i == 1 then
-            PathStr = PathStr .. ':GetService("' .. v.ClassName .. '")'
-        else
-            if v.Name:match("^[%a_][%w_]*$") then
-                PathStr = PathStr .. "." .. v.Name
-            else
-                PathStr = PathStr .. '["' .. v.Name:gsub('"', '\\"') .. '"]'
-            end
-        end
-    end
-
-    return PathStr
-end
-
-local function SerializeType(v)
-    local T = typeof(v)
-    if T == "string" then
-        return '"' .. v .. '"'
-    elseif T == "number" then
-        if v == math.huge then return "math.huge" end
-        if v == -math.huge then return "-math.huge" end
-        return tostring(v)
-    elseif T == "boolean" then
-        return tostring(v)
-    elseif T == "Instance" then
-        return GetPath(v)
-    elseif T == "Vector3" then
-        return string.format("Vector3.new(%s, %s, %s)", v.X, v.Y, v.Z)
-    elseif T == "CFrame" then
-        return string.format("CFrame.new(%s)", tostring(v))
-    elseif T == "Color3" then
-        return string.format("Color3.fromRGB(%d, %d, %d)", v.R*255, v.G*255, v.B*255)
-    else
-        return "nil --[[" .. T .. "]]"
-    end
-end
-
-local function SerializeTable(tbl, indent, seen)
-    seen = seen or {}
-    if seen[tbl] then return "--[[Cyclic Reference]]" end
-    seen[tbl] = true
-    
-    indent = indent or 0
-    local result = "{\n"
-    local padding = string.rep("    ", indent + 1)
-
-    for k, v in pairs(tbl) do
-        local key
-        if type(k) == "string" and k:match("^[%a_][%w_]*$") then
-            key = k
-        elseif type(k) == "number" then
-            key = nil 
-        else
-            key = "[" .. SerializeType(k) .. "]"
-        end
-
-        local value
-        if type(v) == "table" then
-            value = SerializeTable(v, indent + 1, seen)
-        else
-            value = SerializeType(v)
-        end
-
-        if key then
-            result = result .. padding .. key .. " = " .. value .. ",\n"
-        else
-            result = result .. padding .. value .. ",\n"
-        end
-    end
-
-    return result .. string.rep("    ", indent) .. "}"
-end
-
-local function GenerateScript(Log)
-    if not Log then return "-- Erro: Log inválido" end
-
-    local Path = GetPath(Log.Instance)
-    local ArgsStr = SerializeTable(Log.Args)
-    local SourceInfo = Log.Source and ("-- Calling Script: " .. Log.Source) or "-- Calling Script: Unknown"
-
-    local Script = "-- // SlenderHub V2.1 Generated Code\n"
-    Script = Script .. "-- Remote: " .. Log.Name .. "\n"
-    Script = Script .. SourceInfo .. "\n"
-    Script = Script .. "-- Execuções Agrupadas: " .. Log.Count .. "\n\n"
-    Script = Script .. "local args = " .. ArgsStr .. "\n\n"
-
-    if Log.Method == "FireServer" then
-        Script = Script .. Path .. ":FireServer(unpack(args))"
-    elseif Log.Method == "InvokeServer" then
-        Script = Script .. "return " .. Path .. ":InvokeServer(unpack(args))"
-    end
-
-    return Script
-end
-
-local function DeepCompare(t1, t2)
-    if type(t1) ~= type(t2) then return false end
-    if type(t1) ~= "table" then return t1 == t2 end
-    
-    for k, v in pairs(t1) do
-        if not DeepCompare(v, t2[k]) then return false end
-    end
-    for k, v in pairs(t2) do
-        if not DeepCompare(v, t1[k]) then return false end
-    end
-    return true
-end
-
--- // ==========================================
--- // UI: SLENDERWIND V5 INTERFACE
--- // ==========================================
-
+-- // UI LIBRARY (SlenderWind V5)
 local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
 
-local Window = SlenderWind.Window({
-    Name = "SlenderHub | V2.1 - Visualizer",
-    KeySystem = false,
-    Theme = {
-        Accent = Color3.fromRGB(0, 255, 128), -- SlenderHub Green
-        Background = Color3.fromRGB(20, 20, 20)
-    }
-})
-
-local Tab = Window:Tab("Spy Monitor")
-
--- // UI STATE
-local SelectedLogIndex = nil
-local CurrentScriptBuffer = "" 
-local LogDropdown -- Objeto Dropdown
-local CodeInput -- Objeto Input
-
--- // UI ELEMENTS
-
-Tab:Label("Controle Principal")
-
-Tab:Toggle("Ativar Spy (Hybrid Hook)", false, "SpyEnabled", "Captura remotes via Namecall e Closure", function(Value)
-    getgenv().SlenderSpy.Enabled = Value
-end)
-
-Tab:Button("🗑️ Limpar Logs", "Limpa a memória e o visualizador", function()
-    getgenv().SlenderSpy.Logs = {}
-    SelectedLogIndex = nil
-    CurrentScriptBuffer = ""
-    if CodeInput then CodeInput.Set("") end
-    if LogDropdown then LogDropdown.Refresh({"Nenhum"}, "Nenhum") end
-end)
-
-Tab:Button("🚫 Resetar Blacklist", "Restaura filtros padrão", function()
-    getgenv().SlenderSpy.Blocked = { 
-        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat", "MainRemote"
-    }
-end)
-
-Tab:Label("Visualizador de Remotes")
-
--- Dropdown Object Capture
-LogDropdown = Tab:Dropdown("Selecione um Remote", {"Nenhum"}, "Nenhum", "RemoteList", "Lista de remotes capturados", function(Option)
-    if Option == "Nenhum" then 
-        SelectedLogIndex = nil
-        return 
-    end
-
-    local ID = tonumber(Option:match("^%[(%d+)%]"))
-    if ID then SelectedLogIndex = ID end
-end)
-
-Tab:Button("🔄 Atualizar Lista", "Carrega novos logs no dropdown", function()
-    local Options = {}
-    local Logs = getgenv().SlenderSpy.Logs
-    local Start = math.max(1, #Logs - 25)
-
-    for i = #Logs, Start, -1 do
-        local log = Logs[i]
-        local MethodShort = (log.Method == "FireServer") and "Fire" or "Invoke"
-        local Label = string.format("[%d] %s (%s) x%d", i, log.Name, MethodShort, log.Count)
-        table.insert(Options, Label)
-    end
-
-    if #Options == 0 then Options = {"Nenhum"} end
-    
-    -- SlenderWind Refresh Method
-    LogDropdown.Refresh(Options, "Nenhum")
-end)
-
-Tab:Label("Geração e Visualização")
-
-Tab:Button("⬇️ GERAR E VISUALIZAR ⬇️", "Converte o log em script Lua", function()
-    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-        local Code = GenerateScript(Log)
-        
-        CurrentScriptBuffer = Code
-        
-        -- SlenderWind Set Method
-        if CodeInput then
-            CodeInput.Set(Code)
-        end
-    end
-end)
-
-Tab:Button("⛔ Bloquear Selecionado", "Adiciona à blacklist", function()
-    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-        table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
-    end
-end)
-
--- Input Object Capture
-CodeInput = Tab:Input("Script Preview", "O código aparecerá aqui...", "CodeOut", "Edite ou copie o código", function(Text)
-    CurrentScriptBuffer = Text
-end)
-
-Tab:Button("📋 Copiar para Clipboard", "Copia o código atual", function()
-    if CurrentScriptBuffer ~= "" then
-        setclipboard(CurrentScriptBuffer)
-    end
-end)
-
-Tab:Button("⚡ Replay Instantâneo", "Executa o remote novamente", function()
-    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-        if Log.Instance then
-            if Log.Method == "FireServer" then
-                Log.Instance:FireServer(unpack(Log.Args))
-            elseif Log.Method == "InvokeServer" then
-                task.spawn(function() Log.Instance:InvokeServer(unpack(Log.Args)) end)
-            end
-        end
-    end
-end)
-
-Tab:Button("▶ Executar Código Gerado", "Testa o script gerado", function()
-    if CurrentScriptBuffer ~= "" then
-        local success, result = pcall(function()
-            local func, syntaxErr = loadstring(CurrentScriptBuffer)
-            if not func then error(syntaxErr) end
-            func()
-        end)
-
-        if not success then
-            warn("Erro na execução: " .. tostring(result))
-        end
-    end
-end)
-
 -- // ==========================================
--- // CORE LOGIC: HYBRID HOOK SYSTEM
+-- // AUTHENTICATION MODULE
 -- // ==========================================
 
-local function ProcessLog(Instance, Method, Args)
-    if not getgenv().SlenderSpy.Enabled then return end
+local Auth = {}
+
+function Auth.ValidateKey(inputKey)
+    if not inputKey or inputKey == "" then return false, "Key vazia" end
     
-    local RemoteName = Instance.Name
-    for _, v in pairs(getgenv().SlenderSpy.Blocked) do
-        if RemoteName == v then return end
+    -- Trim whitespace
+    inputKey = inputKey:gsub("%s+", "")
+
+    local success, response = pcall(function()
+        return game:HttpGet(VelinkAPI .. inputKey)
+    end)
+
+    if not success then
+        return false, "Erro de Conexão (HTTP Fail)"
     end
 
-    local SrcScript = getcallingscript and getcallingscript()
-    local SrcPath = "Unknown"
-    if SrcScript then
-        SrcPath = SrcScript:GetFullName()
+    local data
+    local jsonSuccess, jsonErr = pcall(function()
+        data = HttpService:JSONDecode(response)
+    end)
+
+    if not jsonSuccess then
+        return false, "Erro na API (Invalid JSON)"
     end
 
-    local Logs = getgenv().SlenderSpy.Logs
-    local LastLog = Logs[#Logs]
-
-    if LastLog and LastLog.Instance == Instance and DeepCompare(LastLog.Args, Args) then
-        LastLog.Count = LastLog.Count + 1
-        LastLog.Time = os.date("%X")
+    -- // VELINK LOGIC CHECK
+    -- Check: expired === false
+    if data.expired == false then
+        -- Opcional: Validar unlockerId se necessário
+        -- local unlockerId = data.unlockerId 
+        return true, "Key Válida"
     else
-        table.insert(Logs, {
-            Name = RemoteName,
-            Instance = Instance,
-            Method = Method,
-            Args = Args,
-            Source = SrcPath,
-            Time = os.date("%X"),
-            Count = 1
-        })
+        return false, "Key Expirada ou Inválida"
     end
 end
 
--- 1. Hook Metamethod (__namecall)
-local mt = getrawmetatable(game)
-local oldNamecall = mt.__namecall
-setreadonly(mt, false)
+function Auth.SaveKey(key)
+    if writefile then
+        writefile(KeyFileName, key)
+    end
+end
 
-mt.__namecall = newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    local args = {...}
+function Auth.LoadKey()
+    if isfile and isfile(KeyFileName) then
+        return readfile(KeyFileName)
+    end
+    return ""
+end
 
-    if (method == "FireServer" or method == "InvokeServer") then
-        ProcessLog(self, method, args)
+-- // ==========================================
+-- // MAIN APPLICATION (THE SPY)
+-- // ==========================================
+
+local function LoadSlenderHub()
+    if getgenv().SlenderHubLoaded then 
+        warn("SlenderHub V2.1 Já está em execução.")
+        -- return 
+    end
+    getgenv().SlenderHubLoaded = true
+
+    -- // Services
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local Players = game:GetService("Players")
+
+    -- // SlenderHub Global State
+    getgenv().SlenderSpy = {
+        Enabled = false,
+        Logs = {}, 
+        Blocked = { 
+            "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat", "MainRemote"
+        }
+    }
+
+    -- // ENGINE: ADVANCED SERIALIZATION
+    local function GetPath(Obj)
+        if not Obj or not Obj.Parent then return "nil --[[Destroyed/Nil]]" end
+        
+        local Hierarchy = {}
+        local Current = Obj
+
+        while Current.Parent ~= nil and Current.Parent ~= game do
+            table.insert(Hierarchy, 1, Current)
+            Current = Current.Parent
+        end
+
+        local Service = Current
+        table.insert(Hierarchy, 1, Service)
+
+        local PathStr = "game"
+
+        for i, v in ipairs(Hierarchy) do
+            if i == 1 then
+                PathStr = PathStr .. ':GetService("' .. v.ClassName .. '")'
+            else
+                if v.Name:match("^[%a_][%w_]*$") then
+                    PathStr = PathStr .. "." .. v.Name
+                else
+                    PathStr = PathStr .. '["' .. v.Name:gsub('"', '\\"') .. '"]'
+                end
+            end
+        end
+
+        return PathStr
     end
 
-    return oldNamecall(self, ...)
-end)
+    local function SerializeType(v)
+        local T = typeof(v)
+        if T == "string" then
+            return '"' .. v .. '"'
+        elseif T == "number" then
+            if v == math.huge then return "math.huge" end
+            if v == -math.huge then return "-math.huge" end
+            return tostring(v)
+        elseif T == "boolean" then
+            return tostring(v)
+        elseif T == "Instance" then
+            return GetPath(v)
+        elseif T == "Vector3" then
+            return string.format("Vector3.new(%s, %s, %s)", v.X, v.Y, v.Z)
+        elseif T == "CFrame" then
+            return string.format("CFrame.new(%s)", tostring(v))
+        elseif T == "Color3" then
+            return string.format("Color3.fromRGB(%d, %d, %d)", v.R*255, v.G*255, v.B*255)
+        else
+            return "nil --[[" .. T .. "]]"
+        end
+    end
 
-setreadonly(mt, true)
+    local function SerializeTable(tbl, indent, seen)
+        seen = seen or {}
+        if seen[tbl] then return "--[[Cyclic Reference]]" end
+        seen[tbl] = true
+        
+        indent = indent or 0
+        local result = "{\n"
+        local padding = string.rep("    ", indent + 1)
 
--- 2. Hook Function (Direct Calls & UnreliableRemoteEvent)
-local OldFireServer
-local OldInvokeServer
+        for k, v in pairs(tbl) do
+            local key
+            if type(k) == "string" and k:match("^[%a_][%w_]*$") then
+                key = k
+            elseif type(k) == "number" then
+                key = nil 
+            else
+                key = "[" .. SerializeType(k) .. "]"
+            end
 
-OldFireServer = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-    ProcessLog(self, "FireServer", {...})
-    return OldFireServer(self, ...)
-end))
+            local value
+            if type(v) == "table" then
+                value = SerializeTable(v, indent + 1, seen)
+            else
+                value = SerializeType(v)
+            end
 
-OldInvokeServer = hookfunction(Instance.new("RemoteFunction").InvokeServer, newcclosure(function(self, ...)
-    ProcessLog(self, "InvokeServer", {...})
-    return OldInvokeServer(self, ...)
-end))
+            if key then
+                result = result .. padding .. key .. " = " .. value .. ",\n"
+            else
+                result = result .. padding .. value .. ",\n"
+            end
+        end
 
-pcall(function()
-    local Unreliable = Instance.new("UnreliableRemoteEvent")
-    local OldUnreliableFire
-    OldUnreliableFire = hookfunction(Unreliable.FireServer, newcclosure(function(self, ...)
+        return result .. string.rep("    ", indent) .. "}"
+    end
+
+    local function GenerateScript(Log)
+        if not Log then return "-- Erro: Log inválido" end
+
+        local Path = GetPath(Log.Instance)
+        local ArgsStr = SerializeTable(Log.Args)
+        local SourceInfo = Log.Source and ("-- Calling Script: " .. Log.Source) or "-- Calling Script: Unknown"
+
+        local Script = "-- // SlenderHub V2.1 Generated Code\n"
+        Script = Script .. "-- Remote: " .. Log.Name .. "\n"
+        Script = Script .. SourceInfo .. "\n"
+        Script = Script .. "-- Execuções Agrupadas: " .. Log.Count .. "\n\n"
+        Script = Script .. "local args = " .. ArgsStr .. "\n\n"
+
+        if Log.Method == "FireServer" then
+            Script = Script .. Path .. ":FireServer(unpack(args))"
+        elseif Log.Method == "InvokeServer" then
+            Script = Script .. "return " .. Path .. ":InvokeServer(unpack(args))"
+        end
+
+        return Script
+    end
+
+    local function DeepCompare(t1, t2)
+        if type(t1) ~= type(t2) then return false end
+        if type(t1) ~= "table" then return t1 == t2 end
+        
+        for k, v in pairs(t1) do
+            if not DeepCompare(v, t2[k]) then return false end
+        end
+        for k, v in pairs(t2) do
+            if not DeepCompare(v, t1[k]) then return false end
+        end
+        return true
+    end
+
+    -- // UI: SLENDERWIND V5 INTERFACE (MAIN)
+    local Window = SlenderWind.Window({
+        Name = "SlenderHub | V2.1 - Visualizer",
+        KeySystem = false, -- Key system handled externally
+        Theme = {
+            Accent = Color3.fromRGB(0, 255, 128),
+            Background = Color3.fromRGB(20, 20, 20)
+        }
+    })
+
+    local Tab = Window:Tab("Spy Monitor")
+
+    -- // UI STATE
+    local SelectedLogIndex = nil
+    local CurrentScriptBuffer = "" 
+    local LogDropdown 
+    local CodeInput 
+
+    -- // UI ELEMENTS
+    Tab:Label("Controle Principal")
+
+    Tab:Toggle("Ativar Spy (Hybrid Hook)", false, "SpyEnabled", "Captura remotes via Namecall e Closure", function(Value)
+        getgenv().SlenderSpy.Enabled = Value
+    end)
+
+    Tab:Button("🗑️ Limpar Logs", "Limpa a memória e o visualizador", function()
+        getgenv().SlenderSpy.Logs = {}
+        SelectedLogIndex = nil
+        CurrentScriptBuffer = ""
+        if CodeInput then CodeInput.Set("") end
+        if LogDropdown then LogDropdown.Refresh({"Nenhum"}, "Nenhum") end
+    end)
+
+    Tab:Button("🚫 Resetar Blacklist", "Restaura filtros padrão", function()
+        getgenv().SlenderSpy.Blocked = { 
+            "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", "GetServerTime", "TouchHeartbeat", "MainRemote"
+        }
+    end)
+
+    Tab:Label("Visualizador de Remotes")
+
+    LogDropdown = Tab:Dropdown("Selecione um Remote", {"Nenhum"}, "Nenhum", "RemoteList", "Lista de remotes capturados", function(Option)
+        if Option == "Nenhum" then 
+            SelectedLogIndex = nil
+            return 
+        end
+
+        local ID = tonumber(Option:match("^%[(%d+)%]"))
+        if ID then SelectedLogIndex = ID end
+    end)
+
+    Tab:Button("🔄 Atualizar Lista", "Carrega novos logs no dropdown", function()
+        local Options = {}
+        local Logs = getgenv().SlenderSpy.Logs
+        local Start = math.max(1, #Logs - 25)
+
+        for i = #Logs, Start, -1 do
+            local log = Logs[i]
+            local MethodShort = (log.Method == "FireServer") and "Fire" or "Invoke"
+            local Label = string.format("[%d] %s (%s) x%d", i, log.Name, MethodShort, log.Count)
+            table.insert(Options, Label)
+        end
+
+        if #Options == 0 then Options = {"Nenhum"} end
+        LogDropdown.Refresh(Options, "Nenhum")
+    end)
+
+    Tab:Label("Geração e Visualização")
+
+    Tab:Button("⬇️ GERAR E VISUALIZAR ⬇️", "Converte o log em script Lua", function()
+        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+            local Code = GenerateScript(Log)
+            CurrentScriptBuffer = Code
+            if CodeInput then CodeInput.Set(Code) end
+        end
+    end)
+
+    Tab:Button("⛔ Bloquear Selecionado", "Adiciona à blacklist", function()
+        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+            table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
+        end
+    end)
+
+    CodeInput = Tab:Input("Script Preview", "O código aparecerá aqui...", "CodeOut", "Edite ou copie o código", function(Text)
+        CurrentScriptBuffer = Text
+    end)
+
+    Tab:Button("📋 Copiar para Clipboard", "Copia o código atual", function()
+        if CurrentScriptBuffer ~= "" then
+            setclipboard(CurrentScriptBuffer)
+        end
+    end)
+
+    Tab:Button("⚡ Replay Instantâneo", "Executa o remote novamente", function()
+        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+            if Log.Instance then
+                if Log.Method == "FireServer" then
+                    Log.Instance:FireServer(unpack(Log.Args))
+                elseif Log.Method == "InvokeServer" then
+                    task.spawn(function() Log.Instance:InvokeServer(unpack(Log.Args)) end)
+                end
+            end
+        end
+    end)
+
+    Tab:Button("▶ Executar Código Gerado", "Testa o script gerado", function()
+        if CurrentScriptBuffer ~= "" then
+            local success, result = pcall(function()
+                local func, syntaxErr = loadstring(CurrentScriptBuffer)
+                if not func then error(syntaxErr) end
+                func()
+            end)
+            if not success then warn("Erro na execução: " .. tostring(result)) end
+        end
+    end)
+
+    -- // CORE LOGIC: HYBRID HOOK SYSTEM
+    local function ProcessLog(Instance, Method, Args)
+        if not getgenv().SlenderSpy.Enabled then return end
+        
+        local RemoteName = Instance.Name
+        for _, v in pairs(getgenv().SlenderSpy.Blocked) do
+            if RemoteName == v then return end
+        end
+
+        local SrcScript = getcallingscript and getcallingscript()
+        local SrcPath = "Unknown"
+        if SrcScript then SrcPath = SrcScript:GetFullName() end
+
+        local Logs = getgenv().SlenderSpy.Logs
+        local LastLog = Logs[#Logs]
+
+        if LastLog and LastLog.Instance == Instance and DeepCompare(LastLog.Args, Args) then
+            LastLog.Count = LastLog.Count + 1
+            LastLog.Time = os.date("%X")
+        else
+            table.insert(Logs, {
+                Name = RemoteName,
+                Instance = Instance,
+                Method = Method,
+                Args = Args,
+                Source = SrcPath,
+                Time = os.date("%X"),
+                Count = 1
+            })
+        end
+    end
+
+    -- Hook Metamethod
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
+    setreadonly(mt, false)
+
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        if (method == "FireServer" or method == "InvokeServer") then
+            ProcessLog(self, method, args)
+        end
+        return oldNamecall(self, ...)
+    end)
+
+    setreadonly(mt, true)
+
+    -- Hook Functions
+    local OldFireServer
+    local OldInvokeServer
+
+    OldFireServer = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
         ProcessLog(self, "FireServer", {...})
-        return OldUnreliableFire(self, ...)
+        return OldFireServer(self, ...)
     end))
-end)
+
+    OldInvokeServer = hookfunction(Instance.new("RemoteFunction").InvokeServer, newcclosure(function(self, ...)
+        ProcessLog(self, "InvokeServer", {...})
+        return OldInvokeServer(self, ...)
+    end))
+
+    pcall(function()
+        local Unreliable = Instance.new("UnreliableRemoteEvent")
+        local OldUnreliableFire
+        OldUnreliableFire = hookfunction(Unreliable.FireServer, newcclosure(function(self, ...)
+            ProcessLog(self, "FireServer", {...})
+            return OldUnreliableFire(self, ...)
+        end))
+    end)
+    
+    -- Notify Success
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "SlenderHub V2.1",
+        Text = "Autenticado e Carregado.",
+        Duration = 5
+    })
+end
+
+-- // ==========================================
+-- // BOOTSTRAPPER (KEY CHECK)
+-- // ==========================================
+
+local function StartAuthFlow()
+    -- 1. Check Saved Key
+    local SavedKey = Auth.LoadKey()
+    if SavedKey ~= "" then
+        local isValid, msg = Auth.ValidateKey(SavedKey)
+        if isValid then
+            LoadSlenderHub()
+            return
+        end
+    end
+
+    -- 2. Create Auth Window
+    local AuthWindow = SlenderWind.Window({
+        Name = "SlenderHub | Authentication",
+        KeySystem = false,
+        Theme = {
+            Accent = Color3.fromRGB(255, 0, 0), -- Red for Locked
+            Background = Color3.fromRGB(15, 15, 15)
+        }
+    })
+
+    local AuthTab = AuthWindow:Tab("Key System")
+    
+    AuthTab:Label("Sistema de Segurança Velink")
+    
+    local KeyInputStr = ""
+    
+    AuthTab:Input("Insira sua Key", "VELINK-XXXX-XXXX", "KeyInput", "Cole a key aqui", function(Text)
+        KeyInputStr = Text
+    end)
+
+    AuthTab:Button("🔑 Verificar Key", "Valida a key com o servidor", function()
+        local isValid, msg = Auth.ValidateKey(KeyInputStr)
+        
+        if isValid then
+            Auth.SaveKey(KeyInputStr)
+            -- Destroy Auth UI (SlenderWind doesn't have a clean destroy, so we hide/remove)
+            -- Assuming SlenderWind creates a ScreenGui named "SlenderWind"
+            local Core = game:GetService("CoreGui")
+            if Core:FindFirstChild("SlenderWind") then
+                Core.SlenderWind:Destroy()
+            end
+            
+            -- Load Main
+            LoadSlenderHub()
+        else
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Erro de Autenticação",
+                Text = msg,
+                Duration = 3
+            })
+        end
+    end)
+
+    AuthTab:Button("🔗 Pegar Key (Link)", "Copia o link para o clipboard", function()
+        setclipboard(GetKeyURL)
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Link Copiado",
+            Text = "Cole no navegador para gerar a key.",
+            Duration = 3
+        })
+    end)
+end
+
+-- Start System
+StartAuthFlow()
