@@ -1,253 +1,409 @@
---!strict
 --[[
-    Slender Hub - INTELLIGENT TIER SYSTEM (V2.5.1 - SLENDERWIND EDITION)
-    Architecture: Universal Key System
-    UI Library: SlenderWind V5 (Internal)
-    Status: ✅ Pickaxe Simulator
-    Status: ✅ The Forge
-    Status: ✅ Tap Simulator
-    Status: ✅ Brookhaven RP
-    Status: ✅ Horse Race [ID PATCHED]
+    SlenderHub Remote Spy V3.0 - SlenderWind Edition
+    Architect: SlenderHub Senior Developer
+    UI Library: SlenderWind V10 (Internal)
+    Features: Hybrid Hook System + Advanced Visualizer
 ]]
 
---//==============================[ SERVICES ]==============================//--
-local HttpService = game:GetService("HttpService")
+-- Singleton Check
+if getgenv().SlenderHubSpyLoaded then 
+    return 
+end
+getgenv().SlenderHubSpyLoaded = true
+
+-- Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local StarterGui = game:GetService("StarterGui")
-local MarketService = game:GetService("MarketplaceService")
-local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
 
-local LocalPlayer = Players.LocalPlayer
-local CurrentPlaceId = game.PlaceId
+-- SlenderWind UI Library
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
 
---//==============================[ ⚠ CONFIGURATION ]==============================//--
-local VELINK_IDS = {
-    -- [LINK ID] = {Type, Seconds}
-    ["ed6453e6-5259-49b4-8779-05b866831dc2"] = {Type = "Premium", Duration = 604800},  -- 7 Days
-    ["2c69fdcf-f8e1-4c1a-9270-f36d9545ebce"] = {Type = "Premium", Duration = 2592000}  -- 30 Days
+-- Global State
+getgenv().SlenderSpy = {
+    Enabled = false,
+    Logs = {},
+    MaxLogs = 100,
+    Blocked = { 
+        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", 
+        "GetServerTime", "TouchHeartbeat", "MainRemote"
+    }
 }
 
-local Config = {
-    FOLDER = "SlenderHub_Universal", 
-    FILE = "KeyData_" .. LocalPlayer.UserId .. ".json",
-    VELINK_CHECK_URL = "https://velink.to/api/public/check/key",
-    FREE_KEY_LINK = "https://velink.to/u/678807",
-    PREMIUM_SHOP_URL = "https://www.slenderhub.shop/"
-}
+-- ==========================================
+-- ENGINE: SERIALIZATION & PATH GENERATION
+-- ==========================================
 
---//==============================[ SUPPORTED GAMES ]==============================//--
-local GAMES_MAP = {
-    [82013336390273] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Pickaxe%20Simulator%20script",
-    [107807115409153] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Bee%20Tappers%20Script",
-    [109983668079237] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Steal%20a%20Brainrot(Free)",
-    [76558904092080] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/The%20Forge%20Script",
-    [75992362647444] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Tap%20simulator",
-    [4924922222] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Brookhaven%20script",
-    [93787311916283] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Horse%20Race" -- [PATCHED] Correct ID
-}
-
-local TARGET_SCRIPT_URL = GAMES_MAP[CurrentPlaceId]
-
---//==============================[ LIFETIME KEYS ]==============================//--
-local LIFETIME_KEYS = {
-    ["LifeTimeF4K9L2P7V8JDHUtY"] = true,
-    ["SlenderDevKey"] = true
-}
-
-local FILE_PATH = Config.FOLDER .. "/" .. Config.FILE
-local isAccessAuthorized = false
-local authorizedKeyType = "Free"
-local authorizedDuration = 86400
-
---//==============================[ BACKEND LOGIC ]==============================//--
-local function Notify(title, text, duration)
-    StarterGui:SetCore("SendNotification", {
-        Title = title;
-        Text = text;
-        Duration = duration or 5;
-    })
-end
-
-local function formatTime(seconds)
-    if seconds == math.huge then return "Lifetime" end
-    local days = math.floor(seconds / 86400)
-    local hours = math.floor((seconds % 86400) / 3600)
-    local minutes = math.floor((seconds % 3600) / 60)
-    return string.format("%dd %02dh %02dm", days, hours, minutes)
-end
-
-local function loadGameScript(accessLevel, shouldCloseUI)
-    if not TARGET_SCRIPT_URL then 
-        warn("🔴 [Slender Hub] Script URL not found for Place ID: " .. CurrentPlaceId)
-        Notify("Slender Hub", "Game Not Supported (Check ID)", 5)
-        return 
+local function GetPath(Obj)
+    if not Obj or Obj == game then return "game" end
+    
+    local Hierarchy = {}
+    local Current = Obj
+    
+    while Current.Parent ~= nil and Current.Parent ~= game do
+        table.insert(Hierarchy, 1, Current)
+        Current = Current.Parent
     end
     
-    -- Set Global Environment
-    if getgenv then 
-        getgenv().SlenderHubAccessLevel = accessLevel
-    else 
-        _G.SlenderHubAccessLevel = accessLevel 
-    end
+    local Service = Current
+    table.insert(Hierarchy, 1, Service)
     
-    -- Close UI if requested
-    if shouldCloseUI then
-        pcall(function()
-            for _, ui in pairs(CoreGui:GetChildren()) do
-                if ui.Name == "SlenderWind" or ui.Name:find("Slender") then
-                    ui:Destroy()
-                end
-            end
-        end)
-    end
+    local PathStr = "game"
     
-    -- Execute Script
-    task.wait(0.3)
-    local success, err = pcall(function()
-        loadstring(game:HttpGet(TARGET_SCRIPT_URL))() 
-    end)
-    if not success then
-        warn("Failed to load script: " .. tostring(err))
-        Notify("Error", "Failed to load script! Check Console (F9)", 5)
-    end
-end
-
-local function verifyKeyWithAPI(inputKey)
-    if LIFETIME_KEYS[inputKey] then return "Premium", math.huge end
-
-    local requestUrl = string.format("%s?key=%s", Config.VELINK_CHECK_URL, inputKey)
-    local requestFunc = (syn and syn.request) or (http and http.request) or (http_request) or (request)
-    
-    if not requestFunc then return nil, nil end
-
-    local response = requestFunc({Url = requestUrl, Method = "GET"})
-
-    if response and response.StatusCode == 200 then
-        local success, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
-        
-        if success and data and data.expired == false then
-            local unlockerId = tostring(data.unlockerId)
-            print("🔐 [SLENDER HUB] ID Validado: " .. unlockerId)
-            
-            local tierInfo = VELINK_IDS[unlockerId]
-            if tierInfo then
-                return tierInfo.Type, tierInfo.Duration
+    for i, v in ipairs(Hierarchy) do
+        if i == 1 then
+            PathStr = PathStr .. ':GetService("' .. v.ClassName .. '")'
+        else
+            if v.Name:match("^[%a_][%w_]*$") then
+                PathStr = PathStr .. "." .. v.Name
             else
-                return "Free", 86400
+                PathStr = PathStr .. '["' .. v.Name .. '"]'
             end
         end
     end
-    return nil, nil
+    
+    return PathStr
 end
 
-local function saveKey(keyType, keyContent, duration)
-    if not isfolder(Config.FOLDER) then makefolder(Config.FOLDER) end
-    local data = {
-        Type = keyType, 
-        Key = keyContent, 
-        Time = os.time(),
-        CustomDuration = duration
-    }
-    writefile(FILE_PATH, HttpService:JSONEncode(data))
-end
-
-local function checkLocalKey()
-    if not isfile(FILE_PATH) then return false, nil end
-    local success, data = pcall(function() return HttpService:JSONDecode(readfile(FILE_PATH)) end)
-    if not success or not data or not data.Time then delfile(FILE_PATH); return false, nil end
-
-    local duration = data.CustomDuration or 86400
-    if duration == math.huge then return true, data, math.huge end
-
-    local elapsed = os.time() - data.Time
-    if elapsed > duration then
-        delfile(FILE_PATH); return false, nil
+local function SerializeType(v)
+    local T = typeof(v)
+    if T == "string" then
+        return '"' .. v:gsub('"', '\\"'):gsub('\n', '\\n'):gsub('\r', '\\r') .. '"'
+    elseif T == "number" then
+        if v == math.huge then return "math.huge" end
+        if v == -math.huge then return "-math.huge" end
+        return tostring(v)
+    elseif T == "boolean" then
+        return tostring(v)
+    elseif T == "Instance" then
+        return GetPath(v)
+    elseif T == "Vector3" then
+        return string.format("Vector3.new(%g, %g, %g)", v.X, v.Y, v.Z)
+    elseif T == "CFrame" then
+        return string.format("CFrame.new(%g, %g, %g)", v.Position.X, v.Position.Y, v.Position.Z)
+    elseif T == "Color3" then
+        return string.format("Color3.fromRGB(%d, %d, %d)", v.R*255, v.G*255, v.B*255)
+    elseif T == "nil" then
+        return "nil"
+    else
+        return '"' .. tostring(v) .. '"'
     end
-    return true, data, (duration - elapsed)
 end
 
---//==============================[ AUTO-EXECUTE CHECK ]==============================//--
-local isSaved, savedData, remainingTime = checkLocalKey()
-
-if isSaved and TARGET_SCRIPT_URL then
-    local timeMsg = (remainingTime == math.huge) and "Lifetime Access" or formatTime(remainingTime)
-    Notify("Slender Hub", "Auto-Login! Remaining: " .. timeMsg, 3)
-    task.wait(0.5)
-    loadGameScript(savedData.Type, false)
-    return -- Stop script here, do not load UI
+local function SerializeTable(tbl, indent, seen)
+    seen = seen or {}
+    if seen[tbl] then return "--[[Cyclic Reference]]" end
+    seen[tbl] = true
+    
+    indent = indent or 0
+    local result = "{\n"
+    local padding = string.rep("    ", indent + 1)
+    
+    for k, v in pairs(tbl) do
+        local key
+        if type(k) == "string" and k:match("^[%a_][%w_]*$") then
+            key = k
+        else
+            key = "[" .. SerializeType(k) .. "]"
+        end
+        
+        local value
+        if type(v) == "table" then
+            value = SerializeTable(v, indent + 1, seen)
+        else
+            value = SerializeType(v)
+        end
+        
+        result = result .. padding .. key .. " = " .. value .. ",\n"
+    end
+    
+    result = result .. string.rep("    ", indent) .. "}"
+    return result
 end
 
---//==============================[ SLENDERWIND UI ]==============================//--
-local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
+local function GenerateScript(Log)
+    if not Log then return "-- Erro: Log inválido" end
+    
+    local Path = GetPath(Log.Instance)
+    local ArgsStr = SerializeTable(Log.Args)
+    local SourceInfo = Log.Source and ("-- Calling Script: " .. Log.Source) or "-- Calling Script: Unknown"
+    
+    local Script = "-- // SlenderHub V3.0 Generated Code\n"
+    Script = Script .. "-- Remote: " .. Log.Name .. "\n"
+    Script = Script .. SourceInfo .. "\n"
+    Script = Script .. "-- Executions: " .. Log.Count .. "\n\n"
+    Script = Script .. "local args = " .. ArgsStr .. "\n\n"
+    
+    if Log.Method == "FireServer" then
+        Script = Script .. Path .. ":FireServer(unpack(args))"
+    else
+        Script = Script .. "local result = " .. Path .. ":InvokeServer(unpack(args))\nprint(result)"
+    end
+    
+    return Script
+end
+
+-- ==========================================
+-- ENGINE: COMPARISON (Deduplication)
+-- ==========================================
+
+local function DeepCompare(t1, t2, depth)
+    depth = depth or 0
+    if depth > 10 then return false end
+    if type(t1) ~= type(t2) then return false end
+    if type(t1) ~= "table" then return t1 == t2 end
+    
+    for k, v in pairs(t1) do if not DeepCompare(v, t2[k], depth + 1) then return false end end
+    for k, v in pairs(t2) do if not DeepCompare(v, t1[k], depth + 1) then return false end end
+    return true
+end
+
+-- ==========================================
+-- SLENDERWIND UI CONSTRUCTION
+-- ==========================================
 
 local Window = SlenderWind.Window({
-    Name = "Slender Hub | Universal",
-    KeySystem = false, -- We are building the key system manually
-    Theme = { Accent = Color3.fromRGB(0, 255, 127) } -- Slender Green
+    Name = "SlenderHub Remote Spy V3.0",
+    KeySystem = false,
+    Theme = { 
+        Accent = Color3.fromRGB(255, 85, 85) -- Red theme for spy
+    }
 })
 
-local Tab = Window:Tab("Authentication")
+-- UI State
+local SelectedLogIndex = nil
+local CurrentScriptBuffer = ""
+local CodePreview = nil
+local LogList = nil
 
--- Game Status Logic
-local gameName = "Unknown Game"
-pcall(function() gameName = MarketService:GetProductInfo(CurrentPlaceId).Name end)
-local statusText = TARGET_SCRIPT_URL and "✅ Supported: " .. gameName or "⚠ Unsupported Game"
+-- Main Tab
+local TabSpy = Window:Tab("Remote Spy")
 
-Tab:Paragraph("Status", statusText .. "\n(ID: " .. CurrentPlaceId .. ")")
+TabSpy:Section("Control Panel")
 
--- Key Input
-Tab:Input("Enter Key", "VELINK-XXXX...", "KeyInput", "Paste your key here", function(text)
-    local key = text:gsub("%s+", "") -- Clean spaces
-    
-    if #key < 5 then return end -- Ignore short inputs
-    
-    Notify("Checking API...", "Verifying Tier & Duration...", 2)
-    
-    local keyType, keyDuration = verifyKeyWithAPI(key)
-    
-    if keyType and keyDuration then
-        isAccessAuthorized = true
-        authorizedKeyType = keyType
-        authorizedDuration = keyDuration
-        saveKey(keyType, key, keyDuration)
-        
-        local durText = (keyDuration == math.huge) and "Lifetime" or formatTime(keyDuration)
-        Notify("Success!", keyType .. " Key Validated (" .. durText .. ")", 5)
+TabSpy:Toggle("Enable Spy (Hybrid Hook)", false, "SpyEnabled", "Activates remote monitoring", function(Value)
+    getgenv().SlenderSpy.Enabled = Value
+    if Value then
+        Window:Notify("Spy Active", "Monitoring remotes...", 2)
     else
-        isAccessAuthorized = false
-        Notify("Invalid Key", "Expired or Does not Exist.", 3)
+        Window:Notify("Spy Disabled", "Stopped monitoring", 2)
     end
 end)
 
--- Launch Button
-Tab:Button("🚀 Launch Hub", "Verify and Load Script", function()
-    if not isAccessAuthorized then
-        Notify("Access Denied", "Please enter a valid key first.", 3)
-        return
+TabSpy:Button("🗑️ Clear All Logs", "Clears all captured remotes", function()
+    getgenv().SlenderSpy.Logs = {}
+    SelectedLogIndex = nil
+    CurrentScriptBuffer = ""
+    if CodePreview then CodePreview:Set("") end
+    Window:Notify("Cleared", "All logs removed", 1)
+end)
+
+TabSpy:Button("🚫 Reset Blacklist", "Resets blocked remotes", function()
+    getgenv().SlenderSpy.Blocked = { 
+        "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", 
+        "GetServerTime", "TouchHeartbeat", "MainRemote"
+    }
+    Window:Notify("Reset", "Blacklist cleared", 1)
+end)
+
+TabSpy:Section("Remote Viewer")
+
+LogList = TabSpy:Dropdown("Select Remote", {"None"}, "None", "RemoteList", "Choose captured remote", function(val)
+    if val == "None" then 
+        SelectedLogIndex = nil 
+        return 
     end
     
-    if not TARGET_SCRIPT_URL then
-         Notify("Error", "Script not available for this game.", 3)
-         return
+    local ID = tonumber(val:match("^%[(%d+)%]"))
+    if ID then SelectedLogIndex = ID end
+end)
+
+TabSpy:Button("🔄 Refresh List", "Updates remote list", function()
+    local Options = {}
+    local Logs = getgenv().SlenderSpy.Logs
+    local Start = math.max(1, #Logs - 25)
+    
+    for i = #Logs, Start, -1 do
+        local log = Logs[i]
+        local MethodShort = (log.Method == "FireServer") and "Fire" or "Invoke"
+        local Label = string.format("[%d] %s (%s) x%d", i, log.Name, MethodShort, log.Count)
+        table.insert(Options, Label)
     end
     
-    local isSaved, data, remaining = checkLocalKey()
-    local timeMsg = (remaining == math.huge) and "Lifetime" or formatTime(remaining)
-    Notify("Access Granted", "Loading... " .. timeMsg, 2)
+    if #Options == 0 then Options = {"None"} end
     
-    task.wait(0.5)
-    loadGameScript(authorizedKeyType, true)
+    LogList:Refresh(Options, "None")
+    Window:Notify("Updated", "List refreshed", 1)
 end)
 
--- Links Section
-Tab:Label("Get Access")
+TabSpy:Section("Advanced Tools")
 
-Tab:Button("🔑 Get Free Key (24h)", "Copy Link", function()
-    setclipboard(Config.FREE_KEY_LINK)
-    Notify("Copied", "Link copied to clipboard!", 2)
+TabSpy:Button("⛔ Block Selected", "Adds remote to blacklist", function()
+    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+        table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
+        Window:Notify("Blocked", Log.Name .. " added to blacklist", 2)
+    else
+        Window:Notify("Error", "Select a remote first!", 2)
+    end
 end)
 
-Tab:Button("💎 Buy Premium (Shop)", "Copy Shop Link", function()
-    setclipboard(Config.PREMIUM_SHOP_URL)
-    Notify("Shop Copied", "Visit SlenderHub.shop", 3)
+TabSpy:Button("⚡ Instant Replay", "Re-executes selected remote", function()
+    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+        if Log.Instance then
+            pcall(function()
+                if Log.Method == "FireServer" then
+                    Log.Instance:FireServer(unpack(Log.Args))
+                elseif Log.Method == "InvokeServer" then
+                    task.spawn(function() Log.Instance:InvokeServer(unpack(Log.Args)) end)
+                end
+            end)
+            Window:Notify("Replayed", "Remote executed again", 1)
+        end
+    else
+        Window:Notify("Error", "Select a remote first!", 2)
+    end
 end)
+
+TabSpy:Section("Code Generation")
+
+TabSpy:Button("⬇️ GENERATE & PREVIEW ⬇️", "Creates Lua code from remote", function()
+    if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
+        local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
+        local Code = GenerateScript(Log)
+        
+        CurrentScriptBuffer = Code
+        
+        if CodePreview then
+            CodePreview:Set(Code)
+        end
+        
+        Window:Notify("Generated", "Code created successfully!", 1)
+    else
+        Window:Notify("Error", "Select a remote first!", 2)
+    end
+end)
+
+CodePreview = TabSpy:Input("Script Preview", "Generated code appears here...", "CodeBuffer", "Edit code before execution", function(Text)
+    CurrentScriptBuffer = Text
+end)
+
+TabSpy:Button("📋 Copy to Clipboard", "Copies code to clipboard", function()
+    if CurrentScriptBuffer ~= "" then
+        if setclipboard then
+            setclipboard(CurrentScriptBuffer)
+            Window:Notify("Copied", "Code copied to clipboard!", 1)
+        else
+            Window:Notify("Error", "Clipboard not supported", 2)
+        end
+    else
+        Window:Notify("Error", "No code to copy!", 2)
+    end
+end)
+
+TabSpy:Button("▶ Execute Generated Code", "Runs the generated script", function()
+    if CurrentScriptBuffer ~= "" then
+        local success, result = pcall(function()
+            local func, syntaxErr = loadstring(CurrentScriptBuffer)
+            if not func then error(syntaxErr) end
+            func()
+        end)
+        
+        if success then
+            Window:Notify("Success", "Script executed successfully", 1)
+        else
+            Window:Notify("Error", "Execution failed: " .. tostring(result), 3)
+        end
+    else
+        Window:Notify("Error", "No code to execute!", 2)
+    end
+end)
+
+-- ==========================================
+-- CORE LOGIC: HYBRID HOOK SYSTEM
+-- ==========================================
+
+local function ProcessLog(Instance, Method, Args)
+    if not getgenv().SlenderSpy.Enabled then return end
+    
+    local RemoteName = Instance.Name
+    for _, v in pairs(getgenv().SlenderSpy.Blocked) do
+        if RemoteName == v then return end
+    end
+
+    local SrcScript = getcallingscript and getcallingscript()
+    local SrcPath = "Unknown"
+    if SrcScript then
+        SrcPath = SrcScript:GetFullName()
+    end
+
+    local Logs = getgenv().SlenderSpy.Logs
+    local LastLog = Logs[#Logs]
+
+    if LastLog and LastLog.Instance == Instance and DeepCompare(LastLog.Args, Args) then
+        LastLog.Count = LastLog.Count + 1
+        LastLog.Time = os.date("%X")
+    else
+        table.insert(Logs, {
+            Name = RemoteName,
+            Instance = Instance,
+            Method = Method,
+            Args = Args,
+            Source = SrcPath,
+            Time = os.date("%X"),
+            Count = 1
+        })
+        
+        -- Memory Management: Remove old logs
+        if #Logs > getgenv().SlenderSpy.MaxLogs then
+            table.remove(Logs, 1)
+        end
+    end
+end
+
+-- 1. Hook Metamethod (__namecall)
+local mt = getrawmetatable(game)
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    
+    if (method == "FireServer" or method == "InvokeServer") then
+        ProcessLog(self, method, args)
+    end
+    
+    return oldNamecall(self, ...)
+end)
+
+setreadonly(mt, true)
+
+-- 2. Hook Function (Direct Calls)
+local HookSuccess = pcall(function()
+    getgenv().SlenderSpy_OldFireServer = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
+        ProcessLog(self, "FireServer", {...})
+        return getgenv().SlenderSpy_OldFireServer(self, ...)
+    end))
+    
+    getgenv().SlenderSpy_OldInvokeServer = hookfunction(Instance.new("RemoteFunction").InvokeServer, newcclosure(function(self, ...)
+        ProcessLog(self, "InvokeServer", {...})
+        return getgenv().SlenderSpy_OldInvokeServer(self, ...)
+    end))
+end)
+
+if not HookSuccess then
+    warn("[SlenderHub Spy] Function hooks failed - using metamethod only")
+end
+
+-- 3. Hook UnreliableRemoteEvent
+pcall(function()
+    local Unreliable = Instance.new("UnreliableRemoteEvent")
+    getgenv().SlenderSpy_OldUnreliableFire = hookfunction(Unreliable.FireServer, newcclosure(function(self, ...)
+        ProcessLog(self, "FireServer", {...})
+        return getgenv().SlenderSpy_OldUnreliableFire(self, ...)
+    end))
+end)
+
+Window:Notify("SlenderHub Spy V3.0", "Remote monitoring active!", 3)
