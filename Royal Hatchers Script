@@ -1,4 +1,4 @@
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 -- Espera o jogo carregar
 repeat task.wait() until game:IsLoaded()
@@ -68,38 +68,64 @@ local AllUpgrades = {
 }
 
 --========================================================--
---                  CARREGANDO SLENDERWIND UI             --
+--                  CARREGANDO RAYFIELD UI                --
 --========================================================--
--- Mudança de Rayfield para SlenderWind V10 Obsidian Edition, conforme suas instruções.
--- SlenderWind é mais otimizado para a plataforma SlenderHub e deve resolver problemas de renderização.
-local Window = Library.Window({ Name = "SlenderHub | Royal Hatchers", KeySystem = false })
+local Window = Rayfield:CreateWindow({
+   Name = "SlenderHub | Royal Hatchers",
+   LoadingTitle = "Inicializando Interface...",
+   LoadingSubtitle = "Por SlenderHub Architect",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "SlenderHubConfig", -- Cria uma pasta no workspace do executor
+      FileName = "MainConfig"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "noinvite",
+      RememberJoins = true 
+   },
+   KeySystem = false,
+   KeySettings = {
+      Title = "Verificação de Segurança",
+      Subtitle = "Sistema de Chaves",
+      Note = "Entre no Discord para obter a chave.",
+      FileName = "Key", 
+      SaveKey = true, 
+      GrabKeyFromSite = false,
+      Key = {"Hello"} -- Chaves aceitas (placeholder)
+   }
+})
 
 --================= TABS =================--
--- SlenderWind usa Window:Tab("Nome da Aba")
-local FarmingTab = Window:Tab("Farming")
-local EggsTab = Window:Tab("Eggs")
-local ShopUpgradesTab = Window:Tab("Shop & Upgrades")
-local ClansTab = Window:Tab("Clans")
-local PlayerTab = Window:Tab("Player")
+local FarmingTab = Window:CreateTab("Farming")
+local EggsTab = Window:CreateTab("Eggs")
+local ShopUpgradesTab = Window:CreateTab("Shop & Upgrades")
+local ClansTab = Window:CreateTab("Clans")
+local PlayerTab = Window:CreateTab("Player")
 
 --================= FARMING TAB =================--
-FarmingTab:Toggle("Auto Click", getgenv().AutoClick, function(Value)
-    getgenv().AutoClick = Value
-    print("SlenderHub: Auto Click Toggled:", Value)
-    if Value then
-        task.spawn(function()
-            while getgenv().AutoClick do
-                local success, err = pcall(function()
-                    ClickRemote:InvokeServer()
-                end)
-                if not success then
-                    warn("SlenderHub: Auto Click failed:", err)
+FarmingTab:CreateToggle({
+    Name = "Auto Click",
+    CurrentValue = getgenv().AutoClick,
+    Flag = "AutoClickToggle", -- Para salvar a configuração
+    Callback = function(Value)
+        getgenv().AutoClick = Value
+        print("SlenderHub: Auto Click Toggled:", Value)
+        if Value then
+            task.spawn(function()
+                while getgenv().AutoClick do
+                    local success, err = pcall(function()
+                        ClickRemote:InvokeServer()
+                    end)
+                    if not success then
+                        warn("SlenderHub: Auto Click failed:", err)
+                    end
+                    task.wait() -- Sem delay para máxima velocidade de click
                 end
-                task.wait() -- Sem delay para máxima velocidade de click
-            end
-        end)
-    end
-end)
+            end)
+        end
+    end,
+})
 
 -- Implementação melhorada do Auto Collectibles, usando o Remote "CollectCollectible"
 local collectibleIdsToCollect = {} -- Armazena os IDs dos coletáveis para coleta
@@ -114,160 +140,283 @@ LoadCollectiblesEvent.OnClientEvent:Connect(function(collectiblesData)
     print("SlenderHub: Loaded", #collectibleIdsToCollect, "collectibles.")
 end)
 
-FarmingTab:Toggle("Auto Collectibles (Gems/Drops)", getgenv().AutoCollect, function(Value)
-    getgenv().AutoCollect = Value
-    print("SlenderHub: Auto Collectibles Toggled:", Value)
-    if Value then
-        task.spawn(function()
-            while getgenv().AutoCollect do
-                if #collectibleIdsToCollect > 0 then
-                    local success, err = pcall(function()
-                        for i = #collectibleIdsToCollect, 1, -1 do
-                            local collectibleID = collectibleIdsToCollect[i]
-                            CollectCollectibleRemote:InvokeServer(collectibleID)
-                            table.remove(collectibleIdsToCollect, i)
-                            -- print("SlenderHub: Collecting item with ID:", collectibleID) -- Descomente para debug intenso
+FarmingTab:CreateToggle({
+    Name = "Auto Collectibles (Gems/Drops)",
+    CurrentValue = getgenv().AutoCollect,
+    Flag = "AutoCollectToggle",
+    Callback = function(Value)
+        getgenv().AutoCollect = Value
+        print("SlenderHub: Auto Collectibles Toggled:", Value)
+        if Value then
+            task.spawn(function()
+                while getgenv().AutoCollect do
+                    for _, collectibleId in ipairs(collectibleIdsToCollect) do
+                        local success, err = pcall(function()
+                            CollectCollectibleRemote:InvokeServer(collectibleId)
+                        end)
+                        if not success then
+                            warn("SlenderHub: Auto Collectible failed for ID", collectibleId, ":", err)
                         end
+                        task.wait(0.1) -- Pequeno delay para evitar flood
+                    end
+                    task.wait(1) -- Espera antes de re-checar
+                end
+            end)
+        end
+    end,
+})
+
+FarmingTab:CreateSection("Collectibles") -- Rayfield section
+
+FarmingTab:CreateButton({
+    Name = "Force Collect Now",
+    Callback = function()
+        warn("SlenderHub: Attempting to force collect", #collectibleIdsToCollect, "collectibles...")
+        for _, collectibleId in ipairs(collectibleIdsToCollect) do
+            local success, err = pcall(function()
+                CollectCollectibleRemote:InvokeServer(collectibleId)
+            end)
+            if not success then
+                warn("SlenderHub: Force Collectible failed for ID", collectibleId, ":", err)
+            end
+            task.wait(0.05) -- Pequeno delay
+        end
+        warn("SlenderHub: Force collection attempt finished.")
+    end,
+})
+
+FarmingTab:CreateToggle({
+    Name = "Auto Buy Merchant",
+    CurrentValue = getgenv().AutoMerchant,
+    Flag = "AutoMerchantToggle",
+    Callback = function(Value)
+        getgenv().AutoMerchant = Value
+        print("SlenderHub: Auto Buy Merchant Toggled:", Value)
+        if Value then
+            task.spawn(function()
+                while getgenv().AutoMerchant do
+                    local success, result = pcall(function()
+                        return BuyMerchantRemote:InvokeServer()
                     end)
                     if not success then
-                        warn("SlenderHub: Auto Collectibles failed:", err)
+                        warn("SlenderHub: Auto Buy Merchant failed:", result)
+                    else
+                        if result == true then
+                            print("SlenderHub: Merchant bought successfully!")
+                        else
+                            warn("SlenderHub: Failed to buy merchant:", result)
+                        end
                     end
-                else
-                    -- print("SlenderHub: No collectibles to collect.") -- Descomente para debug
+                    task.wait(30) -- Wait 30 seconds before trying again (adjust as needed)
                 end
-                task.wait(0.2) -- Pequeno delay para evitar spam excessivo no servidor e dar tempo para o evento LoadCollectibles
-            end
-        end)
-    end
-end)
+            end)
+        end
+    end,
+})
 
 --================= EGGS TAB =================--
--- SlenderWind Dropdown: (Nome, Opções, Valor Atual, Callback)
-EggsTab:Dropdown("Select Egg", AllEggs, getgenv().SelectedEgg, function(SelectedText)
-    getgenv().SelectedEgg = SelectedText
-    print("SlenderHub: Selected Egg:", SelectedText)
-end)
-
--- SlenderWind Slider: (Nome, Min, Max, Valor Atual, Callback, Suffix, Increment)
-EggsTab:Slider("Amount to Open", 1, 100, getgenv().EggAmount, function(Value)
-    getgenv().EggAmount = Value
-    print("SlenderHub: Egg Amount set to:", Value)
-end, " Eggs", 1)
-
-EggsTab:Toggle("Auto Hatch", getgenv().AutoEgg, function(Value)
-    getgenv().AutoEgg = Value
-    print("SlenderHub: Auto Hatch Toggled:", Value)
-    if Value then
-        task.spawn(function()
-            while getgenv().AutoEgg do
-                local success, err = pcall(function()
-                    -- A maioria dos jogos espera o NOME do ovo (string), não a instância.
-                    -- Mudei para passar diretamente o getgenv().SelectedEgg (string).
-                    BuyEggRemote:InvokeServer(getgenv().SelectedEgg, getgenv().EggAmount)
-                    print("SlenderHub: Attempting to hatch", getgenv().EggAmount, "of", getgenv().SelectedEgg)
-                end)
-                if not success then
-                    warn("SlenderHub: Auto Hatch failed:", err)
+EggsTab:CreateToggle({
+    Name = "Auto Hatch Eggs",
+    CurrentValue = getgenv().AutoEgg,
+    Flag = "AutoEggToggle",
+    Callback = function(Value)
+        getgenv().AutoEgg = Value
+        print("SlenderHub: Auto Hatch Eggs Toggled:", Value)
+        if Value then
+            task.spawn(function()
+                while getgenv().AutoEgg do
+                    local success, result = pcall(function()
+                        return BuyEggRemote:InvokeServer(getgenv().SelectedEgg, getgenv().EggAmount)
+                    end)
+                    if not success then
+                        warn("SlenderHub: Auto Egg failed:", result)
+                    else
+                        if result == true then
+                            print("SlenderHub: Successfully bought and hatched", getgenv().EggAmount, getgenv().SelectedEgg, "(s).")
+                        elseif type(result) == "string" then
+                            warn("SlenderHub: Failed to auto hatch egg:", result)
+                        else
+                            warn("SlenderHub: Failed to auto hatch egg: Unknown error (returned type:", type(result), ")")
+                        end
+                    end
+                    task.wait(0.5) -- Small delay between attempts
                 end
-                task.wait(0.1) -- Pequeno delay para segurança e evitar rate-limits
-            end
+            end)
+        end
+    end,
+})
+
+EggsTab:CreateDropdown({
+    Name = "Select Egg",
+    Options = AllEggs,
+    CurrentOption = {getgenv().SelectedEgg}, -- Rayfield espera uma tabela para CurrentOption
+    MultipleOptions = false,
+    Flag = "SelectedEggDD",
+    Callback = function(Option)
+        getgenv().SelectedEgg = Option[1] -- Rayfield retorna uma tabela com as seleções
+        print("SlenderHub: Selected Egg:", getgenv().SelectedEgg)
+    end,
+})
+
+EggsTab:CreateSlider({
+    Name = "Egg Amount",
+    Range = {1, 1000},
+    Increment = 1,
+    Suffix = " Eggs",
+    CurrentValue = getgenv().EggAmount,
+    Flag = "EggAmountSlider",
+    Callback = function(Value)
+        getgenv().EggAmount = Value
+        print("SlenderHub: Egg Amount set to:", Value)
+    end,
+})
+
+EggsTab:CreateButton({
+    Name = "Buy Eggs Once",
+    Callback = function()
+        local success, result = pcall(function()
+            return BuyEggRemote:InvokeServer(getgenv().SelectedEgg, getgenv().EggAmount)
         end)
-    end
-end)
+        if not success then
+            warn("SlenderHub: Manual Buy Egg failed:", result)
+        else
+            if result == true then
+                warn("SlenderHub: Manually bought and hatched", getgenv().EggAmount, getgenv().SelectedEgg, "(s).")
+            elseif type(result) == "string" then
+                warn("SlenderHub: Failed to buy egg manually:", result)
+            else
+                warn("SlenderHub: Failed to buy egg manually: Unknown error (returned type:", type(result), ")")
+            end
+        end
+    end,
+})
 
 --================= SHOP & UPGRADES TAB =================--
-ShopUpgradesTab:Toggle("Auto Buy Merchant (All Items)", getgenv().AutoMerchant, function(Value)
-    getgenv().AutoMerchant = Value
-    print("SlenderHub: Auto Buy Merchant Toggled:", Value)
-    if Value then
-        task.spawn(function()
-            while getgenv().AutoMerchant do
-                local success, err = pcall(function()
-                    -- Compra todos os 15 slots (assumindo que o merchant sempre tem 15 slots)
-                    -- O primeiro argumento "Merchant" é uma suposição para o ID do comerciante.
-                    for i = 1, 15 do
-                        BuyMerchantRemote:InvokeServer("Merchant", i)
-                        -- print("SlenderHub: Attempting to buy merchant item slot:", i) -- Descomente para debug intenso
+ShopUpgradesTab:CreateToggle({
+    Name = "Auto Upgrade",
+    CurrentValue = getgenv().AutoUpgrade,
+    Flag = "AutoUpgradeToggle",
+    Callback = function(Value)
+        getgenv().AutoUpgrade = Value
+        print("SlenderHub: Auto Upgrade Toggled:", Value)
+        if Value then
+            task.spawn(function()
+                while getgenv().AutoUpgrade do
+                    local success, result = pcall(function()
+                        return BuyUpgradeRemote:InvokeServer(getgenv().SelectedUpgrade)
+                    end)
+                    if not success then
+                        warn("SlenderHub: Auto Upgrade failed:", result)
+                    else
+                        if result == true then
+                            print("SlenderHub: Successfully bought upgrade:", getgenv().SelectedUpgrade)
+                        elseif type(result) == "string" then
+                            warn("SlenderHub: Failed to auto upgrade:", result)
+                        else
+                            warn("SlenderHub: Failed to auto upgrade: Unknown error (returned type:", type(result), ")")
+                        end
                     end
-                end)
-                if not success then
-                    warn("SlenderHub: Auto Buy Merchant failed:", err)
+                    task.wait(1) -- Small delay between attempts
                 end
-                task.wait(2) -- Delay de 2s para não dar spam excessivo e respeitar cooldowns do servidor
-            end
-        end)
-    end
-end)
+            end)
+        end
+    end,
+})
 
-ShopUpgradesTab:Dropdown("Select Upgrade", AllUpgrades, getgenv().SelectedUpgrade, function(SelectedText)
-    getgenv().SelectedUpgrade = SelectedText
-    print("SlenderHub: Selected Upgrade:", SelectedText)
-end)
+ShopUpgradesTab:CreateDropdown({
+    Name = "Select Upgrade",
+    Options = AllUpgrades,
+    CurrentOption = {getgenv().SelectedUpgrade},
+    MultipleOptions = false,
+    Flag = "SelectedUpgradeDD",
+    Callback = function(Option)
+        getgenv().SelectedUpgrade = Option[1]
+        print("SlenderHub: Selected Upgrade:", getgenv().SelectedUpgrade)
+    end,
+})
 
-ShopUpgradesTab:Toggle("Auto Buy Upgrade", getgenv().AutoUpgrade, function(Value)
-    getgenv().AutoUpgrade = Value
-    print("SlenderHub: Auto Buy Upgrade Toggled:", Value)
-    if Value then
-        task.spawn(function()
-            while getgenv().AutoUpgrade do
-                local success, err = pcall(function()
-                    -- A maioria dos jogos espera o NOME do upgrade (string).
-                    BuyUpgradeRemote:InvokeServer(getgenv().SelectedUpgrade)
-                    print("SlenderHub: Attempting to buy upgrade:", getgenv().SelectedUpgrade)
-                end)
-                if not success then
-                    warn("SlenderHub: Auto Buy Upgrade failed:", err)
-                end
-                task.wait(1) -- Delay para evitar spam excessivo
-            end
+ShopUpgradesTab:CreateButton({
+    Name = "Buy Upgrade Once",
+    Callback = function()
+        local success, result = pcall(function()
+            return BuyUpgradeRemote:InvokeServer(getgenv().SelectedUpgrade)
         end)
-    end
-end)
+        if not success then
+            warn("SlenderHub: Manual Buy Upgrade failed:", result)
+        else
+            if result == true then
+                warn("SlenderHub: Manually bought upgrade:", getgenv().SelectedUpgrade)
+            elseif type(result) == "string" then
+                warn("SlenderHub: Failed to buy upgrade manually:", result)
+            else
+                warn("SlenderHub: Failed to buy upgrade manually: Unknown error (returned type:", type(result), ")")
+            end
+        end
+    end,
+})
 
 --================= CLANS TAB =================--
-ClansTab:Input("Clan Name to Create", getgenv().ClanNameToCreate, function(Value)
-    getgenv().ClanNameToCreate = Value
-    print("SlenderHub: Clan Name to Create set to:", Value)
-end)
-
-ClansTab:Toggle("Auto Create Clan", getgenv().AutoCreateClan, function(Value)
-    getgenv().AutoCreateClan = Value
-    print("SlenderHub: Auto Create Clan Toggled:", Value)
-    if Value then
-        task.spawn(function()
-            while getgenv().AutoCreateClan do
-                -- Verifica se já estamos em um clã antes de tentar criar
-                if not LocalPlayer:GetAttribute("Clan") then
-                    local success, result = pcall(function()
-                        return ClanRemote:InvokeServer("CreateClan", getgenv().ClanNameToCreate)
-                    end)
-                    if success then
-                        if result == true then
-                            warn("SlenderHub: Clã criado com sucesso:", getgenv().ClanNameToCreate)
-                            getgenv().AutoCreateClan = false -- Desativa após criar com sucesso
-                        elseif type(result) == "string" then
-                            warn("SlenderHub: Falha ao criar clã:", result)
+ClansTab:CreateToggle({
+    Name = "Auto Create Clan",
+    CurrentValue = getgenv().AutoCreateClan,
+    Flag = "AutoCreateClanToggle",
+    Callback = function(Value)
+        getgenv().AutoCreateClan = Value
+        print("SlenderHub: Auto Create Clan Toggled:", Value)
+        if Value then
+            task.spawn(function()
+                while getgenv().AutoCreateClan do
+                    task.wait(1)
+                    -- Verifica se o jogador já está em um clã
+                    if not LocalPlayer:GetAttribute("Clan") then
+                        local success, result = pcall(function()
+                            return ClanRemote:InvokeServer("CreateClan", getgenv().ClanNameToCreate)
+                        end)
+                        if success then
+                            if result == true then
+                                warn("SlenderHub: Clã '" .. getgenv().ClanNameToCreate .. "' criado com sucesso!")
+                                getgenv().AutoCreateClan = false -- Para o auto-criar após o sucesso
+                                -- Opcional: Atualizar o estado do toggle na UI
+                            elseif type(result) == "string" then
+                                warn("SlenderHub: Falha ao criar clã:", result)
+                            else
+                                warn("SlenderHub: Falha ao criar clã: Unknown error (returned type:", type(result), ")")
+                            end
                         else
-                             warn("SlenderHub: Falha ao criar clã: Unknown error (returned type:", type(result), ")")
+                            warn("SlenderHub: pcall failed for CreateClan:", result)
                         end
                     else
-                        warn("SlenderHub: pcall failed for CreateClan:", result)
+                        -- print("SlenderHub: Já está em um clã, parando auto-criar.")
+                        getgenv().AutoCreateClan = false
+                        -- Opcional: Atualizar o estado do toggle na UI
                     end
-                else
-                    warn("SlenderHub: Já está em um clã. Desativando Auto Create Clan.")
-                    getgenv().AutoCreateClan = false -- Desativa se já estiver em um clã
+                    task.wait(5) -- Espera antes da próxima tentativa se não for bem-sucedido
                 end
-                task.wait(5) -- Espera um pouco antes de tentar novamente
-            end
-        end)
-    end
-end)
+            end)
+        end
+    end,
+})
 
--- Conecta ao evento de convites de clã UMA VEZ para evitar múltiplas conexões
-UpdateClansEvent.OnClientEvent:Connect(function(eventType, data)
-    if getgenv().AutoAcceptInvites and eventType == "InvitesUpdate" and data then
-        print("SlenderHub: Received clan invites update. Invites:", data)
-        for _, clanName in pairs(data) do
+ClansTab:CreateInput({
+    Name = "Clan Name to Create",
+    PlaceholderText = "SlenderHub Clan",
+    CurrentValue = getgenv().ClanNameToCreate,
+    RemoveTextAfterFocusLost = false,
+    Flag = "ClanNameInput",
+    Callback = function(Text)
+        getgenv().ClanNameToCreate = Text
+        print("SlenderHub: Clan Name for creation set to:", Text)
+    end,
+})
+
+-- Listener para aceitar convites automaticamente
+UpdateClansEvent.OnClientEvent:Connect(function(clansTable)
+    if not getgenv().AutoAcceptInvites then return end
+
+    for clanName, clanData in pairs(clansTable) do
+        -- Assumindo que `clanData.Invited` indica um convite para o LocalPlayer
+        if clanData.Invited and not LocalPlayer:GetAttribute("Clan") then
+            warn("SlenderHub: Auto-accepting invite for clan:", clanName)
             local success, result = pcall(function()
                 return ClanRemote:InvokeServer("JoinClan", clanName)
             end)
@@ -287,87 +436,117 @@ UpdateClansEvent.OnClientEvent:Connect(function(eventType, data)
     end
 end)
 
-ClansTab:Toggle("Auto Accept Clan Invites", getgenv().AutoAcceptInvites, function(Value)
-    getgenv().AutoAcceptInvites = Value
-    print("SlenderHub: Auto Accept Clan Invites Toggled:", Value)
-end)
+ClansTab:CreateToggle({
+    Name = "Auto Accept Clan Invites",
+    CurrentValue = getgenv().AutoAcceptInvites,
+    Flag = "AutoAcceptInvitesToggle",
+    Callback = function(Value)
+        getgenv().AutoAcceptInvites = Value
+        print("SlenderHub: Auto Accept Clan Invites Toggled:", Value)
+    end,
+})
 
-ClansTab:Toggle("Auto Leave/Delete Clan", getgenv().AutoLeaveClan, function(Value)
-    getgenv().AutoLeaveClan = Value
-    print("SlenderHub: Auto Leave/Delete Clan Toggled:", Value)
-    if Value then
-        task.spawn(function()
-            while getgenv().AutoLeaveClan do
-                task.wait(1)
-                -- Verifica se o jogador está em um clã
-                if LocalPlayer:GetAttribute("Clan") then
-                    local success, result = pcall(function()
-                        return ClanRemote:InvokeServer("LeaveClan")
-                    end)
-                    if success then
-                        if result == true then
-                            warn("SlenderHub: Clã deixado/deletado com sucesso.")
-                        elseif type(result) == "string" then
-                            warn("SlenderHub: Falha ao deixar/deletar clã:", result)
+ClansTab:CreateToggle({
+    Name = "Auto Leave/Delete Clan",
+    CurrentValue = getgenv().AutoLeaveClan,
+    Flag = "AutoLeaveClanToggle",
+    Callback = function(Value)
+        getgenv().AutoLeaveClan = Value
+        print("SlenderHub: Auto Leave/Delete Clan Toggled:", Value)
+        if Value then
+            task.spawn(function()
+                while getgenv().AutoLeaveClan do
+                    task.wait(1)
+                    -- Verifica se o jogador está em um clã
+                    if LocalPlayer:GetAttribute("Clan") then
+                        local success, result = pcall(function()
+                            return ClanRemote:InvokeServer("LeaveClan")
+                        end)
+                        if success then
+                            if result == true then
+                                warn("SlenderHub: Clã deixado/deletado com sucesso.")
+                            elseif type(result) == "string" then
+                                warn("SlenderHub: Falha ao deixar/deletar clã:", result)
+                            else
+                                warn("SlenderHub: Falha ao deixar/deletar clã: Unknown error (returned type:", type(result), ")")
+                            end
                         else
-                            warn("SlenderHub: Falha ao deixar/deletar clã: Unknown error (returned type:", type(result), ")")
+                            warn("SlenderHub: pcall failed for LeaveClan:", result)
                         end
                     else
-                        warn("SlenderHub: pcall failed for LeaveClan:", result)
+                        -- print("SlenderHub: Not in a clan to leave.") -- Descomente para debug
                     end
-                else
-                    -- print("SlenderHub: Not in a clan to leave.") -- Descomente para debug
                 end
-            end
-        end)
-    end
-end)
-
+            end)
+        end
+    end,
+})
 
 --================= PLAYER TAB =================--
-PlayerTab:Slider("WalkSpeed", 16, 200, getgenv().WalkSpeed, function(Value)
-    getgenv().WalkSpeed = Value -- Armazena o valor globalmente
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.WalkSpeed = Value
-        print("SlenderHub: WalkSpeed set to:", Value)
-    end
-end, " WS", 1)
+PlayerTab:CreateSlider({
+    Name = "WalkSpeed",
+    Range = {16, 200},
+    Increment = 1,
+    Suffix = " WS",
+    CurrentValue = getgenv().WalkSpeed,
+    Flag = "WalkSpeedSlider",
+    Callback = function(Value)
+        getgenv().WalkSpeed = Value -- Armazena o valor globalmente
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.WalkSpeed = Value
+            print("SlenderHub: WalkSpeed set to:", Value)
+        end
+    end,
+})
 
-PlayerTab:Slider("JumpPower", 50, 300, getgenv().JumpPower, function(Value)
-    getgenv().JumpPower = Value -- Armazena o valor globalmente
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.JumpPower = Value
-        hum.UseJumpPower = true -- Garante que o JumpPower seja usado
-        print("SlenderHub: JumpPower set to:", Value)
-    end
-end, " JP", 1)
+PlayerTab:CreateSlider({
+    Name = "JumpPower",
+    Range = {50, 300},
+    Increment = 1,
+    Suffix = " JP",
+    CurrentValue = getgenv().JumpPower,
+    Flag = "JumpPowerSlider",
+    Callback = function(Value)
+        getgenv().JumpPower = Value -- Armazena o valor globalmente
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.JumpPower = Value
+            hum.UseJumpPower = true -- Garante que o JumpPower seja usado
+            print("SlenderHub: JumpPower set to:", Value)
+        end
+    end,
+})
 
-PlayerTab:Toggle("Anti-AFK (Jump a cada 5 minutos)", getgenv().AntiAFKMovement, function(Value)
-    getgenv().AntiAFKMovement = Value
-    print("SlenderHub: Anti-AFK (Jump) Toggled:", Value)
-    if Value then
-        task.spawn(function()
-            while getgenv().AntiAFKMovement do
-                task.wait(300) -- Espera 5 minutos (300 segundos)
-                if getgenv().AntiAFKMovement then
-                    local char = LocalPlayer.Character
-                    local hum = char and char:FindFirstChildOfClass("Humanoid")
-                    if hum and hum.Health > 0 then
-                        -- Simula um pequeno pulo para manter a atividade
-                        hum.Jump = true
-                        task.wait(0.1)
-                        hum.Jump = false
-                        print("SlenderHub: Performed Anti-AFK jump.")
+PlayerTab:CreateToggle({
+    Name = "Anti-AFK (Jump a cada 5 minutos)",
+    CurrentValue = getgenv().AntiAFKMovement,
+    Flag = "AntiAFKMovementToggle",
+    Callback = function(Value)
+        getgenv().AntiAFKMovement = Value
+        print("SlenderHub: Anti-AFK (Jump) Toggled:", Value)
+        if Value then
+            task.spawn(function()
+                while getgenv().AntiAFKMovement do
+                    task.wait(300) -- Espera 5 minutos (300 segundos)
+                    if getgenv().AntiAFKMovement then
+                        local char = LocalPlayer.Character
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        if hum and hum.Health > 0 then
+                            -- Simula um pequeno pulo para manter a atividade
+                            hum.Jump = true
+                            task.wait(0.1)
+                            hum.Jump = false
+                            print("SlenderHub: Performed Anti-AFK jump.")
+                        end
                     end
                 end
-            end
-        end)
-    end
-end)
+            end)
+        end
+    end,
+})
 
 -- Função para aplicar WalkSpeed e JumpPower ao Humanoid
 local function applyPlayerStats(character)
