@@ -10,19 +10,22 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local Functions = Remotes:WaitForChild("Functions")
+local Events = Remotes:WaitForChild("Events") -- Adicionado para eventos de collectibles
 
--- Tabelas de Dados extraídas da sua Dex
-local EggsList = {
+-- Tabelas de Dados extraídas da sua Dex (ATUALIZADAS)
+local AllEggs = {
     "Common Egg", "Spotted Egg", "Rocky Egg", "Mushroom Egg", "Leaf Egg", 
     "Arctic Egg", "Icy Egg", "Release Egg", "Lovely Egg", "Valentines Egg", 
-    "100K Egg", "Desert Egg", "Fiery Egg", "Magma Egg", "500K Egg"
+    "100K Egg", "Desert Egg", "Fiery Egg", "Magma Egg", "500K Egg",
+    "Crystal Egg", "Floral Egg", "Mystical Egg", "Season 1 Egg", 
+    "Bounty Pets", "Exclusive Pets"
 }
 
-local UpgradesList = {
+local AllUpgrades = {
     "Coins1", "EggHatch1", "Gems1", "HatchSpeed1", "Coins2", "Luck1", 
     "Shiny1", "HatchSpeed2", "Coins3", "Gems2", "Luck2", "Shiny2", 
-    "Hatcher1", "Shiny3", "Coins4", "Luck3", "EggHatch2", "HiddenLuck", 
-    "HiddenShinyLuck", "HiddenHatchSpeed"
+    "Hatcher1", "Shiny3", "Coins4", "Luck3", "EggHatch2", "Shiny4",
+    "Coins5", "Luck4", "EggHatch3", "HiddenLuck", "HiddenShinyLuck", "HiddenHatchSpeed"
 }
 
 -- Variáveis de Controle
@@ -35,7 +38,11 @@ getgenv().AutoMerchant = false
 getgenv().AutoCollect = false
 getgenv().AutoUpgrade = false
 getgenv().SelectedUpgrade = "Coins1"
-getgenv().AntiAFKMovement = false -- Nova variável de controle para o Anti-AFK
+getgenv().AntiAFKMovement = false
+getgenv().AutoCreateClan = false
+getgenv().ClanNameToCreate = "SlenderHub Clan" -- Default clan name
+getgenv().AutoAcceptInvites = false
+getgenv().AutoLeaveClan = false
 
 -- Anti-AFK padrão (desabilita o evento de ociosidade do jogador)
 for _, con in pairs(getconnections(LocalPlayer.Idled)) do
@@ -68,6 +75,7 @@ local Window = Rayfield:CreateWindow({
 local TabFarming = Window:CreateTab("Farming", 4483362458)
 local TabEggs = Window:CreateTab("Eggs", 4483362458)
 local TabShop = Window:CreateTab("Shop & Upgrades", 4483362458)
+local TabClans = Window:CreateTab("Clans", 4483362458) -- Novo Tab para Clans
 local TabPlayer = Window:CreateTab("Player", 4483362458)
 
 --================= FARMING TAB =================--
@@ -88,6 +96,16 @@ TabFarming:CreateToggle({
     end
 })
 
+-- Implementação melhorada do Auto Collectibles
+local collectibleIdsToCollect = {}
+
+-- Escuta o evento LoadCollectibles para popular a lista de IDs
+Events.LoadCollectibles.OnClientEvent:Connect(function(collectiblesData)
+    for _, data in pairs(collectiblesData) do
+        table.insert(collectibleIdsToCollect, data.ID)
+    end
+end)
+
 TabFarming:CreateToggle({
     Name = "Auto Collectibles (Gems/Drops)",
     CurrentValue = false,
@@ -97,19 +115,14 @@ TabFarming:CreateToggle({
         task.spawn(function()
             while getgenv().AutoCollect do
                 pcall(function()
-                    local colFolder = Workspace:FindFirstChild("_") and Workspace._:FindFirstChild("CollectiblesClient")
-                    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    
-                    -- Teleporta os coletáveis para o jogador (baseado na Dex de Collectibles)
-                    if colFolder and hrp then
-                        for _, item in pairs(colFolder:GetChildren()) do
-                            if item:IsA("BasePart") or item:IsA("Model") then
-                                item:PivotTo(hrp.CFrame)
-                            end
-                        end
+                    -- Itera sobre os IDs conhecidos e tenta coletá-los
+                    for i = #collectibleIdsToCollect, 1, -1 do
+                        local collectibleID = collectibleIdsToCollect[i]
+                        Functions.CollectCollectible:InvokeServer(collectibleID)
+                        table.remove(collectibleIdsToCollect, i) -- Remove da lista local após a tentativa de coleta
                     end
                 end)
-                task.wait(0.1)
+                task.wait(0.1) -- Pequeno delay para evitar spam excessivo
             end
         end)
     end
@@ -118,12 +131,11 @@ TabFarming:CreateToggle({
 --================= EGGS TAB =================--
 TabEggs:CreateDropdown({
     Name = "Select Egg",
-    Options = EggsList,
+    Options = AllEggs, -- Lista atualizada
     CurrentOption = {"Common Egg"},
     MultipleOptions = false,
     Flag = "DropdownEgg",
     Callback = function(Option)
-        -- O Rayfield retorna uma tabela, então pegamos o primeiro item selecionado
         getgenv().SelectedEgg = Option[1]
     end
 })
@@ -155,10 +167,11 @@ TabEggs:CreateToggle({
                             eggFolder[getgenv().SelectedEgg],
                             getgenv().EggAmount
                         }
-                        Functions.BuyEgg:InvokeServer(unpack(args))
+                        -- Usar table.unpack para compatibilidade moderna
+                        Functions.BuyEgg:InvokeServer(table.unpack(args))
                     end
                 end)
-                task.wait(0)
+                task.wait(0.05) -- Pequeno delay para segurança
             end
         end)
     end
@@ -187,7 +200,7 @@ TabShop:CreateToggle({
 
 TabShop:CreateDropdown({
     Name = "Select Upgrade",
-    Options = UpgradesList,
+    Options = AllUpgrades, -- Lista atualizada
     CurrentOption = {"Coins1"},
     MultipleOptions = false,
     Flag = "DropdownUpgrade",
@@ -210,6 +223,97 @@ TabShop:CreateToggle({
                 task.wait(1)
             end
         end)
+    end
+})
+
+--================= CLANS TAB =================--
+local ClanRemote = Remotes:WaitForChild("Functions"):WaitForChild("ClanInvoke")
+
+TabClans:CreateInput({
+    Name = "Clan Name to Create",
+    Placeholder = "Enter clan name",
+    CurrentValue = "SlenderHub Clan",
+    Flag = "ClanNameInput",
+    Callback = function(Value)
+        getgenv().ClanNameToCreate = Value
+    end
+})
+
+TabClans:CreateToggle({
+    Name = "Auto Create Clan",
+    CurrentValue = false,
+    Flag = "ToggleAutoCreateClan",
+    Callback = function(Value)
+        getgenv().AutoCreateClan = Value
+        if Value then
+            task.spawn(function()
+                while getgenv().AutoCreateClan and not LocalPlayer:GetAttribute("Clan") do
+                    pcall(function()
+                        -- Tenta criar o clã com o nome definido
+                        local success = ClanRemote:InvokeServer("CreateClan", getgenv().ClanNameToCreate)
+                        if success == true then
+                            warn("Successfully created clan:", getgenv().ClanNameToCreate)
+                            getgenv().AutoCreateClan = false -- Desativa após criar com sucesso
+                        elseif type(success) == "string" then
+                            warn("Failed to create clan:", success)
+                        end
+                    end)
+                    task.wait(5) -- Espera um pouco antes de tentar novamente
+                end
+            end)
+        end
+    end
+})
+
+TabClans:CreateToggle({
+    Name = "Auto Accept Clan Invites",
+    CurrentValue = false,
+    Flag = "ToggleAutoAcceptInvites",
+    Callback = function(Value)
+        getgenv().AutoAcceptInvites = Value
+        if Value then
+            Events.UpdateClans.OnClientEvent:Connect(function(eventType, data)
+                if getgenv().AutoAcceptInvites and eventType == "InvitesUpdate" and data then
+                    for _, clanName in pairs(data) do
+                        pcall(function()
+                            local success = ClanRemote:InvokeServer("JoinClan", clanName)
+                            if success == true then
+                                warn("Successfully joined clan:", clanName)
+                            elseif type(success) == "string" then
+                                warn("Failed to join clan:", success)
+                            end
+                        end)
+                        task.wait(0.5) -- Pequeno delay entre aceitar convites
+                    end
+                end
+            end)
+        end
+    end
+})
+
+TabClans:CreateToggle({
+    Name = "Auto Leave/Delete Clan",
+    CurrentValue = false,
+    Flag = "ToggleAutoLeaveClan",
+    Callback = function(Value)
+        getgenv().AutoLeaveClan = Value
+        if Value then
+            task.spawn(function()
+                while getgenv().AutoLeaveClan do
+                    task.wait(1)
+                    if LocalPlayer:GetAttribute("Clan") then
+                        pcall(function()
+                            local success = ClanRemote:InvokeServer("LeaveClan")
+                            if success == true then
+                                warn("Successfully left/deleted clan.")
+                            elseif type(success) == "string" then
+                                warn("Failed to leave/delete clan:", success)
+                            end
+                        end)
+                    end
+                end
+            end)
+        end
     end
 })
 
