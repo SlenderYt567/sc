@@ -1,3 +1,6 @@
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
+local Window = Library.Window({ Name = "SlenderHub", KeySystem = false })
+
 -- Espera o jogo carregar
 repeat task.wait() until game:IsLoaded()
 
@@ -8,25 +11,6 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-local Functions = Remotes:WaitForChild("Functions")
-local Events = Remotes:WaitForChild("Events") -- Adicionado para eventos de collectibles e clans
-
--- Tabelas de Dados extraídas da sua Dex (ATUALIZADAS)
-local AllEggs = {
-    "Common Egg", "Spotted Egg", "Rocky Egg", "Mushroom Egg", "Leaf Egg", 
-    "Arctic Egg", "Icy Egg", "Release Egg", "Lovely Egg", "Valentines Egg", 
-    "100K Egg", "Desert Egg", "Fiery Egg", "Magma Egg", "500K Egg",
-    "Crystal Egg", "Floral Egg", "Mystical Egg", "Season 1 Egg", 
-    "Bounty Pets", "Exclusive Pets"
-}
-
-local AllUpgrades = {
-    "Coins1", "EggHatch1", "Gems1", "HatchSpeed1", "Coins2", "Luck1", 
-    "Shiny1", "HatchSpeed2", "Coins3", "Gems2", "Luck2", "Shiny2", 
-    "Hatcher1", "Shiny3", "Coins4", "Luck3", "EggHatch2", "Shiny4",
-    "Coins5", "Luck4", "EggHatch3", "HiddenLuck", "HiddenShinyLuck", "HiddenHatchSpeed"
-}
 
 -- Variáveis de Controle globais (getgenv)
 local getgenv = getgenv or function() return _G end
@@ -43,53 +27,64 @@ getgenv().AutoCreateClan = false
 getgenv().ClanNameToCreate = "SlenderHub Clan" -- Nome de clã padrão
 getgenv().AutoAcceptInvites = false
 getgenv().AutoLeaveClan = false
+getgenv().WalkSpeed = 16 -- Adicionado para armazenar o valor do WalkSpeed
+getgenv().JumpPower = 50  -- Adicionado para armazenar o valor do JumpPower
 
 -- Anti-AFK padrão (desabilita o evento de ociosidade do jogador)
--- Isso evita que o Roblox marque o jogador como AFK por inatividade de input
 for _, con in pairs(getconnections(LocalPlayer.Idled)) do
     con:Disable()
 end
 
---========================================================--
---                  CARREGANDO RAYFIELD UI                --
---========================================================--
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- Espera pelos remotes necessários ANTES de criar a GUI para evitar que a GUI não apareça devido a yield
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local Functions = Remotes:WaitForChild("Functions")
+local Events = Remotes:WaitForChild("Events")
 
-local Window = Rayfield:CreateWindow({
-    Name = "SlenderHub | Royal Hatchers",
-    LoadingTitle = "SlenderHub Loading...",
-    LoadingSubtitle = "by Slender",
-    ConfigurationSaving = {
-        Enabled = false, -- Desabilitado por padrão para evitar erros com configs de UI
-        FolderName = nil,
-        FileName = "SlenderHub"
-    },
-    Discord = {
-        Enabled = false,
-        Invite = "noinvitelink",
-        RememberJoins = true
-    },
-    KeySystem = false -- Sem sistema de chaves
-})
+-- Remotes específicos
+local ClickRemote = Functions:WaitForChild("Click")
+local CollectCollectibleRemote = Functions:WaitForChild("CollectCollectible")
+local BuyEggRemote = Functions:WaitForChild("BuyEgg")
+local BuyMerchantRemote = Functions:WaitForChild("BuyMerchant")
+local BuyUpgradeRemote = Functions:WaitForChild("BuyUpgrade")
+local ClanRemote = Functions:WaitForChild("ClanInvoke") -- Remote para operações de clã
+
+-- Eventos específicos
+local LoadCollectiblesEvent = Events:WaitForChild("LoadCollectibles")
+local UpdateClansEvent = Events:WaitForChild("UpdateClans")
+
+-- Tabelas de Dados extraídas da sua Dex (ATUALIZADAS)
+local AllEggs = {
+    "Common Egg", "Spotted Egg", "Rocky Egg", "Mushroom Egg", "Leaf Egg",
+    "Arctic Egg", "Icy Egg", "Release Egg", "Lovely Egg", "Valentines Egg",
+    "100K Egg", "Desert Egg", "Fiery Egg", "Magma Egg", "500K Egg",
+    "Crystal Egg", "Floral Egg", "Mystical Egg", "Season 1 Egg",
+    "Bounty Pets", "Exclusive Pets"
+}
+
+local AllUpgrades = {
+    "Coins1", "EggHatch1", "Gems1", "HatchSpeed1", "Coins2", "Luck1",
+    "Shiny1", "HatchSpeed2", "Coins3", "Gems2", "Luck2", "Shiny2",
+    "Hatcher1", "Shiny3", "Coins4", "Luck3", "EggHatch2", "Shiny4",
+    "Coins5", "Luck4", "EggHatch3", "HiddenLuck", "HiddenShinyLuck", "HiddenHatchSpeed"
+}
 
 --================= TABS =================--
-local TabFarming = Window:CreateTab("Farming", 4483362458)
-local TabEggs = Window:CreateTab("Eggs", 4483362458)
-local TabShop = Window:CreateTab("Shop & Upgrades", 4483362458)
-local TabClans = Window:CreateTab("Clans", 4483362458) -- Novo Tab para Clans
-local TabPlayer = Window:CreateTab("Player", 4483362458)
+local TabFarming = Window:Tab("Farming")
+local TabEggs = Window:Tab("Eggs")
+local TabShop = Window:Tab("Shop & Upgrades")
+local TabClans = Window:Tab("Clans")
+local TabPlayer = Window:Tab("Player")
 
 --================= FARMING TAB =================--
-TabFarming:CreateToggle({
-    Name = "Auto Click",
-    CurrentValue = false,
-    Flag = "ToggleAutoClick",
+TabFarming:Toggle({
+    Text = "Auto Click",
+    State = getgenv().AutoClick,
     Callback = function(Value)
         getgenv().AutoClick = Value
         task.spawn(function()
             while getgenv().AutoClick do
                 pcall(function()
-                    Functions.Click:InvokeServer()
+                    ClickRemote:InvokeServer()
                 end)
                 task.wait() -- Sem delay para máxima velocidade de click
             end
@@ -101,28 +96,23 @@ TabFarming:CreateToggle({
 local collectibleIdsToCollect = {} -- Armazena os IDs dos coletáveis para coleta
 
 -- Escuta o evento LoadCollectibles para popular a lista de IDs
--- Isso garante que só tentamos coletar IDs que o servidor reconhece
-Events.LoadCollectibles.OnClientEvent:Connect(function(collectiblesData)
+LoadCollectiblesEvent.OnClientEvent:Connect(function(collectiblesData)
     for _, data in pairs(collectiblesData) do
         table.insert(collectibleIdsToCollect, data.ID)
     end
 end)
 
-TabFarming:CreateToggle({
-    Name = "Auto Collectibles (Gems/Drops)",
-    CurrentValue = false,
-    Flag = "ToggleAutoCollect",
+TabFarming:Toggle({
+    Text = "Auto Collectibles (Gems/Drops)",
+    State = getgenv().AutoCollect,
     Callback = function(Value)
         getgenv().AutoCollect = Value
         task.spawn(function()
             while getgenv().AutoCollect do
                 pcall(function()
-                    -- Itera sobre os IDs conhecidos e tenta coletá-los via InvokeServer
-                    for i = #collectibleIdsToCollect, 1, -1 do -- Itera de trás para frente para remoção segura
+                    for i = #collectibleIdsToCollect, 1, -1 do
                         local collectibleID = collectibleIdsToCollect[i]
-                        -- Tenta coletar. O servidor validará se o item ainda existe.
-                        Functions.CollectCollectible:InvokeServer(collectibleID)
-                        -- Remove da lista local após a tentativa de coleta para evitar re-tentativas desnecessárias
+                        CollectCollectibleRemote:InvokeServer(collectibleID)
                         table.remove(collectibleIdsToCollect, i)
                     end
                 end)
@@ -133,33 +123,29 @@ TabFarming:CreateToggle({
 })
 
 --================= EGGS TAB =================--
-TabEggs:CreateDropdown({
-    Name = "Select Egg",
-    Options = AllEggs, -- Lista atualizada da Dex
-    CurrentOption = {"Common Egg"},
-    MultipleOptions = false,
-    Flag = "DropdownEgg",
+TabEggs:Dropdown({
+    Text = "Select Egg",
+    Options = AllEggs,
+    Selected = getgenv().SelectedEgg, -- SlenderWind usa 'Selected' para a opção inicial
     Callback = function(Option)
-        getgenv().SelectedEgg = Option[1] -- Rayfield retorna uma tabela, pegamos o primeiro item
+        getgenv().SelectedEgg = Option
     end
 })
 
-TabEggs:CreateSlider({
-    Name = "Amount to Open",
-    Range = {1, 100},
-    Increment = 1,
+TabEggs:Slider({
+    Text = "Amount to Open",
+    Min = 1,
+    Max = 100,
+    Default = getgenv().EggAmount,
     Suffix = " Eggs",
-    CurrentValue = 100,
-    Flag = "SliderEggAmount",
     Callback = function(Value)
         getgenv().EggAmount = Value
     end
 })
 
-TabEggs:CreateToggle({
-    Name = "Auto Hatch",
-    CurrentValue = false,
-    Flag = "ToggleAutoHatch",
+TabEggs:Toggle({
+    Text = "Auto Hatch",
+    State = getgenv().AutoEgg,
     Callback = function(Value)
         getgenv().AutoEgg = Value
         task.spawn(function()
@@ -167,12 +153,7 @@ TabEggs:CreateToggle({
                 pcall(function()
                     local eggFolder = Workspace:FindFirstChild("_") and Workspace._:FindFirstChild("Eggs")
                     if eggFolder and eggFolder:FindFirstChild(getgenv().SelectedEgg) then
-                        local args = {
-                            eggFolder[getgenv().SelectedEgg], -- Instância do ovo
-                            getgenv().EggAmount -- Quantidade de ovos
-                        }
-                        -- Usar table.unpack para compatibilidade moderna com múltiplos argumentos
-                        Functions.BuyEgg:InvokeServer(table.unpack(args))
+                        BuyEggRemote:InvokeServer(eggFolder[getgenv().SelectedEgg], getgenv().EggAmount)
                     end
                 end)
                 task.wait(0.05) -- Pequeno delay para segurança e evitar rate-limits
@@ -182,10 +163,9 @@ TabEggs:CreateToggle({
 })
 
 --================= SHOP & UPGRADES TAB =================--
-TabShop:CreateToggle({
-    Name = "Auto Buy Merchant (All Items)",
-    CurrentValue = false,
-    Flag = "ToggleMerchant",
+TabShop:Toggle({
+    Text = "Auto Buy Merchant (All Items)",
+    State = getgenv().AutoMerchant,
     Callback = function(Value)
         getgenv().AutoMerchant = Value
         task.spawn(function()
@@ -193,7 +173,7 @@ TabShop:CreateToggle({
                 pcall(function()
                     -- Compra todos os 15 slots (assumindo que o merchant sempre tem 15 slots)
                     for i = 1, 15 do
-                        Functions.BuyMerchant:InvokeServer("Merchant", i)
+                        BuyMerchantRemote:InvokeServer("Merchant", i)
                     end
                 end)
                 task.wait(2) -- Delay de 2s para não dar spam excessivo e respeitar cooldowns do servidor
@@ -202,27 +182,24 @@ TabShop:CreateToggle({
     end
 })
 
-TabShop:CreateDropdown({
-    Name = "Select Upgrade",
-    Options = AllUpgrades, -- Lista atualizada da Dex
-    CurrentOption = {"Coins1"},
-    MultipleOptions = false,
-    Flag = "DropdownUpgrade",
+TabShop:Dropdown({
+    Text = "Select Upgrade",
+    Options = AllUpgrades,
+    Selected = getgenv().SelectedUpgrade,
     Callback = function(Option)
-        getgenv().SelectedUpgrade = Option[1]
+        getgenv().SelectedUpgrade = Option
     end
 })
 
-TabShop:CreateToggle({
-    Name = "Auto Buy Upgrade",
-    CurrentValue = false,
-    Flag = "ToggleUpgrade",
+TabShop:Toggle({
+    Text = "Auto Buy Upgrade",
+    State = getgenv().AutoUpgrade,
     Callback = function(Value)
         getgenv().AutoUpgrade = Value
         task.spawn(function()
             while getgenv().AutoUpgrade do
                 pcall(function()
-                    Functions.BuyUpgrade:InvokeServer(getgenv().SelectedUpgrade)
+                    BuyUpgradeRemote:InvokeServer(getgenv().SelectedUpgrade)
                 end)
                 task.wait(1) -- Delay para evitar spam excessivo
             end
@@ -231,23 +208,18 @@ TabShop:CreateToggle({
 })
 
 --================= CLANS TAB =================--
--- O remote para operações de clã é "ClanInvoke"
-local ClanRemote = Functions:WaitForChild("ClanInvoke")
-
-TabClans:CreateInput({
-    Name = "Clan Name to Create",
+TabClans:Input({
+    Text = "Clan Name to Create",
     Placeholder = "Enter clan name",
-    CurrentValue = getgenv().ClanNameToCreate,
-    Flag = "ClanNameInput",
+    Default = getgenv().ClanNameToCreate,
     Callback = function(Value)
         getgenv().ClanNameToCreate = Value
     end
 })
 
-TabClans:CreateToggle({
-    Name = "Auto Create Clan",
-    CurrentValue = false,
-    Flag = "ToggleAutoCreateClan",
+TabClans:Toggle({
+    Text = "Auto Create Clan",
+    State = getgenv().AutoCreateClan,
     Callback = function(Value)
         getgenv().AutoCreateClan = Value
         if Value then
@@ -275,15 +247,14 @@ TabClans:CreateToggle({
     end
 })
 
-TabClans:CreateToggle({
-    Name = "Auto Accept Clan Invites",
-    CurrentValue = false,
-    Flag = "ToggleAutoAcceptInvites",
+TabClans:Toggle({
+    Text = "Auto Accept Clan Invites",
+    State = getgenv().AutoAcceptInvites,
     Callback = function(Value)
         getgenv().AutoAcceptInvites = Value
         if Value then
             -- Conecta ao evento que notifica sobre convites de clã
-            Events.UpdateClans.OnClientEvent:Connect(function(eventType, data)
+            UpdateClansEvent.OnClientEvent:Connect(function(eventType, data)
                 if getgenv().AutoAcceptInvites and eventType == "InvitesUpdate" and data then
                     for _, clanName in pairs(data) do
                         pcall(function()
@@ -303,10 +274,9 @@ TabClans:CreateToggle({
     end
 })
 
-TabClans:CreateToggle({
-    Name = "Auto Leave/Delete Clan",
-    CurrentValue = false,
-    Flag = "ToggleAutoLeaveClan",
+TabClans:Toggle({
+    Text = "Auto Leave/Delete Clan",
+    State = getgenv().AutoLeaveClan,
     Callback = function(Value)
         getgenv().AutoLeaveClan = Value
         if Value then
@@ -331,41 +301,43 @@ TabClans:CreateToggle({
     end
 })
 
-
 --================= PLAYER TAB =================--
-TabPlayer:CreateSlider({
-    Name = "WalkSpeed",
-    Range = {16, 200}, -- Faixa razoável de WalkSpeed
-    Increment = 1,
+TabPlayer:Slider({
+    Text = "WalkSpeed",
+    Min = 16,
+    Max = 200,
+    Default = getgenv().WalkSpeed,
     Suffix = " WS",
-    CurrentValue = 16,
-    Flag = "SliderWS",
     Callback = function(Value)
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.WalkSpeed = Value
+        getgenv().WalkSpeed = Value -- Armazena o valor globalmente
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.WalkSpeed = Value
         end
     end
 })
 
-TabPlayer:CreateSlider({
-    Name = "JumpPower",
-    Range = {50, 300}, -- Faixa razoável de JumpPower
-    Increment = 1,
+TabPlayer:Slider({
+    Text = "JumpPower",
+    Min = 50,
+    Max = 300,
+    Default = getgenv().JumpPower,
     Suffix = " JP",
-    CurrentValue = 50,
-    Flag = "SliderJP",
     Callback = function(Value)
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            LocalPlayer.Character.Humanoid.JumpPower = Value
-            LocalPlayer.Character.Humanoid.UseJumpPower = true -- Garante que o JumpPower seja usado
+        getgenv().JumpPower = Value -- Armazena o valor globalmente
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.JumpPower = Value
+            hum.UseJumpPower = true -- Garante que o JumpPower seja usado
         end
     end
 })
 
-TabPlayer:CreateToggle({
-    Name = "Anti-AFK (Jump a cada 5 minutos)",
-    CurrentValue = false,
-    Flag = "ToggleAntiAFK",
+TabPlayer:Toggle({
+    Text = "Anti-AFK (Jump a cada 5 minutos)",
+    State = getgenv().AntiAFKMovement,
     Callback = function(Value)
         getgenv().AntiAFKMovement = Value
         if Value then
@@ -387,3 +359,12 @@ TabPlayer:CreateToggle({
         end
     end
 })
+
+-- Reaplica WalkSpeed e JumpPower quando o personagem é adicionado/respawna
+LocalPlayer.CharacterAdded:Connect(function(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    -- Reaplica os valores armazenados globalmente pelos sliders
+    humanoid.WalkSpeed = getgenv().WalkSpeed
+    humanoid.JumpPower = getgenv().JumpPower
+    humanoid.UseJumpPower = true
+end)
