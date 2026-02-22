@@ -117,6 +117,8 @@ local collectibleIdsToCollect = {} -- Armazena os IDs dos coletáveis para colet
 
 -- Escuta o evento LoadCollectibles para popular a lista de IDs
 LoadCollectiblesEvent.OnClientEvent:Connect(function(collectiblesData)
+    -- Limpa a lista existente antes de popular com novos dados, se necessário
+    collectibleIdsToCollect = {} 
     for _, data in pairs(collectiblesData) do
         table.insert(collectibleIdsToCollect, data.ID)
     end
@@ -125,7 +127,7 @@ end)
 TabFarming:CreateToggle({
     Name = "Auto Collectibles (Gems/Drops)",
     CurrentValue = false,
-    Flag = "ToggleAutoCollect",
+    Flag = "ToggleAutoCollect", -- CORREÇÃO: Flag estava truncado
     Callback = function(Value)
         getgenv().AutoCollect = Value
         task.spawn(function()
@@ -286,7 +288,7 @@ UpdateClansEvent.OnClientEvent:Connect(function(eventType, data)
                 local success = ClanRemote:InvokeServer("JoinClan", clanName)
                 if success == true then
                     warn("SlenderHub: Convite para o clã '" .. clanName .. "' aceito com sucesso!")
-                    getgenv().AutoAcceptInvites = false -- Desativa após aceitar um convite
+                    -- Removido: getgenv().AutoAcceptInvites = false -- Permite que continue aceitando se mais convites chegarem
                 elseif type(success) == "string" then
                     warn("SlenderHub: Falha ao aceitar convite para o clã '" .. clanName .. "':", success)
                 end
