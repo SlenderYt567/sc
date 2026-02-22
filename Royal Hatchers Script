@@ -6,7 +6,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService") -- Added for potential future use
 
 local LocalPlayer = Players.LocalPlayer
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -27,17 +26,17 @@ local UpgradesList = {
 }
 
 -- Variáveis de Controle Global (usando _G para compatibilidade)
-_G.AutoClick = false
-_G.AutoEgg = false
-_G.SelectedEgg = "Common Egg"
-_G.EggAmount = 100
-_G.AutoMerchant = false
-_G.AutoCollect = false
-_G.AutoUpgrade = false
-_G.SelectedUpgrade = "Coins1"
-_G.AntiAFKMovement = false
-_G.WalkSpeed = 16
-_G.JumpPower = 50
+getgenv().AutoClick = false
+getgenv().AutoEgg = false
+getgenv().SelectedEgg = "Common Egg"
+getgenv().EggAmount = 100
+getgenv().AutoMerchant = false
+getgenv().AutoCollect = false
+getgenv().AutoUpgrade = false
+getgenv().SelectedUpgrade = "Coins1"
+getgenv().AntiAFKMovement = false
+getgenv().WalkSpeed = 16 -- Valor inicial para WalkSpeed
+getgenv().JumpPower = 50 -- Valor inicial para JumpPower
 
 -- Anti-AFK padrão (desabilita o evento de ociosidade do jogador)
 for _, con in pairs(getconnections(LocalPlayer.Idled)) do
@@ -50,190 +49,265 @@ local function UpdatePlayerStats()
     if character then
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         if humanoid then
-            humanoid.WalkSpeed = _G.WalkSpeed
-            humanoid.JumpPower = _G.JumpPower
-            humanoid.UseJumpPower = true
+            humanoid.WalkSpeed = getgenv().WalkSpeed
+            humanoid.JumpPower = getgenv().JumpPower
+            humanoid.UseJumpPower = true -- Garante que JumpPower seja usado
         end
     end
 end
 
 -- Conecta a um evento para aplicar WalkSpeed/JumpPower quando o personagem for adicionado
 LocalPlayer.CharacterAdded:Connect(function(character)
-    character:WaitForChild("Humanoid").WalkSpeed = _G.WalkSpeed
-    character:WaitForChild("Humanoid").JumpPower = _G.JumpPower
+    -- Espera o Humanoid estar presente no novo personagem
+    character:WaitForChild("Humanoid").WalkSpeed = getgenv().WalkSpeed
+    character:WaitForChild("Humanoid").JumpPower = getgenv().JumpPower
     character:WaitForChild("Humanoid").UseJumpPower = true
 end)
 
 --========================================================--
---                  CARREGANDO SLENDERWIND UI             --
+--                  CARREGANDO RAYFIELD UI                --
 --========================================================--
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
-local Window = Library.Window({ Name = "SlenderHub | Royal Hatchers", KeySystem = false })
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+Name = "SlenderHub | Royal Hatchers",
+LoadingTitle = "SlenderHub Loading...",
+LoadingSubtitle = "by Slender",
+ConfigurationSaving = {
+Enabled = false, -- Desabilitado para garantir que as configurações sejam resetadas a cada injeção
+FolderName = nil,
+FileName = "SlenderHub"
+},
+Discord = {
+Enabled = false,
+Invite = "noinvitelink", -- Adicione um convite de Discord real se desejar
+RememberJoins = true
+},
+KeySystem = false
+})
 
 --================= TABS =================--
-local TabFarming = Window:NewTab("Farming")
-local TabEggs = Window:NewTab("Eggs")
-local TabShop = Window:NewTab("Shop & Upgrades")
-local TabPlayer = Window:NewTab("Player")
+local TabFarming = Window:CreateTab("Farming", 4483362458)
+local TabEggs = Window:CreateTab("Eggs", 4483362458)
+local TabShop = Window:CreateTab("Shop & Upgrades", 4483362458)
+local TabPlayer = Window:CreateTab("Player", 4483362458)
 
 --================= FARMING TAB =================--
-local FarmingSection = TabFarming:NewSection("Auto Farming")
-
-FarmingSection:NewToggle("Auto Click", false, function(Value)
-    _G.AutoClick = Value
-    if Value then
-        task.spawn(function()
-            while _G.AutoClick and LocalPlayer.Character do
-                pcall(function()
-                    Functions.Click:InvokeServer()
-                end)
-                task.wait(0.05) -- Pequeno delay para evitar spam excessivo no server
-            end
-        end)
-    end
+TabFarming:CreateToggle({
+Name = "Auto Click",
+CurrentValue = false,
+Flag = "ToggleAutoClick",
+Callback = function(Value)
+getgenv().AutoClick = Value
+if Value then
+task.spawn(function()
+while getgenv().AutoClick and LocalPlayer.Character do -- Garante que o personagem existe
+pcall(function()
+Functions.Click:InvokeServer()
 end)
-
-FarmingSection:NewToggle("Auto Collectibles (Gems/Drops)", false, function(Value)
-    _G.AutoCollect = Value
-    if Value then
-        task.spawn(function()
-            -- Tenta encontrar o RemoteEvent para coleta (assumindo nomes comuns)
-            local collectRemote = ReplicatedStorage:FindFirstChild("Collect") or ReplicatedStorage:FindFirstChild("Pickup")
-            
-            if not collectRemote then
-                warn("SlenderHub: Collect remote not found. Auto Collectibles may not work.")
-            end
-
-            while _G.AutoCollect and LocalPlayer.Character do
-                pcall(function()
-                    local colFolder = Workspace:FindFirstChild("_") and Workspace._:FindFirstChild("CollectiblesClient")
-                    local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-
-                    if colFolder and hrp then
-                        for _, item in pairs(colFolder:GetChildren()) do
-                            if item:IsA("BasePart") and item.Parent == colFolder then -- Ensure it's a valid collectible
-                                -- Attempt to fire a remote for collection
-                                if collectRemote and collectRemote:IsA("RemoteEvent") then
-                                    -- Assumes the remote takes the item instance or its name/id
-                                    collectRemote:FireServer(item) 
-                                elseif collectRemote and collectRemote:IsA("RemoteFunction") then
-                                    collectRemote:InvokeServer(item)
-                                end
-                                -- Optionally, you can still pivot for instant visual collection effect
-                                item:PivotTo(hrp.CFrame) 
-                            end
-                        end
-                    end
-                end)
-                task.wait(0.5) -- Delay entre as varreduras de coletáveis
-            end
-        end)
-    end
+task.wait(0.05) -- Delay de 0.05s para evitar spam excessivo no server e detecção
+end
 end)
+end
+end
+})
+
+TabFarming:CreateToggle({
+Name = "Auto Collectibles (Gems/Drops)",
+CurrentValue = false,
+Flag = "ToggleAutoCollect",
+Callback = function(Value)
+getgenv().AutoCollect = Value
+if Value then
+task.spawn(function()
+-- Tenta encontrar o RemoteEvent para coleta (nomes comuns)
+local collectRemote = ReplicatedStorage:FindFirstChild("Collect") or ReplicatedStorage:FindFirstChild("Pickup")
+if not collectRemote then
+warn("SlenderHub: Remote de coleta não encontrado. O Auto Collectibles pode não funcionar.")
+end
+
+while getgenv().AutoCollect and LocalPlayer.Character do
+pcall(function()
+local colFolder = Workspace:FindFirstChild("_") and Workspace._:FindFirstChild("CollectiblesClient")
+local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+if colFolder and hrp then
+for _, item in pairs(colFolder:GetChildren()) do
+if item:IsA("BasePart") and item.Parent == colFolder then -- Verifica se é um item válido no container
+-- Para realmente coletar, precisamos interagir com o server.
+-- A suposição é que existe um RemoteEvent/Function para coleta.
+if collectRemote then
+if collectRemote:IsA("RemoteEvent") then
+collectRemote:FireServer(item) -- Assumindo que o remoto recebe a instância do item
+elseif collectRemote:IsA("RemoteFunction") then
+collectRemote:InvokeServer(item) -- Assumindo que o remoto recebe a instância do item
+end
+end
+-- O PivotTo ainda pode ser usado para um efeito visual de coleta instantânea no cliente
+item:PivotTo(hrp.CFrame)
+end
+end
+end
+end)
+task.wait(0.5) -- Delay entre as varreduras de coletáveis
+end
+end)
+end
+end
+})
 
 --================= EGGS TAB =================--
-local EggsSection = TabEggs:NewSection("Egg Hatching")
+TabEggs:CreateDropdown({
+Name = "Select Egg",
+Options = EggsList,
+CurrentOption = {"Common Egg"},
+MultipleOptions = false,
+Flag = "DropdownEgg",
+Callback = function(Option)
+-- O Rayfield retorna uma tabela, então pegamos o primeiro item selecionado
+getgenv().SelectedEgg = Option[1]
+end
+})
 
-EggsSection:NewDropdown("Select Egg", EggsList, _G.SelectedEgg, function(Option)
-    _G.SelectedEgg = Option
-end)
+TabEggs:CreateSlider({
+Name = "Amount to Open",
+Range = {1, 100},
+Increment = 1,
+Suffix = " Eggs",
+CurrentValue = 100,
+Flag = "SliderEggAmount",
+Callback = function(Value)
+getgenv().EggAmount = Value
+end
+})
 
-EggsSection:NewSlider("Amount to Open", 1, 100, _G.EggAmount, function(Value)
-    _G.EggAmount = Value
+TabEggs:CreateToggle({
+Name = "Auto Hatch",
+CurrentValue = false,
+Flag = "ToggleAutoHatch",
+Callback = function(Value)
+getgenv().AutoEgg = Value
+if Value then
+task.spawn(function()
+while getgenv().AutoEgg and LocalPlayer.Character do -- Garante que o personagem existe
+pcall(function()
+local eggFolder = Workspace:FindFirstChild("_") and Workspace._:FindFirstChild("Eggs")
+if eggFolder and eggFolder:FindFirstChild(getgenv().SelectedEgg) then
+local eggInstance = eggFolder[getgenv().SelectedEgg]
+Functions.BuyEgg:InvokeServer(eggInstance, getgenv().EggAmount)
+end
 end)
-
-EggsSection:NewToggle("Auto Hatch", false, function(Value)
-    _G.AutoEgg = Value
-    if Value then
-        task.spawn(function()
-            while _G.AutoEgg and LocalPlayer.Character do
-                pcall(function()
-                    local eggFolder = Workspace:FindFirstChild("_") and Workspace._:FindFirstChild("Eggs")
-                    if eggFolder and eggFolder:FindFirstChild(_G.SelectedEgg) then
-                        local eggInstance = eggFolder[_G.SelectedEgg]
-                        Functions.BuyEgg:InvokeServer(eggInstance, _G.EggAmount)
-                    end
-                end)
-                task.wait(0.05) -- Pequeno delay para evitar spam excessivo no server
-            end
-        end)
-    end
+task.wait(0.05) -- Delay de 0.05s para evitar spam excessivo no server
+end
 end)
+end
+end
+})
 
 --================= SHOP & UPGRADES TAB =================--
-local ShopSection = TabShop:NewSection("Merchant")
-
-ShopSection:NewToggle("Auto Buy Merchant (All Items)", false, function(Value)
-    _G.AutoMerchant = Value
-    if Value then
-        task.spawn(function()
-            while _G.AutoMerchant do
-                pcall(function()
-                    -- Compra todos os 15 slots baseados no MerchantData
-                    for i = 1, 15 do
-                        Functions.BuyMerchant:InvokeServer("Merchant", i)
-                    end
-                end)
-                task.wait(2) -- Delay de 2s para não dar spam excessivo no server
-            end
-        end)
-    end
+TabShop:CreateToggle({
+Name = "Auto Buy Merchant (All Items)",
+CurrentValue = false,
+Flag = "ToggleMerchant",
+Callback = function(Value)
+getgenv().AutoMerchant = Value
+if Value then
+task.spawn(function()
+while getgenv().AutoMerchant do
+pcall(function()
+-- Compra todos os 15 slots baseados no MerchantData
+for i = 1, 15 do
+Functions.BuyMerchant:InvokeServer("Merchant", i)
+end
 end)
-
-local UpgradeSection = TabShop:NewSection("Upgrades")
-
-UpgradeSection:NewDropdown("Select Upgrade", UpgradesList, _G.SelectedUpgrade, function(Option)
-    _G.SelectedUpgrade = Option
+task.wait(2) -- Delay de 2s para não dar spam excessivo no server
+end
 end)
+end
+end
+})
 
-UpgradeSection:NewToggle("Auto Buy Upgrade", false, function(Value)
-    _G.AutoUpgrade = Value
-    if Value then
-        task.spawn(function()
-            while _G.AutoUpgrade do
-                pcall(function()
-                    Functions.BuyUpgrade:InvokeServer(_G.SelectedUpgrade)
-                end)
-                task.wait(1) -- Delay de 1s para comprar upgrades
-            end
-        end)
-    end
+TabShop:CreateDropdown({
+Name = "Select Upgrade",
+Options = UpgradesList,
+CurrentOption = {"Coins1"},
+MultipleOptions = false,
+Flag = "DropdownUpgrade",
+Callback = function(Option)
+getgenv().SelectedUpgrade = Option[1]
+end
+})
+
+TabShop:CreateToggle({
+Name = "Auto Buy Upgrade",
+CurrentValue = false,
+Flag = "ToggleUpgrade",
+Callback = function(Value)
+getgenv().AutoUpgrade = Value
+if Value then
+task.spawn(function()
+while getgenv().AutoUpgrade do
+pcall(function()
+Functions.BuyUpgrade:InvokeServer(getgenv().SelectedUpgrade)
 end)
+task.wait(1) -- Delay de 1s entre as tentativas de compra
+end
+end)
+end
+end
+})
 
 --================= PLAYER TAB =================--
-local PlayerStatsSection = TabPlayer:NewSection("Player Stats")
+TabPlayer:CreateSlider({
+Name = "WalkSpeed",
+Range = {16, 200},
+Increment = 1,
+Suffix = " WS",
+CurrentValue = getgenv().WalkSpeed, -- Define o valor inicial do slider
+Flag = "SliderWS",
+Callback = function(Value)
+getgenv().WalkSpeed = Value
+UpdatePlayerStats() -- Chama a função para aplicar ao personagem
+end
+})
 
-PlayerStatsSection:NewSlider("WalkSpeed", 16, 200, _G.WalkSpeed, function(Value)
-    _G.WalkSpeed = Value
-    UpdatePlayerStats()
+TabPlayer:CreateSlider({
+Name = "JumpPower",
+Range = {50, 300},
+Increment = 1,
+Suffix = " JP",
+CurrentValue = getgenv().JumpPower, -- Define o valor inicial do slider
+Flag = "SliderJP",
+Callback = function(Value)
+getgenv().JumpPower = Value
+UpdatePlayerStats() -- Chama a função para aplicar ao personagem
+end
+})
+
+TabPlayer:CreateToggle({
+Name = "Anti-AFK (Jump a cada 5 minutos)",
+CurrentValue = false,
+Flag = "ToggleAntiAFK",
+Callback = function(Value)
+getgenv().AntiAFKMovement = Value
+if Value then
+task.spawn(function()
+while getgenv().AntiAFKMovement do
+task.wait(300) -- Espera 5 minutos (300 segundos)
+if getgenv().AntiAFKMovement and LocalPlayer.Character then -- Verifica novamente e se o personagem existe
+local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+if hum and hum.Health > 0 then
+-- Simula um pequeno pulo para manter a atividade
+hum.Jump = true
+task.wait(0.1) -- Mantém o pulo por um breve momento
+hum.Jump = false
+end
+end
+end
 end)
+end
+end
+})
 
-PlayerStatsSection:NewSlider("JumpPower", 50, 300, _G.JumpPower, function(Value)
-    _G.JumpPower = Value
-    UpdatePlayerStats()
-end)
-
-local AntiAFKSection = TabPlayer:NewSection("Anti-AFK")
-
-AntiAFKSection:NewToggle("Anti-AFK (Jump a cada 5 minutos)", false, function(Value)
-    _G.AntiAFKMovement = Value
-    if Value then
-        task.spawn(function()
-            while _G.AntiAFKMovement do
-                task.wait(300) -- Espera 5 minutos (300 segundos)
-                if _G.AntiAFKMovement and LocalPlayer.Character then -- Verifica novamente caso o toggle tenha sido desativado durante a espera
-                    local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    if hum and hum.Health > 0 then
-                        -- Simula um pequeno pulo para manter a atividade
-                        hum.Jump = true
-                        task.wait(0.1) -- Mantém o pulo por um breve momento
-                        hum.Jump = false
-                    end
-                end
-            end
-        end)
-    end
-end)
-
--- Initial stat update
+-- Aplica os stats iniciais ao carregar o script
 UpdatePlayerStats()
