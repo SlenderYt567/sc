@@ -1,424 +1,240 @@
---[[
-    SlenderHub Remote Spy V3.1 - With VeLink Key System
-    Architect: SlenderHub Senior Developer
-    UI Library: SlenderWind V5
-    Features: Hybrid Hook System + VeLink Authentication
-]]
+--========================================================
+-- [Roblox Studio Expert] - Remote & Dex Code Dumper
+--========================================================
+-- Este script foi projetado para facilitar a extração de
+-- Remotes (RemoteEvents/RemoteFunctions) e código-fonte
+-- de Scripts, LocalScripts e ModuleScripts.
+-- Funciona tanto em ambiente exploit quanto no Studio.
+--========================================================
 
--- Singleton Check
-if getgenv().SlenderHubSpyLoaded then return end
-getgenv().SlenderHubSpyLoaded = true
-
--- Services
-local HttpService = game:GetService("HttpService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
 
--- VeLink Configuration
-local VELINK_CONFIG = {
-    CHECK_URL = "https://velink.to/api/public/check/key",
-    KEY_URL = "https://velink.to/u/678807"
-}
-
--- SlenderWind UI Library
-local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
-
--- Key Validation Function
-local function ValidateKey(key)
-    local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
-    if not requestFunc then return false end
-    
-    local url = VELINK_CONFIG.CHECK_URL .. "?key=" .. key
-    local response = requestFunc({Url = url, Method = "GET"})
-    
-    if response and response.StatusCode == 200 then
-        local success, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
-        if success and data and data.expired == false then
-            return true
-        end
+-- Define o local onde a GUI vai ficar (CoreGui se suportado, senão PlayerGui)
+local guiParent
+if pcall(function() return CoreGui.Name end) then
+    guiParent = CoreGui
+else
+    local player = Players.LocalPlayer
+    if player then
+        guiParent = player:WaitForChild("PlayerGui")
+    else
+        guiParent = StarterGui
     end
-    return false
 end
 
--- Create Key System Window
-local KeyWindow = SlenderWind.Window({
-    Name = "SlenderHub Remote Spy",
-    KeySystem = false,
-    Theme = { Accent = Color3.fromRGB(255, 85, 85) }
-})
+-- Limpa a GUI antiga se existir
+if guiParent:FindFirstChild("AgenteRobloxDumper") then
+    guiParent.AgenteRobloxDumper:Destroy()
+end
 
-local KeyTab = KeyWindow:Tab("Authentication")
-
-KeyTab:Paragraph("Access Required", "Enter a valid VeLink key to use Remote Spy.\nKeys are valid for 24 hours.")
-
-local keyInput = ""
-KeyTab:Input("Enter Key", "VELINK-XXXXX-XXXXX", "KeyInput", "Paste your key here", function(text)
-    keyInput = text:gsub("%s+", "")
-end)
-
-KeyTab:Button("🔓 Verify Key", "Validate and unlock Remote Spy", function()
-    if #keyInput < 5 then
-        KeyWindow:Notify("Error", "Please enter a valid key", 2)
-        return
-    end
-    
-    KeyWindow:Notify("Checking...", "Validating key with VeLink API...", 2)
-    
-    local isValid = ValidateKey(keyInput)
-    
-    if isValid then
-        KeyWindow:Notify("Success!", "Key validated! Loading Remote Spy...", 2)
-        task.wait(1)
-        
-        -- Destroy key window
-        pcall(function()
-            for _, ui in pairs(game.CoreGui:GetChildren()) do
-                if ui.Name:find("Slender") then ui:Destroy() end
-            end
-        end)
-        
-        task.wait(0.3)
-        
-        -- Load Main Remote Spy
-        LoadRemoteSpy()
-    else
-        KeyWindow:Notify("Invalid Key", "Key expired or does not exist", 3)
-    end
-end)
-
-KeyTab:Section("Get Key")
-
-KeyTab:Button("🔑 Get Free Key (24h)", "Copy link to get key", function()
+--========================================================
+-- Função para copiar para o teclado
+--========================================================
+local function copyToClipboard(text)
     if setclipboard then
-        setclipboard(VELINK_CONFIG.KEY_URL)
-        KeyWindow:Notify("Copied!", "Link copied to clipboard", 2)
+        setclipboard(text)
     else
-        KeyWindow:Notify("Link", VELINK_CONFIG.KEY_URL, 5)
+        -- Fallback: Imprime no console (F9) ou Output
+        warn("=[ COPIADO DEVIDO A FALTA DE SETCLIPBOARD ]=")
+        print(text)
+        warn("==============================================")
     end
+end
+
+--========================================================
+-- Função para obter o caminho absoluto de um objeto
+--========================================================
+local function getObjectPath(obj)
+    local path = obj.Name
+    if not string.match(path, "^[%w_]+$") then
+        path = '["' .. path .. '"]'
+    end
+
+    local currentObj = obj.Parent
+    while currentObj and currentObj ~= game do
+        local parentName = currentObj.Name
+        if not string.match(parentName, "^[%w_]+$") then
+            parentName = '["' .. parentName .. '"]'
+        end
+        path = parentName .. "." .. path
+        currentObj = currentObj.Parent
+    end
+    return "game." .. path
+end
+
+--========================================================
+-- Interface Gráfica (GUI)
+--========================================================
+local mainGui = Instance.new("ScreenGui")
+mainGui.Name = "AgenteRobloxDumper"
+mainGui.ResetOnSpawn = false
+mainGui.Parent = guiParent
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 400, 0, 500)
+mainFrame.Position = UDim2.new(0.5, -200, 0.5, -250)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = mainGui
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, 0, 0, 40)
+titleLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+titleLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
+titleLabel.Text = " Agente Roblox - Remote & Script Dumper"
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 16
+titleLabel.BorderSizePixel = 0
+titleLabel.Parent = mainFrame
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Adiciona botão de fechar
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 14
+closeBtn.Parent = titleLabel
+
+closeBtn.MouseButton1Click:Connect(function()
+    mainGui:Destroy()
 end)
 
--- ==========================================
--- MAIN REMOTE SPY FUNCTION
--- ==========================================
+local scrollingFrame = Instance.new("ScrollingFrame")
+scrollingFrame.Size = UDim2.new(1, -20, 1, -60)
+scrollingFrame.Position = UDim2.new(0, 10, 0, 50)
+scrollingFrame.BackgroundTransparency = 1
+scrollingFrame.ScrollBarThickness = 6
+scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollingFrame.UIListLayout = Instance.new("UIListLayout")
+scrollingFrame.UIListLayout.Padding = UDim.new(0, 5)
+scrollingFrame.UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+scrollingFrame.Parent = mainFrame
 
-function LoadRemoteSpy()
-    -- Global State
-    getgenv().SlenderSpy = {
-        Enabled = false,
-        Logs = {},
-        MaxLogs = 100,
-        Blocked = { 
-            "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", 
-            "GetServerTime", "TouchHeartbeat", "MainRemote"
-        }
-    }
+local function createCard(name, details, copyData, color)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, -10, 0, 45)
+    card.BackgroundColor3 = color
+    card.BorderSizePixel = 0
+    card.Parent = scrollingFrame
 
-    -- Serialization Engine
-    local function GetPath(Obj)
-        if not Obj or Obj == game then return "game" end
-        local Hierarchy = {}
-        local Current = Obj
-        while Current.Parent ~= nil and Current.Parent ~= game do
-            table.insert(Hierarchy, 1, Current)
-            Current = Current.Parent
-        end
-        local Service = Current
-        table.insert(Hierarchy, 1, Service)
-        local PathStr = "game"
-        for i, v in ipairs(Hierarchy) do
-            if i == 1 then
-                PathStr = PathStr .. ':GetService("' .. v.ClassName .. '")'
-            else
-                if v.Name:match("^[%a_][%w_]*$") then
-                    PathStr = PathStr .. "." .. v.Name
-                else
-                    PathStr = PathStr .. '["' .. v.Name .. '"]'
-                end
-            end
-        end
-        return PathStr
-    end
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, -80, 0, 25)
+    nameLabel.Position = UDim2.new(0, 5, 0, 2)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = name
+    nameLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+    nameLabel.Font = Enum.Font.GothamSemibold
+    nameLabel.TextSize = 14
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    nameLabel.Parent = card
 
-    local function SerializeType(v)
-        local T = typeof(v)
-        if T == "string" then
-            return '"' .. v:gsub('"', '\\"'):gsub('\n', '\\n'):gsub('\r', '\\r') .. '"'
-        elseif T == "number" then
-            if v == math.huge then return "math.huge" end
-            if v == -math.huge then return "-math.huge" end
-            return tostring(v)
-        elseif T == "boolean" then
-            return tostring(v)
-        elseif T == "Instance" then
-            return GetPath(v)
-        elseif T == "Vector3" then
-            return string.format("Vector3.new(%g, %g, %g)", v.X, v.Y, v.Z)
-        elseif T == "CFrame" then
-            return string.format("CFrame.new(%g, %g, %g)", v.Position.X, v.Position.Y, v.Position.Z)
-        elseif T == "Color3" then
-            return string.format("Color3.fromRGB(%d, %d, %d)", v.R*255, v.G*255, v.B*255)
-        elseif T == "nil" then
-            return "nil"
-        else
-            return '"' .. tostring(v) .. '"'
-        end
-    end
+    local detailsLabel = Instance.new("TextLabel")
+    detailsLabel.Size = UDim2.new(1, -80, 0, 15)
+    detailsLabel.Position = UDim2.new(0, 5, 0, 25)
+    detailsLabel.BackgroundTransparency = 1
+    detailsLabel.Text = details
+    detailsLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+    detailsLabel.Font = Enum.Font.Gotham
+    detailsLabel.TextSize = 11
+    detailsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    detailsLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    detailsLabel.Parent = card
 
-    local function SerializeTable(tbl, indent, seen)
-        seen = seen or {}
-        if seen[tbl] then return "--[[Cyclic Reference]]" end
-        seen[tbl] = true
-        indent = indent or 0
-        local result = "{\n"
-        local padding = string.rep("    ", indent + 1)
-        for k, v in pairs(tbl) do
-            local key
-            if type(k) == "string" and k:match("^[%a_][%w_]*$") then
-                key = k
-            else
-                key = "[" .. SerializeType(k) .. "]"
-            end
-            local value
-            if type(v) == "table" then
-                value = SerializeTable(v, indent + 1, seen)
-            else
-                value = SerializeType(v)
-            end
-            result = result .. padding .. key .. " = " .. value .. ",\n"
-        end
-        result = result .. string.rep("    ", indent) .. "}"
-        return result
-    end
+    local copyBtn = Instance.new("TextButton")
+    copyBtn.Size = UDim2.new(0, 70, 0, 35)
+    copyBtn.Position = UDim2.new(1, -75, 0, 5)
+    copyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    copyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    copyBtn.Text = "Copiar"
+    copyBtn.Font = Enum.Font.GothamBold
+    copyBtn.TextSize = 12
+    copyBtn.Parent = card
 
-    local function GenerateScript(Log)
-        if not Log then return "-- Erro: Log inválido" end
-        local Path = GetPath(Log.Instance)
-        local ArgsStr = SerializeTable(Log.Args)
-        local SourceInfo = Log.Source and ("-- Calling Script: " .. Log.Source) or "-- Calling Script: Unknown"
-        local Script = "-- SlenderHub V3.1 Generated Code\n"
-        Script = Script .. "-- Remote: " .. Log.Name .. "\n"
-        Script = Script .. SourceInfo .. "\n"
-        Script = Script .. "-- Executions: " .. Log.Count .. "\n\n"
-        Script = Script .. "local args = " .. ArgsStr .. "\n\n"
-        if Log.Method == "FireServer" then
-            Script = Script .. Path .. ":FireServer(unpack(args))"
-        else
-            Script = Script .. "local result = " .. Path .. ":InvokeServer(unpack(args))\nprint(result)"
-        end
-        return Script
-    end
-
-    local function DeepCompare(t1, t2, depth)
-        depth = depth or 0
-        if depth > 10 then return false end
-        if type(t1) ~= type(t2) then return false end
-        if type(t1) ~= "table" then return t1 == t2 end
-        for k, v in pairs(t1) do if not DeepCompare(v, t2[k], depth + 1) then return false end end
-        for k, v in pairs(t2) do if not DeepCompare(v, t1[k], depth + 1) then return false end end
-        return true
-    end
-
-    -- UI Construction
-    local Window = SlenderWind.Window({
-        Name = "SlenderHub Remote Spy V3.1",
-        KeySystem = false,
-        Theme = { Accent = Color3.fromRGB(255, 85, 85) }
-    })
-
-    local SelectedLogIndex = nil
-    local CurrentScriptBuffer = ""
-    local CodePreview = nil
-    local LogList = nil
-
-    local TabSpy = Window:Tab("Remote Spy")
-
-    TabSpy:Section("Control Panel")
-
-    TabSpy:Toggle("Enable Spy (Hybrid Hook)", false, "SpyEnabled", "Activates remote monitoring", function(Value)
-        getgenv().SlenderSpy.Enabled = Value
-        Window:Notify(Value and "Spy Active" or "Spy Disabled", Value and "Monitoring remotes..." or "Stopped monitoring", 2)
+    copyBtn.MouseButton1Click:Connect(function()
+        copyToClipboard(copyData)
+        copyBtn.Text = "Copiado!"
+        copyBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+        task.wait(1.5)
+        copyBtn.Text = "Copiar"
+        copyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     end)
-
-    TabSpy:Button("🗑️ Clear All Logs", "Clears all captured remotes", function()
-        getgenv().SlenderSpy.Logs = {}
-        SelectedLogIndex = nil
-        CurrentScriptBuffer = ""
-        if CodePreview then CodePreview:Set("") end
-        Window:Notify("Cleared", "All logs removed", 1)
-    end)
-
-    TabSpy:Button("🚫 Reset Blacklist", "Resets blocked remotes", function()
-        getgenv().SlenderSpy.Blocked = { 
-            "CharacterSoundEvent", "UpdateMouse", "Move", "UpdateCharacter", 
-            "GetServerTime", "TouchHeartbeat", "MainRemote"
-        }
-        Window:Notify("Reset", "Blacklist cleared", 1)
-    end)
-
-    TabSpy:Section("Remote Viewer")
-
-    LogList = TabSpy:Dropdown("Select Remote", {"None"}, "None", "RemoteList", "Choose captured remote", function(val)
-        if val == "None" then SelectedLogIndex = nil return end
-        local ID = tonumber(val:match("^%[(%d+)%]"))
-        if ID then SelectedLogIndex = ID end
-    end)
-
-    TabSpy:Button("🔄 Refresh List", "Updates remote list", function()
-        local Options = {}
-        local Logs = getgenv().SlenderSpy.Logs
-        local Start = math.max(1, #Logs - 25)
-        for i = #Logs, Start, -1 do
-            local log = Logs[i]
-            local MethodShort = (log.Method == "FireServer") and "Fire" or "Invoke"
-            local Label = string.format("[%d] %s (%s) x%d", i, log.Name, MethodShort, log.Count)
-            table.insert(Options, Label)
-        end
-        if #Options == 0 then Options = {"None"} end
-        LogList:Refresh(Options, "None")
-        Window:Notify("Updated", "List refreshed", 1)
-    end)
-
-    TabSpy:Section("Advanced Tools")
-
-    TabSpy:Button("⛔ Block Selected", "Adds remote to blacklist", function()
-        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-            table.insert(getgenv().SlenderSpy.Blocked, Log.Name)
-            Window:Notify("Blocked", Log.Name .. " added to blacklist", 2)
-        else
-            Window:Notify("Error", "Select a remote first!", 2)
-        end
-    end)
-
-    TabSpy:Button("⚡ Instant Replay", "Re-executes selected remote", function()
-        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-            if Log.Instance then
-                pcall(function()
-                    if Log.Method == "FireServer" then
-                        Log.Instance:FireServer(unpack(Log.Args))
-                    elseif Log.Method == "InvokeServer" then
-                        task.spawn(function() Log.Instance:InvokeServer(unpack(Log.Args)) end)
-                    end
-                end)
-                Window:Notify("Replayed", "Remote executed again", 1)
-            end
-        else
-            Window:Notify("Error", "Select a remote first!", 2)
-        end
-    end)
-
-    TabSpy:Section("Code Generation")
-
-    TabSpy:Button("⬇️ GENERATE & PREVIEW ⬇️", "Creates Lua code from remote", function()
-        if SelectedLogIndex and getgenv().SlenderSpy.Logs[SelectedLogIndex] then
-            local Log = getgenv().SlenderSpy.Logs[SelectedLogIndex]
-            local Code = GenerateScript(Log)
-            CurrentScriptBuffer = Code
-            if CodePreview then CodePreview:Set(Code) end
-            Window:Notify("Generated", "Code created successfully!", 1)
-        else
-            Window:Notify("Error", "Select a remote first!", 2)
-        end
-    end)
-
-    CodePreview = TabSpy:Input("Script Preview", "Generated code appears here...", "CodeBuffer", "Edit code before execution", function(Text)
-        CurrentScriptBuffer = Text
-    end)
-
-    TabSpy:Button("📋 Copy to Clipboard", "Copies code to clipboard", function()
-        if CurrentScriptBuffer ~= "" then
-            if setclipboard then
-                setclipboard(CurrentScriptBuffer)
-                Window:Notify("Copied", "Code copied to clipboard!", 1)
-            else
-                Window:Notify("Error", "Clipboard not supported", 2)
-            end
-        else
-            Window:Notify("Error", "No code to copy!", 2)
-        end
-    end)
-
-    TabSpy:Button("▶ Execute Generated Code", "Runs the generated script", function()
-        if CurrentScriptBuffer ~= "" then
-            local success, result = pcall(function()
-                local func, syntaxErr = loadstring(CurrentScriptBuffer)
-                if not func then error(syntaxErr) end
-                func()
-            end)
-            if success then
-                Window:Notify("Success", "Script executed successfully", 1)
-            else
-                Window:Notify("Error", "Execution failed: " .. tostring(result), 3)
-            end
-        else
-            Window:Notify("Error", "No code to execute!", 2)
-        end
-    end)
-
-    -- Hook System
-    local function ProcessLog(Instance, Method, Args)
-        if not getgenv().SlenderSpy.Enabled then return end
-        local RemoteName = Instance.Name
-        for _, v in pairs(getgenv().SlenderSpy.Blocked) do
-            if RemoteName == v then return end
-        end
-        local SrcScript = getcallingscript and getcallingscript()
-        local SrcPath = "Unknown"
-        if SrcScript then SrcPath = SrcScript:GetFullName() end
-        local Logs = getgenv().SlenderSpy.Logs
-        local LastLog = Logs[#Logs]
-        if LastLog and LastLog.Instance == Instance and DeepCompare(LastLog.Args, Args) then
-            LastLog.Count = LastLog.Count + 1
-            LastLog.Time = os.date("%X")
-        else
-            table.insert(Logs, {
-                Name = RemoteName,
-                Instance = Instance,
-                Method = Method,
-                Args = Args,
-                Source = SrcPath,
-                Time = os.date("%X"),
-                Count = 1
-            })
-            if #Logs > getgenv().SlenderSpy.MaxLogs then
-                table.remove(Logs, 1)
-            end
-        end
-    end
-
-    local mt = getrawmetatable(game)
-    local oldNamecall = mt.__namecall
-    setreadonly(mt, false)
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-        if (method == "FireServer" or method == "InvokeServer") then
-            ProcessLog(self, method, args)
-        end
-        return oldNamecall(self, ...)
-    end)
-    setreadonly(mt, true)
-
-    pcall(function()
-        getgenv().SlenderSpy_OldFireServer = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-            ProcessLog(self, "FireServer", {...})
-            return getgenv().SlenderSpy_OldFireServer(self, ...)
-        end))
-        getgenv().SlenderSpy_OldInvokeServer = hookfunction(Instance.new("RemoteFunction").InvokeServer, newcclosure(function(self, ...)
-            ProcessLog(self, "InvokeServer", {...})
-            return getgenv().SlenderSpy_OldInvokeServer(self, ...)
-        end))
-    end)
-
-    pcall(function()
-        local Unreliable = Instance.new("UnreliableRemoteEvent")
-        getgenv().SlenderSpy_OldUnreliableFire = hookfunction(Unreliable.FireServer, newcclosure(function(self, ...)
-            ProcessLog(self, "FireServer", {...})
-            return getgenv().SlenderSpy_OldUnreliableFire(self, ...)
-        end))
-    end)
-
-    Window:Notify("SlenderHub Spy V3.1", "Remote monitoring active!", 3)
+    
+    scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, #scrollingFrame:GetChildren() * 50)
 end
+
+--========================================================
+-- Coletando dados (Remotes)
+--========================================================
+local function loadRemotes()
+    for _, obj in pairs(game:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local path = getObjectPath(obj)
+            local isEvent = obj:IsA("RemoteEvent")
+            
+            local copyTemplate = string.format(
+                "-- [%s] Obtenção do Remote\nlocal %s = %s\n\n-- Como usar:\n%s",
+                obj.ClassName,
+                obj.Name,
+                path,
+                isEvent and string.format("%s:FireServer(args)", obj.Name) or string.format("local result = %s:InvokeServer(args)", obj.Name)
+            )
+            
+            createCard(
+                "[Remote] " .. obj.Name, 
+                "Caminho: " .. path, 
+                copyTemplate, 
+                isEvent and Color3.fromRGB(40, 40, 60) or Color3.fromRGB(60, 40, 60)
+            )
+        end
+    end
+end
+
+--========================================================
+-- Coletando dados (Scripts Dex)
+--========================================================
+local function loadScripts()
+    for _, obj in pairs(game:GetDescendants()) do
+        if obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+            pcall(function()
+                local sourceStr = ""
+                -- Exploits tem 'decompile', no Studio tem .Source
+                if typeof(decompile) == "function" then
+                    sourceStr = decompile(obj)
+                elseif obj.Source then
+                    sourceStr = obj.Source
+                end
+                
+                if sourceStr and string.len(sourceStr) > 0 then
+                    local path = getObjectPath(obj)
+                    local copyTemplate = string.format(
+                        "-- [DEX] Fonte do Script %s (%s)\n-- Caminho: %s\n\n%s",
+                        obj.Name, obj.ClassName, path, sourceStr
+                    )
+                    
+                    createCard(
+                        "[Script] " .. obj.Name,
+                        "Tipo: " .. obj.ClassName,
+                        copyTemplate,
+                        obj:IsA("ModuleScript") and Color3.fromRGB(40, 60, 40) or Color3.fromRGB(60, 60, 40)
+                    )
+                end
+            end)
+        end
+    end
+end
+
+--========================================================
+-- Inicialização
+--========================================================
+loadRemotes()
+loadScripts()
+
+print("[Agente Roblox] Script carregado com sucesso. A UI deve aparecer na tela.")
