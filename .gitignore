@@ -171,12 +171,28 @@ local function createCard(name, details, copyData, color)
 end
 
 --========================================================
+-- Função para varrer objetos de forma segura (ignora erros de permissão)
+--========================================================
+local function scanObjSecure(parent, action)
+    local success, children = pcall(function() return parent:GetChildren() end)
+    if success then
+        for _, child in ipairs(children) do
+            action(child)
+            scanObjSecure(child, action)
+        end
+    end
+end
+
+--========================================================
 -- Coletando dados (Remotes)
 --========================================================
 local function loadRemotes()
-    for _, obj in pairs(game:GetDescendants()) do
+    scanObjSecure(game, function(obj)
         if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-            local path = getObjectPath(obj)
+            -- Previne erro ao obter o caminho caso esteja numa pasta sem acesso
+            local path = obj.Name
+            pcall(function() path = getObjectPath(obj) end)
+            
             local isEvent = obj:IsA("RemoteEvent")
             
             local copyTemplate = string.format(
@@ -194,26 +210,30 @@ local function loadRemotes()
                 isEvent and Color3.fromRGB(40, 40, 60) or Color3.fromRGB(60, 40, 60)
             )
         end
-    end
+    end)
 end
 
 --========================================================
 -- Coletando dados (Scripts Dex)
 --========================================================
 local function loadScripts()
-    for _, obj in pairs(game:GetDescendants()) do
+    scanObjSecure(game, function(obj)
         if obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
             pcall(function()
                 local sourceStr = ""
                 -- Exploits tem 'decompile', no Studio tem .Source
                 if typeof(decompile) == "function" then
-                    sourceStr = decompile(obj)
-                elseif obj.Source then
-                    sourceStr = obj.Source
+                    pcall(function() sourceStr = decompile(obj) end)
+                end
+                
+                if not sourceStr or sourceStr == "" then
+                    pcall(function() sourceStr = obj.Source end)
                 end
                 
                 if sourceStr and string.len(sourceStr) > 0 then
-                    local path = getObjectPath(obj)
+                    local path = obj.Name
+                    pcall(function() path = getObjectPath(obj) end)
+                    
                     local copyTemplate = string.format(
                         "-- [DEX] Fonte do Script %s (%s)\n-- Caminho: %s\n\n%s",
                         obj.Name, obj.ClassName, path, sourceStr
@@ -228,7 +248,7 @@ local function loadScripts()
                 end
             end)
         end
-    end
+    end)
 end
 
 --========================================================
