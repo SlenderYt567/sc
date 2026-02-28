@@ -1,9 +1,12 @@
 --[[ 
     SlenderWind UI - Library Source
-    Version: V10.0 [Obsidian Edition]
+    Version: V11.0 [Premium Edition]
     Architect: SlenderHub Lead
     
-    New Features vs V9:
+    New Features vs V10:
+    + Mobile Responsivity (UISizeConstraint & AspectRatio)
+    + Memory Leak Fixes (Destroy Connections)
+    + Automated Scaling & Fixes
     + Multi-Selection Dropdowns
     + Tooltip System (Hover Info)
     + Advanced Notifications (Success/Warn/Error)
@@ -56,7 +59,9 @@ local function MakeDraggable(topbar, object)
             DragInput = input
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
+    local dragConn
+    dragConn = UserInputService.InputChanged:Connect(function(input)
+        if not object.Parent then dragConn:Disconnect() return end
         if input == DragInput and Dragging then Update(input) end
     end)
 end
@@ -145,6 +150,9 @@ function SlenderWind.Window(config)
     })
     Create("UICorner", {Parent = Main, CornerRadius = UDim.new(0, 10)})
     Create("UIStroke", {Parent = Main, Color = Colors.Stroke, Thickness = 1})
+    Create("UISizeConstraint", {Parent = Main, MaxSize = Vector2.new(800, 600), MinSize = Vector2.new(450, 300)})
+    -- Premium UI Aspect Ratio for Mobile scaling
+    Create("UIAspectRatioConstraint", {Parent = Main, AspectRatio = 1.55, AspectType = Enum.AspectType.ScaleWithParentSize, DominantAxis = Enum.DominantAxis.Width})
 
     --// CONFIGURATION SYSTEM //--
     function Self:Save()
