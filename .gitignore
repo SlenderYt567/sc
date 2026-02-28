@@ -1,120 +1,891 @@
---[[
-    =========================================================
-    [ 💀 ] GENERAL REMOTE SPY & INTERCEPTOR
-    [ 🔧 ] Architect: Agente Roblox Lua Expert
-    [ 🎯 ] Purpose: Logar, Copiar e Executar Remotes (Events/Functions)
-    =========================================================
-]]
+ReplicatedStorage 
+Egg data 
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-02-25 18:56:34
+-- Luau version 6, Types version 3
+-- Time taken: 0.017207 seconds
 
---// Serviços Nativos
-local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
-local RunService = game:GetService("RunService")
-local StarterGui = game:GetService("StarterGui")
+return {
+	["Common Egg"] = {
+		Image = "rbxassetid://115322652054054";
+		Cost = {50, "Stats", "leaderstats", "Coins"};
+		IslandRequired = nil;
+		LayoutOrder = 1;
+		ShowInIndex = true;
+		Chances = {
+			Doggy = {1, 50};
+			Bunny = {3, 15};
+			Kitty = {2, 35};
+			Bear = {4, 4.9};
+			["King Kitty"] = {5, 0.000002};
+		};
+	};
+	["Spotted Egg"] = {
+		Image = "rbxassetid://106484374434471";
+		Cost = {300, "Stats", "leaderstats", "Coins"};
+		IslandRequired = nil;
+		LayoutOrder = 2;
+		ShowInIndex = true;
+		Chances = {
+			Mouse = {1, 55};
+			Deer = {2, 30};
+			Fox = {3, 11};
+			Bee = {4, 4};
+		};
+	};
+	["Rocky Egg"] = {
+		Image = "rbxassetid://98201413111378";
+		Cost = {1000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = nil;
+		LayoutOrder = 3;
+		ShowInIndex = true;
+		Chances = {
+			["Rocky Doggy"] = {1, 30};
+			["Rocky Kitty"] = {2, 25};
+			["Rocky Fox"] = {3, 20};
+			["Rocky Dinosaur"] = {4, 15};
+			["Rocky Golem"] = {5, 7};
+			["Rocky Dragon"] = {6, 3};
+		};
+	};
+	["Mushroom Egg"] = {
+		Image = "rbxassetid://122714140241107";
+		Cost = {2000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = "Forest";
+		LayoutOrder = 4;
+		ShowInIndex = true;
+		Chances = {
+			["Mushroom Doggy"] = {1, 55};
+			["Mushroom Kitty"] = {2, 30};
+			["Mushroom Bunny"] = {3, 11};
+			["Mushroom Fox"] = {4, 3.69};
+			["Majestic Mushy"] = {5, 0.3};
+			["King Mushy"] = {6, 0.00002};
+		};
+	};
+	["Leaf Egg"] = {
+		Image = "rbxassetid://104110920305201";
+		Cost = {3000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = "AutumnForest";
+		LayoutOrder = 5;
+		ShowInIndex = true;
+		Chances = {
+			["Leaf Doggy"] = {1, 55};
+			["Leaf Kitty"] = {2, 30};
+			["Leaf Bunny"] = {3, 11};
+			Squirrel = {4, 3.69};
+			["Angelic Pumpkin"] = {5, 0.175};
+			["Elegant Leaf"] = {6, 0.00002};
+		};
+	};
+	["Arctic Egg"] = {
+		Image = "rbxassetid://87332144546728";
+		Cost = {5000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = "Frost";
+		LayoutOrder = 6;
+		ShowInIndex = true;
+		Chances = {
+			["Arctic Doggy"] = {1, 55};
+			["Arctic Golem"] = {2, 30};
+			["Arctic Bear"] = {3, 11};
+			["Arctic Dragon"] = {4, 3.69};
+			Mammoth = {5, 0.2};
+			Yeti = {6, 0.00002};
+		};
+	};
+	["Icy Egg"] = {
+		Image = "rbxassetid://107036386933664";
+		Cost = {8000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = "Frost";
+		LayoutOrder = 7;
+		ShowInIndex = true;
+		Chances = {
+			["Icy Bear"] = {1, 55};
+			["Icy Fox"] = {2, 30};
+			["Icy Deer"] = {3, 11};
+			["Icy Dinosaur"] = {4, 3.69};
+			["Icy Blast"] = {5, 0.05};
+			["Frost Overlord"] = {6, 0.005};
+			["Frost Fiend"] = {7, 0.00002857142857142857};
+		};
+	};
+	["Release Egg"] = {
+		Image = "rbxassetid://114604701284502";
+		Cost = {2000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = nil;
+		LayoutOrder = 8;
+		ShowInIndex = true;
+		Chances = {
+			["Release Doggy"] = {1, 50};
+			["Release Fox"] = {2, 40};
+			["Release Dragon"] = {3, 10};
+			["Release Serpent"] = {4, 0.1};
+			["Release Overlord"] = {5, 0.0075};
+			["Release Hexarium"] = {6, 0.00125};
+			["Toxic Overseer"] = {7, 0.000033333333333333335};
+			["Midnight Pyramidium"] = {8, 0.000005};
+		};
+	};
+	["Lovely Egg"] = {
+		Image = "rbxassetid://74152908944606";
+		Cost = {100, "Stats", "otherstats", "Hearts"};
+		IslandRequired = nil;
+		LayoutOrder = 9;
+		ShowInIndex = true;
+		Chances = {
+			["Lovely Doggy"] = {1, 50};
+			["Lovely Kitty"] = {2, 40};
+			["Lovely Bunny"] = {3, 10};
+			["Lovestruck Dragon"] = {4, 0.25};
+			["Lovestruck Star"] = {5, 0.00005};
+		};
+	};
+	["Valentines Egg"] = {
+		Image = "rbxassetid://107615388748381";
+		Cost = {500, "Stats", "otherstats", "Hearts"};
+		IslandRequired = nil;
+		LayoutOrder = 10;
+		ShowInIndex = true;
+		Chances = {
+			["Valentines Mouse"] = {1, 70};
+			["Valentines Fox"] = {2, 25};
+			["Winged Heart"] = {3, 4};
+			["Lovely Blast"] = {4, 0.075};
+			["Lovely Teddy Bear"] = {5, 0.005};
+			Cupid = {6, 0.0009};
+			["Heavenly Rose"] = {7, 0.000016};
+			["Lovely Harp"] = {8, 0.000008};
+			["Loyal Heart"] = {9, 0.0000025};
+		};
+	};
+	["100K Egg"] = {
+		Image = "rbxassetid://80013756195911";
+		Cost = {2500, "Stats", "leaderstats", "Coins"};
+		IslandRequired = nil;
+		LayoutOrder = 11;
+		ShowInIndex = true;
+		Chances = {
+			["Golden Doggy"] = {1, 70};
+			["Golden Mouse"] = {2, 25};
+			["Golden Dragon"] = {3, 4};
+			["Gilded Hexarium"] = {4, 0.4};
+			["Golden Knight"] = {5, 0.005};
+			["Royal Plaque"] = {6, 0.0008};
+			["Crowned Trophy"] = {7, 0.00001};
+			["Golden Warrior"] = {8, 0.000001818181818181818};
+		};
+	};
+	["Desert Egg"] = {
+		Image = "rbxassetid://105560417422449";
+		Cost = {10000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = "Desert";
+		LayoutOrder = 12;
+		ShowInIndex = true;
+		Chances = {
+			["Sand Golem"] = {1, 70};
+			["Sand Fox"] = {2, 25};
+			["Sand Dragon"] = {3, 4};
+			Scorpion = {4, 0.075};
+			Sphinx = {5, 0.005};
+			Pyramid = {6, 0.00002};
+		};
+	};
+	["Fiery Egg"] = {
+		Image = "rbxassetid://117596598806604";
+		Cost = {12500, "Stats", "leaderstats", "Coins"};
+		IslandRequired = "Volcano";
+		LayoutOrder = 13;
+		ShowInIndex = true;
+		Chances = {
+			["Fiery Doggy"] = {1, 70};
+			["Fiery Kitty"] = {2, 25};
+			["Fiery Bunny"] = {3, 4};
+			["Fiery Bat"] = {4, 0.065};
+			["Fiery Serpent"] = {5, 0.0045};
+			["Fiery Gem"] = {6, 0.000015};
+		};
+	};
+	["Magma Egg"] = {
+		Image = "rbxassetid://105524791850443";
+		Cost = {14000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = "Volcano";
+		LayoutOrder = 14;
+		ShowInIndex = true;
+		Chances = {
+			["Magma Dinosaur"] = {1, 70};
+			["Magma Bear"] = {2, 25};
+			["Magma Fox"] = {3, 4};
+			["Magma Devil"] = {4, 0.065};
+			["Magma Core"] = {5, 0.0045};
+			["Magma Wyvern"] = {6, 0.0008};
+			["Magma Shard"] = {7, 0.000008};
+			["Magma Beast"] = {8, 0.000001111111111111111};
+		};
+	};
+	["500K Egg"] = {
+		Image = "rbxassetid://70455457967706";
+		Cost = {3000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = nil;
+		LayoutOrder = 15;
+		ShowInIndex = true;
+		Chances = {
+			["Demonic Doggy"] = {1, 70};
+			["Angelic Kitty"] = {2, 25};
+			["Demonic Fox"] = {3, 4};
+			["Holy Crystal"] = {4, 0.08};
+			["Demonic Orb"] = {5, 0.004};
+			["Heavenly Angel"] = {6, 0.0004};
+			["Demonic Computer"] = {7, 0.00001};
+			Seraph = {8, 0.000004};
+			["Fallen Goddess"] = {9, 0.000001};
+		};
+	};
+	["Crystal Egg"] = {
+		Image = "rbxassetid://70455457967706";
+		Cost = {15000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = "Crystal";
+		LayoutOrder = 16;
+		ShowInIndex = true;
+		Chances = {
+			["Crystal Doggy"] = {1, 70};
+			["Crystal Kitty"] = {2, 25};
+			["Crystal Bunny"] = {3, 4};
+			["Geode Beast"] = {4, 0.08};
+			["Crystal Fiend"] = {5, 0.004};
+			["Precious Emerald"] = {6, 0.0000125};
+		};
+	};
+	["Floral Egg"] = {
+		Image = "rbxassetid://70455457967706";
+		Cost = {17500, "Stats", "leaderstats", "Coins"};
+		IslandRequired = "MysticalForest";
+		LayoutOrder = 17;
+		ShowInIndex = true;
+		Chances = {
+			["Floral Doggy"] = {1, 70};
+			["Floral Kitty"] = {2, 25};
+			["Floral Bunny"] = {3, 4};
+			["Floral Angel"] = {4, 0.005};
+			["Floral Overlord"] = {5, 0.0025};
+			Evergreen = {6, 0.00001};
+		};
+	};
+	["Mystical Egg"] = {
+		Image = "rbxassetid://70455457967706";
+		Cost = {20000, "Stats", "leaderstats", "Coins"};
+		IslandRequired = "MysticalForest";
+		LayoutOrder = 18;
+		ShowInIndex = true;
+		Chances = {
+			["Mystical Kitty"] = {1, 70};
+			["Star Dinosaur"] = {2, 25};
+			["Mystical Bunny"] = {3, 4};
+			["Mystical Dragon"] = {4, 0.04};
+			["Enchanted Spirit"] = {5, 0.004};
+			["Gilded Fairy"] = {6, 0.0004};
+			["Mystical Pixie"] = {7, 0.0000075};
+			["Enchanted Kitsune"] = {8, 0.000001};
+		};
+	};
+	["Season 1 Egg"] = {
+		Image = "rbxassetid://106660468593419";
+		IslandRequired = "";
+		LayoutOrder = 15;
+		ShowInIndex = true;
+		Chances = {
+			["Demonic Kitty"] = {1, 84};
+			["Dark Golem"] = {2, 15};
+			Devil = {3, 1};
+			["Demonic Overlord"] = {4, 0.25};
+			["Impish Angel"] = {5, 0.06666666};
+		};
+	};
+	["Bounty Pets"] = {
+		Image = "rbxassetid://106658213982482";
+		IslandRequired = nil;
+		LayoutOrder = 100;
+		ShowInIndex = true;
+		Chances = {
+			["Cyborg Lord"] = {1, 0.000010526315789473684};
+			["Prisma Shard"] = {2, 0.000008};
+			["Galactic Deity"] = {3, 0.000002};
+		};
+	};
+	["Exclusive Pets"] = {
+		Image = "rbxassetid://129495304590451";
+		IslandRequired = nil;
+		LayoutOrder = 101;
+		ShowInIndex = true;
+		Chances = {
+			Clockwork = {1, 0};
+			["King Star"] = {2, 0};
+			["Eternal Hourglass"] = {3, 0};
+			["Lovestruck Serpent"] = {4, 0};
+			["King Heart"] = {5, 0};
+			["Passion Pyramidium"] = {6, 0};
+			["Midnight Fox"] = {6, 0};
+			Starfly = {7, 0};
+			Prismalith = {8, 0};
+		};
+	};
+}
 
---// Variaveis de Ambiente e Bypass do Anti-Cheat
-local LocalPlayer = Players.LocalPlayer
-local LoggedRemotes = {}
-local IsSpying = true
-local IgnoreList = {
-    "MessageId", "Ping", "Mouse", "Movement", "Camera"
-} -- Palavras-chave para ignorar remotes de spam do Roblox
+Index Rewards 
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-02-25 18:57:04
+-- Luau version 6, Types version 3
+-- Time taken: 0.002627 seconds
 
---// Função Auxiliar de Formatação (Tabela p/ String)
-local function FormatArguments(args)
-    local result = ""
-    for i, v in ipairs(args) do
-        local varType = typeof(v)
-        if varType == "string" then
-            result = result .. "\"" .. v .. "\""
-        elseif varType == "Instance" then
-            result = result .. "game." .. v:GetFullName()
-        elseif varType == "CFrame" then
-            result = result .. "CFrame.new(" .. tostring(v) .. ")"
-        elseif varType == "Vector3" then
-            result = result .. "Vector3.new(" .. tostring(v) .. ")"
-        elseif varType == "Color3" then
-            result = result .. "Color3.new(" .. tostring(v) .. ")"
-        elseif varType == "table" then
-            result = result .. "{...}" -- Tabelas complexas
-        else
-            result = result .. tostring(v)
-        end
-        
-        if i < #args then
-            result = result .. ", "
-        end
-    end
-    return result
-end
+return {
+	Normal = {-- : First try: K:0: attempt to index nil with 't'
+;
+	Shiny = {-- : First try: K:0: attempt to index nil with 't'
+;
+}
 
---// Notificação na Tela (Feedback)
-local function Notify(title, text)
-    StarterGui:SetCore("SendNotification", {
-        Title = title;
-        Text = text;
-        Icon = "rbxassetid://10882439086";
-        Duration = 3;
-    })
-end
 
---// Interface Gráfica Simples Pelo Console (F9) ou Clipboard
--- Obs: Como solicitado, este script armazena tudo no F9 de forma organizada e também permite copiar ao clicar no log gerado.
-local function LogRemote(remoteName, remotePath, method, argsStr)
-    if not IsSpying then return end
-    
-    -- Checa IgnoreList para evitar flood na tela
-    for _, ignoreWord in ipairs(IgnoreList) do
-        if string.find(string.lower(remoteName), string.lower(ignoreWord)) then
-            return 
-        end
-    end
-    
-    if not LoggedRemotes[remoteName] then
-        LoggedRemotes[remoteName] = true
-        
-        local logMessage = string.format("[Remote Spy] Ativado:\nMethod: %s\nPath: %s\nArguments: %s", method, remotePath, argsStr)
-        warn("============== [ REMOTE DETECTADO ] ==============")
-        print("Nome: ", remoteName)
-        print("Caminho: ", remotePath)
-        print("Método: ", method)
-        print("Argumentos (args): ", argsStr)
-        
-        -- Gerando Código Executável (Pronto para o Exploit)
-        local exploitCode = string.format("local args = {%s}\n%s:%s(unpack(args))", argsStr, remotePath, method)
-        print("--- Código para re-executar: ---")
-        print(exploitCode)
-        print("==================================================")
-        
-        -- Sistema de Backup em GUI Simples
-        Notify("Remote Capturado!", "Nome: " .. remoteName .. "\nCheque o Console (F9) para copiar o código.")
-    end
-end
+Maestria data 
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-02-25 18:57:34
+-- Luau version 6, Types version 3
+-- Time taken: 0.001561 seconds
 
---// Hooking Metamethod: Interceptação Profunda do Jogo
-local OldNamecall
-OldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    local args = {...}
-    
-    -- Verifica se quem chamou NÃO foi o nosso Executor (checkcaller) para não se trancar em um loop de log
-    if not checkcaller() then
-        if method == "FireServer" or method == "InvokeServer" then
-            if typeof(self) == "Instance" and (self:IsA("RemoteEvent") or self:IsA("RemoteFunction")) then
-                local remoteName = self.Name
-                local remotePath = "game." .. self:GetFullName()
-                local argsStr = FormatArguments(args)
-                
-                -- Spawnar fora da Thread principal para não dar lag ou ser pego por verificações de tempo
-                task.spawn(LogRemote, remoteName, remotePath, method, argsStr)
-            end
-        end
-    end
-    
-    -- Retorna a execução original para o jogo não quebrar
-    return OldNamecall(self, ...)
-end))
+return {
+	Eggs = {
+		["Bronze I"] = {
+			Requirement = 200;
+			LuckMulti = 1.1;
+		};
+		["Bronze II"] = {
+			Requirement = 1000;
+			LuckMulti = 1.15;
+		};
+		["Bronze III"] = {
+			Requirement = 3000;
+			LuckMulti = 1.25;
+		};
+		["Silver I"] = {
+			Requirement = 10000;
+			LuckMulti = 1.35;
+			HatchSpeed = 1.01;
+		};
+		["Silver II"] = {
+			Requirement = 15000;
+			LuckMulti = 1.5;
+			HatchSpeed = 1.02;
+		};
+		["Silver III"] = {
+			Requirement = 25000;
+			LuckMulti = 1.75;
+			HatchSpeed = 1.03;
+		};
+		["Gold I"] = {
+			Requirement = 50000;
+			LuckMulti = 2;
+			HatchSpeed = 1.04;
+		};
+		["Gold II"] = {
+			Requirement = 100000;
+			LuckMulti = 2.25;
+			HatchSpeed = 1.05;
+			ExtraEggs = 1;
+		};
+		["Gold III"] = {
+			Requirement = 250000;
+			LuckMulti = 2.5;
+			HatchSpeed = 1.1;
+			ExtraEggs = 1;
+		};
+		["Diamond I"] = {
+			Requirement = 500000;
+			LuckMulti = 2.75;
+			HatchSpeed = 1.15;
+			ExtraEggs = 2;
+		};
+		["Diamond II"] = {
+			Requirement = 1000000;
+			LuckMulti = 3;
+			HatchSpeed = 1.2;
+			ExtraEggs = 2;
+		};
+		["Diamond III"] = {
+			Requirement = 1500000;
+			LuckMulti = 3.5;
+			HatchSpeed = 1.3;
+			ExtraEggs = 2;
+		};
+		["Royal Hatcher"] = {
+			Requirement = 3000000;
+			LuckMulti = 4;
+			HatchSpeed = 1.5;
+			ExtraEggs = 3;
+		};
+	};
+}
 
---// Mensagem de Inicialização
-Notify("Remote Spy Injetado!", "Fique atento ao F9 para copiar os códigos capturados.")
-print("[Roblox Lua Expert] Remote Spy executando com Hooking Seguro nos métodos __namecall.")
+Merchant data 
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-02-25 18:57:52
+-- Luau version 6, Types version 3
+-- Time taken: 0.001887 seconds
+
+return {
+	Merchant = {
+		RefreshTime = 1200;
+		CostImage = "rbxassetid://81672039275944";
+		Location = workspace._.Walkups.Merchant;
+		IslandRequired = "Forest";
+		Cost = {"Stats", "leaderstats", "Gems"};
+		AmountOfItems = 3;
+		FrameDisplayName = "MerchantBase";
+		Drops = {
+			["Lucky I"] = {15, 11, 90};
+			["Hatch I"] = {15, 11, 90};
+			["Coins I"] = {15, 11, 90};
+			["Lucky II"] = {8, 9, 225};
+			["Hatch II"] = {8, 9, 225};
+			["Coins II"] = {8, 9, 225};
+			Crate = {10, 4, 650};
+			["Lucky III"] = {5, 5.5, 950};
+			["Hatch III"] = {5, 5.5, 950};
+			["Coins III"] = {5, 5.5, 950};
+			["Lucky IV"] = {3, 4.5, 1250};
+			["Hatch IV"] = {3, 4.5, 1250};
+			["Coins IV"] = {3, 4.5, 1250};
+			["Egg Potion"] = {2, 4, 3500};
+			["Royal Essence"] = {1, 2, 10000};
+		};
+	};
+}
+
+
+Pet data 
+-- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
+-- Decompiled on 2026-02-25 18:58:06
+-- Luau version 6, Types version 3
+-- Time taken: 0.025593 seconds
+
+return {
+	Doggy = {
+		Image = "rbxassetid://72018230716685";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 2;
+		};
+	};
+	Kitty = {
+		Image = "rbxassetid://81718122799253";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 3;
+		};
+	};
+	Bunny = {
+		Image = "rbxassetid://95841421965978";
+		Rarity = "Rare";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 4;
+		};
+	};
+	Bear = {
+		Image = "rbxassetid://91020137925581";
+		Rarity = "Epic";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 5;
+		};
+	};
+	["King Kitty"] = {
+		Image = "rbxassetid://111204217564148";
+		ShinyImage = "rbxassetid://135370538107291";
+		Rarity = "Royal";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 3000;
+		};
+	};
+	Mouse = {
+		Image = "rbxassetid://137485237526889";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 6;
+		};
+	};
+	Deer = {
+		Image = "rbxassetid://79278056209555";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 8;
+		};
+	};
+	Fox = {
+		Image = "rbxassetid://107183846157452";
+		Rarity = "Rare";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 10;
+		};
+	};
+	Bee = {
+		Image = "rbxassetid://77013948749862";
+		Rarity = "Epic";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 13;
+		};
+	};
+	["Rocky Doggy"] = {
+		Image = "rbxassetid://133774719083694";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 12;
+		};
+	};
+	["Rocky Kitty"] = {
+		Image = "rbxassetid://100820315131764";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 14;
+		};
+	};
+	["Rocky Fox"] = {
+		Image = "rbxassetid://104947945892555";
+		Rarity = "Rare";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 16;
+		};
+	};
+	["Rocky Dinosaur"] = {
+		Image = "rbxassetid://114543554374052";
+		Rarity = "Rare";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 18;
+		};
+	};
+	["Rocky Golem"] = {
+		Image = "rbxassetid://73915573791563";
+		Rarity = "Rare";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 20;
+		};
+	};
+	["Rocky Dragon"] = {
+		Image = "rbxassetid://77995896948689";
+		Rarity = "Epic";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 25;
+		};
+	};
+	["Mushroom Doggy"] = {
+		Image = "rbxassetid://89427206834534";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 27;
+		};
+	};
+	["Mushroom Kitty"] = {
+		Image = "rbxassetid://120852369191524";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 30;
+		};
+	};
+	["Mushroom Bunny"] = {
+		Image = "rbxassetid://93992321457625";
+		Rarity = "Rare";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 35;
+		};
+	};
+	["Mushroom Fox"] = {
+		Image = "rbxassetid://94665837166637";
+		Rarity = "Epic";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 60;
+		};
+	};
+	["Majestic Mushy"] = {
+		Image = "rbxassetid://98193880173769";
+		Rarity = "Legendary";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 125;
+		};
+	};
+	["King Mushy"] = {
+		Image = "rbxassetid://135375665654024";
+		ShinyImage = "rbxassetid://87720466193500";
+		Rarity = "Secret";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 2225;
+		};
+	};
+	["Leaf Doggy"] = {
+		Image = "rbxassetid://102971599244974";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 38;
+		};
+	};
+	["Leaf Kitty"] = {
+		Image = "rbxassetid://78759601262987";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 40;
+		};
+	};
+	["Leaf Bunny"] = {
+		Image = "rbxassetid://125922478196064";
+		Rarity = "Rare";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 45;
+		};
+	};
+	Squirrel = {
+		Image = "rbxassetid://122507721930624";
+		Rarity = "Epic";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 50;
+		};
+	};
+	["Angelic Pumpkin"] = {
+		Image = "rbxassetid://77399681679121";
+		Rarity = "Legendary";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 140;
+		};
+	};
+	["Elegant Leaf"] = {
+		Image = "rbxassetid://127802677944768";
+		ShinyImage = "rbxassetid://98993401216502";
+		Rarity = "Secret";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 2500;
+		};
+	};
+	["Arctic Doggy"] = {
+		Image = "rbxassetid://86189515085737";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 40;
+		};
+	};
+	["Arctic Golem"] = {
+		Image = "rbxassetid://70675238002846";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 63;
+		};
+	};
+	["Arctic Bear"] = {
+		Image = "rbxassetid://83179996326932";
+		Rarity = "Rare";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 66;
+		};
+	};
+	["Arctic Dragon"] = {
+		Image = "rbxassetid://109792126232960";
+		Rarity = "Epic";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 70;
+		};
+	};
+	Mammoth = {
+		Image = "rbxassetid://80483648560829";
+		Rarity = "Legendary";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 150;
+		};
+	};
+	Yeti = {
+		Image = "rbxassetid://75493550100352";
+		ShinyImage = "rbxassetid://84764393650174";
+		Rarity = "Secret";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 2600;
+		};
+	};
+	["Icy Bear"] = {
+		Image = "rbxassetid://105448896401561";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 55;
+		};
+	};
+	["Icy Fox"] = {
+		Image = "rbxassetid://116555528761086";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 60;
+		};
+	};
+	["Icy Deer"] = {
+		Image = "rbxassetid://113992328493268";
+		Rarity = "Rare";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 70;
+		};
+	};
+	["Icy Dinosaur"] = {
+		Image = "rbxassetid://75678870989533";
+		Rarity = "Epic";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 80;
+		};
+	};
+	["Icy Blast"] = {
+		Image = "rbxassetid://109955647052330";
+		Rarity = "Legendary";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 180;
+		};
+	};
+	["Frost Overlord"] = {
+		Image = "rbxassetid://111224164421078";
+		Rarity = "Legendary";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 225;
+		};
+	};
+	["Frost Fiend"] = {
+		Image = "rbxassetid://108909516889392";
+		ShinyImage = "rbxassetid://119249142575861";
+		Rarity = "Secret";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 3000;
+		};
+	};
+	["Release Doggy"] = {
+		Image = "rbxassetid://136750065303591";
+		Rarity = "Common";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 66;
+		};
+	};
+	["Release Fox"] = {
+		Image = "rbxassetid://101614306248339";
+		Rarity = "Rare";
+		AnimationType = "Walking";
+		Stats = {
+			Coins = 75;
+		};
+	};
+	["Release Dragon"] = {
+		Image = "rbxassetid://90291407759389";
+		Rarity = "Epic";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 120;
+		};
+	};
+	["Release Serpent"] = {
+		Image = "rbxassetid://129628542080313";
+		Rarity = "Legendary";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 180;
+		};
+	};
+	["Release Overlord"] = {
+		Image = "rbxassetid://131525334339166";
+		Rarity = "Legendary";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 300;
+		};
+	};
+	["Release Hexarium"] = {
+		Image = "rbxassetid://90926637356635";
+		Rarity = "Legendary";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 425;
+		};
+	};
+	["Toxic Overseer"] = {
+		Image = "rbxassetid://106167752760631";
+		ShinyImage = "rbxassetid://98143496433067";
+		Rarity = "Secret";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 3333;
+		};
+	};
+	["Midnight Pyramidium"] = {
+		Image = "rbxassetid://130827457782746";
+		ShinyImage = "rbxassetid://83254210675548";
+		Rarity = "Royal";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 4500;
+		};
+	};
+	["Cyborg Lord"] = {
+		Image = "rbxassetid://77740009982982";
+		ShinyImage = "rbxassetid://72437419180231";
+		Rarity = "Secret";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 3800;
+		};
+	};
+	["Prisma Shard"] = {
+		Image = "rbxassetid://102891160774528";
+		ShinyImage = "rbxassetid://111880595795308";
+		Rarity = "Secret";
+		AnimationType = "Flying";
+		Stats = {
+			Coins = 4500;
+		};
+	};
+	["Galactic Deity"] = {
+		Image = "rbxassetid://106658213982482";
+		ShinyImage = "rbxassetid://84972046689600";
+		Rarity = "Royal";
+		AnimationType = "Flying";
+		CustomAnimated = "TextureAnimated";
+		Stats = {
+			Coins = 5250;
+		};
+	};
+	["Lovely Doggy"] = {
+		Image = "rbxassetid://123859971159681";
+		Rarity = "Common";
+		AnimationTyp
