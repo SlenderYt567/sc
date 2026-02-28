@@ -14,7 +14,7 @@ getgenv().SlenderHubGameLoaded = true
 
 --// 2. Load SlenderWind V11
 -- Load via URL just like the original V10 script, assuming V5 raw file is standard
-local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
 
 --// 3. Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
