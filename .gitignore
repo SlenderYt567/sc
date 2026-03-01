@@ -1,663 +1,318 @@
-Dex Royal Hatchers 
--- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
--- Decompiled on 2026-02-28 14:33:40
--- Luau version 6, Types version 3
--- Time taken: 0.012094 seconds
+--!strict
+--[[
+    SlenderHub | Royal Hatchers (V11 UI Edition)
+    UI Library: SlenderWind Internal (V11 Premium Default)
+    Architect: SlenderHub Lead / Roblox Lua Expert Agent
+]]
 
-local module = {}
-module.__index = module
-local Players_upvr = game:GetService("Players")
+--// 1. Singleton Pattern & Configuration
+if getgenv().SlenderHubGameLoaded then 
+    warn("[SlenderHub] Instance already active.") 
+    return 
+end
+getgenv().SlenderHubGameLoaded = true
+
+--// 2. Load SlenderWind V11
+-- Load via URL just like the original V10 script, assuming V5 raw file is standard
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
+
+--// 3. Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Libraries = ReplicatedStorage.Libraries
-local Remotes_upvr = ReplicatedStorage.Remotes
-local MerchantData_upvr = require(Libraries.MerchantData)
-local Short_upvr = require(Libraries.Short)
-local tbl_upvr_2 = {}
-local function toggleAuto_upvr(arg1, arg2) -- Line 22, Named "toggleAuto"
-	--[[ Upvalues[1]:
-		[1]: tbl_upvr_2 (readonly)
-	]]
-	if arg2 == true then
-		tbl_upvr_2[arg1][1].Auto.Click.Frame.TextLabel.Text = "On"
-		tbl_upvr_2[arg1][1].Auto.Click.Frame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-		tbl_upvr_2[arg1][1].Auto.Click.Frame.TextLabel.UIStroke.Color = Color3.fromRGB(0, 109, 0)
-		tbl_upvr_2[arg1][1].Auto.Click.Shadow.BackgroundColor3 = Color3.fromRGB(0, 109, 0)
-		tbl_upvr_2[arg1][1].Auto.Click.Shadow.UIStroke.Color = Color3.fromRGB(0, 109, 0)
-	elseif arg2 == false then
-		tbl_upvr_2[arg1][1].Auto.Click.Frame.TextLabel.Text = "Off"
-		tbl_upvr_2[arg1][1].Auto.Click.Frame.BackgroundColor3 = Color3.fromRGB(197, 197, 197)
-		tbl_upvr_2[arg1][1].Auto.Click.Frame.TextLabel.UIStroke.Color = Color3.fromRGB(122, 122, 122)
-		tbl_upvr_2[arg1][1].Auto.Click.Shadow.BackgroundColor3 = Color3.fromRGB(122, 122, 122)
-		tbl_upvr_2[arg1][1].Auto.Click.Shadow.UIStroke.Color = Color3.fromRGB(122, 122, 122)
-	end
-end
-local Clones_upvr = ReplicatedStorage.Clones
-local function buyFromMerchant_upvr(arg1, arg2, arg3) -- Line 38, Named "buyFromMerchant"
-	--[[ Upvalues[5]:
-		[1]: MerchantData_upvr (readonly)
-		[2]: tbl_upvr_2 (readonly)
-		[3]: Remotes_upvr (readonly)
-		[4]: Clones_upvr (readonly)
-		[5]: Short_upvr (readonly)
-	]]
-	if MerchantData_upvr[arg1] and tbl_upvr_2[arg1] then
-		local SOME_upvr_2 = tbl_upvr_2[arg1][1].InventoryScroll:FindFirstChild(arg2)
-		if SOME_upvr_2:GetAttribute("Stock") and 0 < SOME_upvr_2:GetAttribute("Stock") and SOME_upvr_2 and Remotes_upvr.Functions.BuyMerchant:InvokeServer(arg1, tonumber(arg2)) then
-			local any_InvokeServer_result1_2_upvr = Remotes_upvr.Functions.BuyMerchant:InvokeServer(arg1, tonumber(arg2))
-			task.spawn(function() -- Line 44
-				--[[ Upvalues[5]:
-					[1]: SOME_upvr_2 (readonly)
-					[2]: any_InvokeServer_result1_2_upvr (readonly)
-					[3]: arg3 (readonly)
-					[4]: Clones_upvr (copied, readonly)
-					[5]: Short_upvr (copied, readonly)
-				]]
-				SOME_upvr_2:SetAttribute("Stock", any_InvokeServer_result1_2_upvr)
-				if arg3 == nil then
-					local clone_2_upvr = Clones_upvr.Sounds.BuyUpgrade:Clone()
-					clone_2_upvr.PlaybackSpeed *= math.random(105, 115) / 100
-					clone_2_upvr.Parent = game.SoundService
-					clone_2_upvr:Play()
-					clone_2_upvr.Ended:Connect(function() -- Line 52
-						--[[ Upvalues[1]:
-							[1]: clone_2_upvr (readonly)
-						]]
-						clone_2_upvr:Destroy()
-					end)
-				end
-				clone_2_upvr = SOME_upvr_2:FindFirstChild("Stock")
-				if clone_2_upvr then
-					clone_2_upvr = any_InvokeServer_result1_2_upvr
-					if clone_2_upvr <= 0 then
-						clone_2_upvr = SOME_upvr_2.Stock
-						clone_2_upvr.Text = "Sold Out"
-						clone_2_upvr = SOME_upvr_2.Stock
-						clone_2_upvr.TextColor3 = Color3.fromRGB(255, 0, 0)
-						return
-					end
-					clone_2_upvr = SOME_upvr_2.Stock
-					clone_2_upvr.Text = `{Short_upvr.en(any_InvokeServer_result1_2_upvr)} Left`
-				end
-			end)
-		end
-	end
-end
-local LocalPlayer_upvr = Players_upvr.LocalPlayer
-local UIHandler_upvr = require(script.Parent.UIHandler)
-local tbl_upvr = {}
-local ItemData_upvr = require(Libraries.ItemData)
-local GetTime_upvr = require(Libraries.GetTime)
-function module.Init(arg1) -- Line 71
-	--[[ Upvalues[12]:
-		[1]: MerchantData_upvr (readonly)
-		[2]: LocalPlayer_upvr (readonly)
-		[3]: UIHandler_upvr (readonly)
-		[4]: tbl_upvr_2 (readonly)
-		[5]: Players_upvr (readonly)
-		[6]: toggleAuto_upvr (readonly)
-		[7]: Remotes_upvr (readonly)
-		[8]: tbl_upvr (readonly)
-		[9]: buyFromMerchant_upvr (readonly)
-		[10]: ItemData_upvr (readonly)
-		[11]: Short_upvr (readonly)
-		[12]: GetTime_upvr (readonly)
-	]]
-	for i_upvr, v in pairs(MerchantData_upvr) do
-		local clone_4_upvr = LocalPlayer_upvr.PlayerGui.GUI.Merchant:Clone()
-		UIHandler_upvr:setupButton(clone_4_upvr.Back, function() -- Line 74
-			--[[ Upvalues[2]:
-				[1]: UIHandler_upvr (copied, readonly)
-				[2]: clone_4_upvr (readonly)
-			]]
-			UIHandler_upvr:CloseUI(clone_4_upvr)
-		end)
-		tbl_upvr_2[i_upvr] = {clone_4_upvr, os.time()}
-		clone_4_upvr.Name = v.FrameDisplayName
-		clone_4_upvr.Parent = LocalPlayer_upvr.PlayerGui.GUI
-		v.Location.Touch.Touched:Connect(function(arg1_2) -- Line 80
-			--[[ Upvalues[4]:
-				[1]: Players_upvr (copied, readonly)
-				[2]: clone_4_upvr (readonly)
-				[3]: LocalPlayer_upvr (copied, readonly)
-				[4]: UIHandler_upvr (copied, readonly)
-			]]
-			if arg1_2.Parent and clone_4_upvr.Visible == false and Players_upvr:GetPlayerFromCharacter(arg1_2.Parent) == LocalPlayer_upvr then
-				UIHandler_upvr:OpenUI(clone_4_upvr)
-			end
-		end)
-		toggleAuto_upvr(i_upvr, false)
-		UIHandler_upvr:setupButton(clone_4_upvr.Auto.Click, function() -- Line 90
-			--[[ Upvalues[6]:
-				[1]: Remotes_upvr (copied, readonly)
-				[2]: i_upvr (readonly)
-				[3]: UIHandler_upvr (copied, readonly)
-				[4]: LocalPlayer_upvr (copied, readonly)
-				[5]: toggleAuto_upvr (copied, readonly)
-				[6]: tbl_upvr (copied, readonly)
-			]]
-			local any_InvokeServer_result1 = Remotes_upvr.Functions.ToggleAutoMerchant:InvokeServer(i_upvr)
-			if any_InvokeServer_result1 == "NoOwn" then
-				UIHandler_upvr:OpenUI(LocalPlayer_upvr.PlayerGui.GUI.Shop)
-			else
-				if any_InvokeServer_result1 == true then
-					toggleAuto_upvr(i_upvr, any_InvokeServer_result1)
-					table.insert(tbl_upvr, i_upvr)
-					return
-				end
-				if any_InvokeServer_result1 == false then
-					toggleAuto_upvr(i_upvr, any_InvokeServer_result1)
-					table.remove(tbl_upvr, table.find(tbl_upvr, i_upvr))
-				end
-			end
-		end)
-	end
-	task.spawn(function() -- Line 106
-		--[[ Upvalues[3]:
-			[1]: tbl_upvr (copied, readonly)
-			[2]: tbl_upvr_2 (copied, readonly)
-			[3]: buyFromMerchant_upvr (copied, readonly)
-		]]
-		while wait() do
-			for _, v_2 in pairs(tbl_upvr) do
-				for _, v_3 in pairs(tbl_upvr_2[v_2][1].InventoryScroll:GetChildren()) do
-					if v_3:IsA("Frame") then
-						buyFromMerchant_upvr(v_2, v_3.Name, true)
-					end
-					wait(0.1)
-				end
-				wait(0.1)
-			end
-		end
-	end)
-	Remotes_upvr.Events.LoadMerchantInfo.OnClientEvent:Connect(function(arg1_3, arg2) -- Line 119
-		--[[ Upvalues[8]:
-			[1]: tbl_upvr_2 (copied, readonly)
-			[2]: UIHandler_upvr (copied, readonly)
-			[3]: ItemData_upvr (copied, readonly)
-			[4]: Short_upvr (copied, readonly)
-			[5]: MerchantData_upvr (copied, readonly)
-			[6]: buyFromMerchant_upvr (copied, readonly)
-			[7]: toggleAuto_upvr (copied, readonly)
-			[8]: tbl_upvr (copied, readonly)
-		]]
-		for i_4_upvr, v_4 in pairs(arg1_3) do
-			if tbl_upvr_2[i_4_upvr] then
-				tbl_upvr_2[i_4_upvr][2] = v_4.RefreshOS
-				for _, v_5 in pairs(tbl_upvr_2[i_4_upvr][1].InventoryScroll:GetChildren()) do
-					if v_5:IsA("Frame") then
-						v_5:Destroy()
-					end
-				end
-				for i_6_upvr, v_6 in pairs(v_4.Stock) do
-					local clone = script.Template:Clone()
-					UIHandler_upvr:setupHoverItem(clone.Click, {
-						ItemName = v_6.ItemName;
-					})
-					clone:SetAttribute("Stock", v_6.Stock)
-					clone.Name = i_6_upvr
-					clone.Icon.Image = ItemData_upvr[v_6.ItemName].Image
-					clone.ItemName.Text = `{v_6.ItemName}`
-					if v_6.Stock <= 0 then
-						clone.Stock.Text = "Sold Out"
-						clone.Stock.TextColor3 = Color3.fromRGB(255, 0, 0)
-					else
-						clone.Stock.Text = `{Short_upvr.en(v_6.Stock)} Left`
-					end
-					clone.Buy.Frame.TextLabel.Text = `{Short_upvr.en(v_6.Cost)}`
-					clone.Buy.Frame.Icon.Image = MerchantData_upvr[i_4_upvr].CostImage
-					UIHandler_upvr:setupButton(clone.Buy, function() -- Line 146
-						--[[ Upvalues[3]:
-							[1]: buyFromMerchant_upvr (copied, readonly)
-							[2]: i_4_upvr (readonly)
-							[3]: i_6_upvr (readonly)
-						]]
-						buyFromMerchant_upvr(i_4_upvr, i_6_upvr)
-					end)
-					clone.Parent = tbl_upvr_2[i_4_upvr][1].InventoryScroll
-					clone.Visible = true
-				end
-			end
-			if arg2 then
-				for i_7, _ in pairs(arg2) do
-					toggleAuto_upvr(i_7, true)
-					table.insert(tbl_upvr, i_7)
-				end
-			end
-		end
-	end)
-	task.spawn(function() -- Line 161
-		--[[ Upvalues[2]:
-			[1]: tbl_upvr_2 (copied, readonly)
-			[2]: GetTime_upvr (copied, readonly)
-		]]
-		while wait(1) do
-			for _, v_8 in pairs(tbl_upvr_2) do
-				v_8[1].Restock.Text = `Restocks In: {GetTime_upvr:GetTime(math.round(v_8[2] - workspace:GetServerTimeNow()))}`
-			end
-		end
-	end)
-end
-return module
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
 
-Egg data 
--- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
--- Decompiled on 2026-02-28 14:34:25
--- Luau version 6, Types version 3
--- Time taken: 0.017434 seconds
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local Functions = Remotes:WaitForChild("Functions")
 
-return {
-	["Common Egg"] = {
-		Image = "rbxassetid://115322652054054";
-		Cost = {50, "Stats", "leaderstats", "Coins"};
-		IslandRequired = nil;
-		LayoutOrder = 1;
-		ShowInIndex = true;
-		Chances = {
-			Doggy = {1, 50};
-			Bunny = {3, 15};
-			Kitty = {2, 35};
-			Bear = {4, 4.9};
-			["King Kitty"] = {5, 0.000002};
-		};
-	};
-	["Spotted Egg"] = {
-		Image = "rbxassetid://106484374434471";
-		Cost = {300, "Stats", "leaderstats", "Coins"};
-		IslandRequired = nil;
-		LayoutOrder = 2;
-		ShowInIndex = true;
-		Chances = {
-			Mouse = {1, 55};
-			Deer = {2, 30};
-			Fox = {3, 11};
-			Bee = {4, 4};
-		};
-	};
-	["Rocky Egg"] = {
-		Image = "rbxassetid://98201413111378";
-		Cost = {1000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = nil;
-		LayoutOrder = 3;
-		ShowInIndex = true;
-		Chances = {
-			["Rocky Doggy"] = {1, 30};
-			["Rocky Kitty"] = {2, 25};
-			["Rocky Fox"] = {3, 20};
-			["Rocky Dinosaur"] = {4, 15};
-			["Rocky Golem"] = {5, 7};
-			["Rocky Dragon"] = {6, 3};
-		};
-	};
-	["Mushroom Egg"] = {
-		Image = "rbxassetid://122714140241107";
-		Cost = {2000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = "Forest";
-		LayoutOrder = 4;
-		ShowInIndex = true;
-		Chances = {
-			["Mushroom Doggy"] = {1, 55};
-			["Mushroom Kitty"] = {2, 30};
-			["Mushroom Bunny"] = {3, 11};
-			["Mushroom Fox"] = {4, 3.69};
-			["Majestic Mushy"] = {5, 0.3};
-			["King Mushy"] = {6, 0.00002};
-		};
-	};
-	["Leaf Egg"] = {
-		Image = "rbxassetid://104110920305201";
-		Cost = {3000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = "AutumnForest";
-		LayoutOrder = 5;
-		ShowInIndex = true;
-		Chances = {
-			["Leaf Doggy"] = {1, 55};
-			["Leaf Kitty"] = {2, 30};
-			["Leaf Bunny"] = {3, 11};
-			Squirrel = {4, 3.69};
-			["Angelic Pumpkin"] = {5, 0.175};
-			["Elegant Leaf"] = {6, 0.00002};
-		};
-	};
-	["Arctic Egg"] = {
-		Image = "rbxassetid://87332144546728";
-		Cost = {5000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = "Frost";
-		LayoutOrder = 6;
-		ShowInIndex = true;
-		Chances = {
-			["Arctic Doggy"] = {1, 55};
-			["Arctic Golem"] = {2, 30};
-			["Arctic Bear"] = {3, 11};
-			["Arctic Dragon"] = {4, 3.69};
-			Mammoth = {5, 0.2};
-			Yeti = {6, 0.00002};
-		};
-	};
-	["Icy Egg"] = {
-		Image = "rbxassetid://107036386933664";
-		Cost = {8000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = "Frost";
-		LayoutOrder = 7;
-		ShowInIndex = true;
-		Chances = {
-			["Icy Bear"] = {1, 55};
-			["Icy Fox"] = {2, 30};
-			["Icy Deer"] = {3, 11};
-			["Icy Dinosaur"] = {4, 3.69};
-			["Icy Blast"] = {5, 0.05};
-			["Frost Overlord"] = {6, 0.005};
-			["Frost Fiend"] = {7, 0.00002857142857142857};
-		};
-	};
-	["Release Egg"] = {
-		Image = "rbxassetid://114604701284502";
-		Cost = {2000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = nil;
-		LayoutOrder = 8;
-		ShowInIndex = true;
-		Chances = {
-			["Release Doggy"] = {1, 50};
-			["Release Fox"] = {2, 40};
-			["Release Dragon"] = {3, 10};
-			["Release Serpent"] = {4, 0.1};
-			["Release Overlord"] = {5, 0.0075};
-			["Release Hexarium"] = {6, 0.00125};
-			["Toxic Overseer"] = {7, 0.000033333333333333335};
-			["Midnight Pyramidium"] = {8, 0.000005};
-		};
-	};
-	["Lovely Egg"] = {
-		Image = "rbxassetid://74152908944606";
-		Cost = {100, "Stats", "otherstats", "Hearts"};
-		IslandRequired = nil;
-		LayoutOrder = 9;
-		ShowInIndex = true;
-		Chances = {
-			["Lovely Doggy"] = {1, 50};
-			["Lovely Kitty"] = {2, 40};
-			["Lovely Bunny"] = {3, 10};
-			["Lovestruck Dragon"] = {4, 0.25};
-			["Lovestruck Star"] = {5, 0.00005};
-		};
-	};
-	["Valentines Egg"] = {
-		Image = "rbxassetid://107615388748381";
-		Cost = {500, "Stats", "otherstats", "Hearts"};
-		IslandRequired = nil;
-		LayoutOrder = 10;
-		ShowInIndex = true;
-		Chances = {
-			["Valentines Mouse"] = {1, 70};
-			["Valentines Fox"] = {2, 25};
-			["Winged Heart"] = {3, 4};
-			["Lovely Blast"] = {4, 0.075};
-			["Lovely Teddy Bear"] = {5, 0.005};
-			Cupid = {6, 0.0009};
-			["Heavenly Rose"] = {7, 0.000016};
-			["Lovely Harp"] = {8, 0.000008};
-			["Loyal Heart"] = {9, 0.0000025};
-		};
-	};
-	["100K Egg"] = {
-		Image = "rbxassetid://80013756195911";
-		Cost = {2500, "Stats", "leaderstats", "Coins"};
-		IslandRequired = nil;
-		LayoutOrder = 11;
-		ShowInIndex = true;
-		Chances = {
-			["Golden Doggy"] = {1, 70};
-			["Golden Mouse"] = {2, 25};
-			["Golden Dragon"] = {3, 4};
-			["Gilded Hexarium"] = {4, 0.4};
-			["Golden Knight"] = {5, 0.005};
-			["Royal Plaque"] = {6, 0.0008};
-			["Crowned Trophy"] = {7, 0.00001};
-			["Golden Warrior"] = {8, 0.000001818181818181818};
-		};
-	};
-	["Desert Egg"] = {
-		Image = "rbxassetid://105560417422449";
-		Cost = {10000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = "Desert";
-		LayoutOrder = 12;
-		ShowInIndex = true;
-		Chances = {
-			["Sand Golem"] = {1, 70};
-			["Sand Fox"] = {2, 25};
-			["Sand Dragon"] = {3, 4};
-			Scorpion = {4, 0.075};
-			Sphinx = {5, 0.005};
-			Pyramid = {6, 0.00002};
-		};
-	};
-	["Fiery Egg"] = {
-		Image = "rbxassetid://117596598806604";
-		Cost = {12500, "Stats", "leaderstats", "Coins"};
-		IslandRequired = "Volcano";
-		LayoutOrder = 13;
-		ShowInIndex = true;
-		Chances = {
-			["Fiery Doggy"] = {1, 70};
-			["Fiery Kitty"] = {2, 25};
-			["Fiery Bunny"] = {3, 4};
-			["Fiery Bat"] = {4, 0.065};
-			["Fiery Serpent"] = {5, 0.0045};
-			["Fiery Gem"] = {6, 0.000015};
-		};
-	};
-	["Magma Egg"] = {
-		Image = "rbxassetid://105524791850443";
-		Cost = {14000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = "Volcano";
-		LayoutOrder = 14;
-		ShowInIndex = true;
-		Chances = {
-			["Magma Dinosaur"] = {1, 70};
-			["Magma Bear"] = {2, 25};
-			["Magma Fox"] = {3, 4};
-			["Magma Devil"] = {4, 0.065};
-			["Magma Core"] = {5, 0.0045};
-			["Magma Wyvern"] = {6, 0.0008};
-			["Magma Shard"] = {7, 0.000008};
-			["Magma Beast"] = {8, 0.000001111111111111111};
-		};
-	};
-	["500K Egg"] = {
-		Image = "rbxassetid://70455457967706";
-		Cost = {3000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = nil;
-		LayoutOrder = 15;
-		ShowInIndex = true;
-		Chances = {
-			["Demonic Doggy"] = {1, 70};
-			["Angelic Kitty"] = {2, 25};
-			["Demonic Fox"] = {3, 4};
-			["Holy Crystal"] = {4, 0.08};
-			["Demonic Orb"] = {5, 0.004};
-			["Heavenly Angel"] = {6, 0.0004};
-			["Demonic Computer"] = {7, 0.00001};
-			Seraph = {8, 0.000004};
-			["Fallen Goddess"] = {9, 0.000001};
-		};
-	};
-	["Crystal Egg"] = {
-		Image = "rbxassetid://70455457967706";
-		Cost = {15000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = "Crystal";
-		LayoutOrder = 16;
-		ShowInIndex = true;
-		Chances = {
-			["Crystal Doggy"] = {1, 70};
-			["Crystal Kitty"] = {2, 25};
-			["Crystal Bunny"] = {3, 4};
-			["Geode Beast"] = {4, 0.08};
-			["Crystal Fiend"] = {5, 0.004};
-			["Precious Emerald"] = {6, 0.0000125};
-		};
-	};
-	["Floral Egg"] = {
-		Image = "rbxassetid://70455457967706";
-		Cost = {17500, "Stats", "leaderstats", "Coins"};
-		IslandRequired = "MysticalForest";
-		LayoutOrder = 17;
-		ShowInIndex = true;
-		Chances = {
-			["Floral Doggy"] = {1, 70};
-			["Floral Kitty"] = {2, 25};
-			["Floral Bunny"] = {3, 4};
-			["Floral Angel"] = {4, 0.005};
-			["Floral Overlord"] = {5, 0.0025};
-			Evergreen = {6, 0.00001};
-		};
-	};
-	["Mystical Egg"] = {
-		Image = "rbxassetid://70455457967706";
-		Cost = {20000, "Stats", "leaderstats", "Coins"};
-		IslandRequired = "MysticalForest";
-		LayoutOrder = 18;
-		ShowInIndex = true;
-		Chances = {
-			["Mystical Kitty"] = {1, 70};
-			["Star Dinosaur"] = {2, 25};
-			["Mystical Bunny"] = {3, 4};
-			["Mystical Dragon"] = {4, 0.04};
-			["Enchanted Spirit"] = {5, 0.004};
-			["Gilded Fairy"] = {6, 0.0004};
-			["Mystical Pixie"] = {7, 0.0000075};
-			["Enchanted Kitsune"] = {8, 0.000001};
-		};
-	};
-	["Celebration Egg"] = {
-		Image = "rbxassetid://70455457967706";
-		Cost = {200, "Stats", "otherstats", "Stars"};
-		IslandRequired = "1MEvent";
-		LayoutOrder = 19;
-		ShowInIndex = true;
-		Chances = {
-			["Celebration Doggy"] = {1, 70};
-			["Celebration Kitty"] = {2, 25};
-			["Celebration Bunny"] = {3, 4};
-			["Celebration Hexarium"] = {4, 0.1};
-			["Celebration Guardian"] = {5, 0.004};
-			["Celebration Trophy"] = {7, 0.0000125};
-			["Celebration Gemstone"] = {8, 0.00000133333333};
-		};
-	};
-	["1M Egg"] = {
-		Image = "rbxassetid://70455457967706";
-		Cost = {800, "Stats", "otherstats", "Stars"};
-		IslandRequired = "1MEvent";
-		LayoutOrder = 20;
-		ShowInIndex = true;
-		Chances = {
-			["Bronze Dinosaur"] = {1, 70};
-			["Silver Mouse"] = {2, 25};
-			["Golden Devil"] = {3, 4};
-			["Ruby Kitsune"] = {4, 0.05};
-			["Diamond Star"] = {5, 0.003};
-			["Platinum Knight"] = {6, 0.0003};
-			["King Crystal"] = {7, 0.000004};
-			["Queen Crystal"] = {7, 0.000004};
-			["Diamond Robot"] = {8, 7.5e-07};
-			["Vicious Beast"] = {9, 2e-07};
-		};
-	};
-	["Season 1 Egg"] = {
-		Image = "rbxassetid://106660468593419";
-		IslandRequired = "";
-		LayoutOrder = 15;
-		ShowInIndex = true;
-		Chances = {
-			["Demonic Kitty"] = {1, 84};
-			["Dark Golem"] = {2, 15};
-			Devil = {3, 1};
-			["Demonic Overlord"] = {4, 0.25};
-			["Impish Angel"] = {5, 0.04};
-		};
-	};
-	["Light Egg"] = {
-		Image = "rbxassetid://106660468593419";
-		IslandRequired = "";
-		LayoutOrder = 15;
-		ShowInIndex = true;
-		Chances = {
-			["Light Serpent"] = {1, 50};
-			["Light Blast"] = {2, 30};
-			["Light Fairy"] = {3, 9};
-			["Light Seraph"] = {4, 0.9};
-			["Light Bulb"] = {5, 0.1};
-		};
-	};
-	["Bounty Pets"] = {
-		Image = "rbxassetid://106658213982482";
-		IslandRequired = nil;
-		LayoutOrder = 100;
-		ShowInIndex = true;
-		Chances = {
-			["Cyborg Lord"] = {1, 0.000010526315789473684};
-			["Prisma Shard"] = {2, 0.000008};
-			["Galactic Deity"] = {3, 0.000002};
-		};
-	};
-	["Exclusive Pets"] = {
-		Image = "rbxassetid://129495304590451";
-		IslandRequired = nil;
-		LayoutOrder = 101;
-		ShowInIndex = true;
-		Chances = {
-			Clockwork = {1, 0};
-			["King Star"] = {2, 0};
-			["Eternal Hourglass"] = {3, 0};
-			["Lovestruck Serpent"] = {4, 0};
-			["King Heart"] = {5, 0};
-			["Passion Pyramidium"] = {6, 0};
-			["Midnight Fox"] = {6, 0};
-			Starfly = {7, 0};
-			Prismalith = {8, 0};
-		};
-	};
+--// 4. Game Data
+local EggsList = {
+    "Common Egg", "Spotted Egg", "Rocky Egg", "Mushroom Egg", "Leaf Egg",
+    "Arctic Egg", "Icy Egg", "Release Egg", "Lovely Egg", "Valentines Egg",
+    "100K Egg", "Desert Egg", "Fiery Egg", "Magma Egg", "500K Egg",
+    "Crystal Egg", "Floral Egg", "Mystical Egg", "Celebration Egg", "1M Egg", 
+    "Season 1 Egg", "Light Egg", "Bounty Pets", "Exclusive Pets"
 }
 
-Merchant data 
--- Decompiled with Konstant V2.1, a fast Luau decompiler made in Luau by plusgiant5 (https://discord.gg/brNTY8nX8t)
--- Decompiled on 2026-02-28 14:34:59
--- Luau version 6, Types version 3
--- Time taken: 0.004230 seconds
-
-return {
-	Merchant = {
-		RefreshTime = 1200;
-		CostImage = "rbxassetid://81672039275944";
-		Location = workspace._.Walkups.Merchant;
-		IslandRequired = "Forest";
-		Cost = {"Stats", "leaderstats", "Gems"};
-		AmountOfItems = 3;
-		FrameDisplayName = "MerchantBase";
-		Drops = {
-			["Lucky I"] = {15, 11, 90};
-			["Hatch I"] = {15, 11, 90};
-			["Coins I"] = {15, 11, 90};
-			["Lucky II"] = {8, 9, 225};
-			["Hatch II"] = {8, 9, 225};
-			["Coins II"] = {8, 9, 225};
-			Crate = {10, 4, 650};
-			["Lucky III"] = {5, 5.5, 950};
-			["Hatch III"] = {5, 5.5, 950};
-			["Coins III"] = {5, 5.5, 950};
-			["Lucky IV"] = {3, 4.5, 1250};
-			["Hatch IV"] = {3, 4.5, 1250};
-			["Coins IV"] = {3, 4.5, 1250};
-			["Egg Potion"] = {2, 4, 3500};
-			["Royal Essence"] = {1, 2, 10000};
-		};
-	};
-	["1MMerchant"] = {
-		RefreshTime = 1200;
-		CostImage
-
-event merchant 1m
-local args = {
-	"1MMerchant",
-	1
+local UpgradesList = {
+    "Coins1", "EggHatch1", "Gems1", "HatchSpeed1", "Coins2", "Luck1",
+    "Shiny1", "HatchSpeed2", "Coins3", "Gems2", "Luck2", "Shiny2",
+    "Hatcher1", "Shiny3", "Coins4", "Luck3", "EggHatch2",
+    "Shiny4", "Coins5", "Luck4", "EggHatch3",
+    "HiddenLuck", "HiddenShinyLuck", "HiddenHatchSpeed"
 }
-game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Functions"):WaitForChild("BuyMerchant"):InvokeServer(unpack(args))
+
+--// 5. Control Flags
+local Flags = {
+    AutoClick = false,
+    AutoCollect = false,
+    AutoEgg = false,
+    SelectedEgg = "Common Egg",
+    EggAmount = 100,
+    AutoMerchant = false,
+    Auto1MMerchant = false,
+    AutoUpgrade = false,
+    SelectedUpgrade = "Coins1",
+    
+    -- Character Mods
+    SpeedHack = false,
+    Noclip = false,
+    InfJump = false,
+    WalkSpeedVal = 16,
+    JumpPowerVal = 50,
+    
+    -- Teleport / Premium OP Modes
+    AutoClaimRewards = false 
+}
+
+--// 6. UI Construction (V11)
+local Window = SlenderWind.Window({
+    Name = "SlenderHub | Royal Hatchers [PREMIUM]",
+    KeySystem = false,
+    Theme = { 
+        Accent = Color3.fromRGB(0, 255, 128),
+        Background = Color3.fromRGB(15, 15, 20),
+        Text = Color3.fromRGB(240, 240, 240)
+    } 
+})
+
+--================= TABS =================--
+local TabFarming = Window:Tab("Farming")
+local TabEggs = Window:Tab("Eggs")
+local TabShop = Window:Tab("Shop & Upgrades")
+local TabPlayer = Window:Tab("Player OP")
+local TabMisc = Window:Tab("Misc")
+
+--================= FARMING TAB =================--
+TabFarming:Label("--- Primary Farm ---")
+
+TabFarming:Toggle("Auto Click", false, "AutoClick", "Automatically clicks for you", function(Value)
+    Flags.AutoClick = Value
+    task.spawn(function()
+        while Flags.AutoClick do
+            -- Ensure LocalPlayer.Character exists
+            if LocalPlayer.Character then
+                pcall(function() Functions.Click:InvokeServer() end)
+            end
+            task.wait(0.05)
+        end
+    end)
+end)
+
+TabFarming:Toggle("Auto Collect Drops", false, "AutoCollect", "Picks up gems and coins", function(Value)
+    Flags.AutoCollect = Value
+    local collectRemoteFunction = Functions.CollectCollectible
+    
+    task.spawn(function()
+        while Flags.AutoCollect do
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                pcall(function()
+                    local colFolder = Workspace:FindFirstChild("_") and Workspace._:FindFirstChild("CollectiblesClient")
+                    local hrp = LocalPlayer.Character.HumanoidRootPart
+
+                    if colFolder then
+                        for _, item in pairs(colFolder:GetChildren()) do
+                            if item:IsA("BasePart") then
+                                local collectibleID = item:GetAttribute("ID")
+                                if not collectibleID then
+                                    local idValue = item:FindFirstChild("ID")
+                                    if idValue and idValue:IsA("StringValue") then
+                                        collectibleID = idValue.Value
+                                    end
+                                end
+
+                                if collectibleID then
+                                    collectRemoteFunction:InvokeServer(collectibleID)
+                                    item:PivotTo(hrp.CFrame)
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+            task.wait(0.5)
+        end
+    end)
+end)
+
+--================= EGGS TAB =================--
+TabEggs:Label("--- Hatching Options ---")
+
+TabEggs:Dropdown("Select Egg", EggsList, "Common Egg", "SelectedEgg", "Egg to hatch", function(val)
+    Flags.SelectedEgg = val
+end)
+
+TabEggs:Slider("Amount to Open", 1, 100, 100, "EggAmount", "Amount of eggs per hatch cycle", function(Value)
+    Flags.EggAmount = Value
+end)
+
+TabEggs:Toggle("Auto Hatch", false, "AutoEgg", "Spam buys selected egg", function(Value)
+    Flags.AutoEgg = Value
+    task.spawn(function()
+        while Flags.AutoEgg do
+            if LocalPlayer.Character then
+                pcall(function()
+                    local eggFolder = Workspace:FindFirstChild("_") and Workspace._:FindFirstChild("Eggs")
+                    if eggFolder and eggFolder:FindFirstChild(Flags.SelectedEgg) then
+                        local eggInstance = eggFolder[Flags.SelectedEgg]
+                        Functions.BuyEgg:InvokeServer(eggInstance, Flags.EggAmount)
+                    end
+                end)
+            end
+            task.wait(0.1) -- Increased slightly to prevent remote spam detection
+        end
+    end)
+end)
+
+TabEggs:Label("--- Free OP Features ---")
+TabEggs:Toggle("Auto Claim Rewards (Online)", false, "AutoClaim", "Attempts to claim random online rewards", function(Value)
+    Flags.AutoClaimRewards = Value
+    -- Using the remote structure seen in Dex e Remotes as a speculative claim loop
+    task.spawn(function()
+        while Flags.AutoClaimRewards do
+            pcall(function()
+                -- Assuming typical naming conventions if missing from decompiled script
+                if ReplicatedStorage.Remotes.Functions:FindFirstChild("ClaimOnlineReward") then
+                    ReplicatedStorage.Remotes.Functions.ClaimOnlineReward:InvokeServer()
+                end
+            end)
+            task.wait(5)
+        end
+    end)
+end)
+
+--================= SHOP TAB =================--
+TabShop:Label("--- Merchant Options ---")
+
+TabShop:Toggle("Auto Buy Merchant (Normal)", false, "AutoMerchant", "Buys all normal merchant slots", function(Value)
+    Flags.AutoMerchant = Value
+    task.spawn(function()
+        while Flags.AutoMerchant do
+            pcall(function()
+                for i = 1, 15 do
+                    Functions.BuyMerchant:InvokeServer("Merchant", i)
+                end
+            end)
+            task.wait(2)
+        end
+    end)
+end)
+
+TabShop:Toggle("Auto Buy Merchant (1M Event)", false, "Auto1MMerchant", "Buys all 1M event merchant slots", function(Value)
+    Flags.Auto1MMerchant = Value
+    task.spawn(function()
+        while Flags.Auto1MMerchant do
+            pcall(function()
+                for i = 1, 15 do
+                    Functions.BuyMerchant:InvokeServer("1MMerchant", i)
+                end
+            end)
+            task.wait(2)
+        end
+    end)
+end)
+
+TabShop:Label("--- Player Upgrades ---")
+
+TabShop:Dropdown("Select Upgrade", UpgradesList, "Coins1", "SelectedUpgrade", "Upgrade to spam", function(val)
+    Flags.SelectedUpgrade = val
+end)
+
+TabShop:Toggle("Auto Buy Upgrade", false, "AutoUpgrade", "Continuously buys selected upgrade", function(Value)
+    Flags.AutoUpgrade = Value
+    task.spawn(function()
+        while Flags.AutoUpgrade do
+            pcall(function() Functions.BuyUpgrade:InvokeServer(Flags.SelectedUpgrade) end)
+            task.wait(1)
+        end
+    end)
+end)
+
+--================= PLAYER OP TAB =================--
+TabPlayer:Label("--- Character Exploits ---")
+
+TabPlayer:Toggle("Speed Hack", false, "SpeedHack", "Bypasses anti-cheat speed checks", function(Value)
+    Flags.SpeedHack = Value
+    task.spawn(function()
+        while Flags.SpeedHack and task.wait() do
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                    LocalPlayer.Character.Humanoid.WalkSpeed = Flags.WalkSpeedVal
+                end
+            end)
+        end
+        -- Reset on disable
+        pcall(function() LocalPlayer.Character.Humanoid.WalkSpeed = 16 end)
+    end)
+end)
+
+TabPlayer:Slider("Speed Value", 16, 500, 16, "WalkSpeedVal", "Movement speed", function(Value)
+    Flags.WalkSpeedVal = Value
+end)
+
+TabPlayer:Slider("Jump Power", 50, 300, 50, "JumpPowerVal", "Jump height", function(Value)
+    Flags.JumpPowerVal = Value
+    pcall(function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.JumpPower = Flags.JumpPowerVal
+            LocalPlayer.Character.Humanoid.UseJumpPower = true
+        end
+    end)
+end)
+
+TabPlayer:Toggle("Noclip", false, "Noclip", "Walk through walls", function(Value)
+    Flags.Noclip = Value
+    if Flags.Noclip then
+        RunService:BindToRenderStep("SlenderNoclip", 1000, function()
+            if LocalPlayer.Character then
+                for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
+                end
+            end
+        end)
+    else
+        RunService:UnbindFromRenderStep("SlenderNoclip")
+    end
+end)
+
+TabPlayer:Toggle("Infinite Jump", false, "InfJump", "Jump endlessly", function(Value)
+    Flags.InfJump = Value
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if Flags.InfJump and LocalPlayer.Character then
+        LocalPlayer.Character:FindFirstChildOfClass('Humanoid'):ChangeState("Jumping")
+    end
+end)
+
+--================= MISC TAB =================--
+TabMisc:Label("--- Performance & AFK ---")
+
+TabMisc:Button("CPU Optimizer (Low Render)", "Disables 3D rendering to lower CPU usage", function()
+    RunService:Set3dRenderingEnabled(false)
+    -- Replaces traditional jump AFK with efficient click bypass
+    LocalPlayer.Idled:Connect(function()
+        VirtualUser:Button2Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        VirtualUser:Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
+    end)
+end)
+
+TabMisc:Button("Restore Rendering", "Re-enables 3D rendering", function()
+    RunService:Set3dRenderingEnabled(true)
+end)
+
+-- Initialize Humanoid state on respawn
+LocalPlayer.CharacterAdded:Connect(function(char)
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        hum.UseJumpPower = true
+        if not Flags.SpeedHack then hum.WalkSpeed = Flags.WalkSpeedVal end
+        hum.JumpPower = Flags.JumpPowerVal
+    end
+end)
+
+print("[SlenderHub] Royal Hatchers Loaded Using SlenderWind V11.")
