@@ -180,7 +180,7 @@ if isSaved and TARGET_SCRIPT_URL then
 end
 
 --//==============================[ SLENDERWIND UI ]==============================//--
-local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
 
 local Window = SlenderWind.Window({
     Name = "Slender Hub | Universal",
