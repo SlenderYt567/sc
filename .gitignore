@@ -45,7 +45,7 @@ local GAMES_MAP = {
     [75992362647444] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Tap%20simulator",
     [4924922222] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Brookhaven%20script",
     [93787311916283] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Horse%20Race",
-    [120405647949186] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Horse%20Race"
+    [120405647949186] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Royal%20Hatchers%20Script"
 }
 
 local TARGET_SCRIPT_URL = GAMES_MAP[CurrentPlaceId]
