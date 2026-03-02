@@ -18,7 +18,7 @@ local AccessLevel = getgenv().SlenderHubAccessLevel or "Free"
 local IsPremium = (AccessLevel == "Premium")
 
 --// 3. Load SlenderWind V10 (Internal Standard)
-local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
 
 --// 4. Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
