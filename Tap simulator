@@ -11,7 +11,7 @@ if getgenv().SlenderHubLoaded then
 end
 getgenv().SlenderHubLoaded = true
 
-local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWindV5.lua"))()
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
 
 local AccessLevel = getgenv().SlenderHubAccessLevel or "Free" 
 local IsPremium = (AccessLevel == "Premium")
