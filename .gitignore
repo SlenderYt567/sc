@@ -42,7 +42,7 @@ local selectedMode = "Triple"
 local EggList = {
 	"Basic Egg", "Rare Egg", "Farm Egg", "Desert Egg", 
 	"Arctic Egg", "Space Egg", "Forest Egg", "Castle Egg", 
-	"Jungle Egg", "Candy Egg", "Angelic Egg", "Brainrot Egg", "Vocanic Egg"
+	"Jungle Egg", "Candy Egg", "Angelic Egg", "Brainrot Egg", "Volcanic Egg"
 }
 
 -- =================[ FUNCTIONS ]================= --
