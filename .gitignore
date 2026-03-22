@@ -19,7 +19,9 @@ local Window = Rayfield:CreateWindow({
 
 local Tabs = {
 	Farm = Window:CreateTab("Auto Farm", 4483362458),
-	Eggs = Window:CreateTab("Auto Hatch", 4483362458)
+	Eggs = Window:CreateTab("Auto Hatch", 4483362458),
+	Limiteds = Window:CreateTab("Limited Pets", 4483362458),
+	Exploits = Window:CreateTab("Exploits & Codes", 4483362458)
 }
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -42,8 +44,12 @@ local selectedMode = "Triple"
 local EggList = {
 	"Basic Egg", "Rare Egg", "Farm Egg", "Desert Egg", 
 	"Arctic Egg", "Space Egg", "Forest Egg", "Castle Egg", 
-	"Jungle Egg", "Candy Egg", "Angelic Egg", "Brainrot Egg", "Volcanic Egg"
+	"Jungle Egg", "Candy Egg", "Angelic Egg", "Brainrot Egg"
 }
+
+getgenv().AutoSnipeLimiteds = false
+getgenv().AutoRedeemCodes = false
+local codesList = {"RELEASE", "UPDATE1", "FREEPET", "FREELUCK", "GEMS"}
 
 -- =================[ FUNCTIONS ]================= --
 local function AutoClicker()
@@ -63,7 +69,7 @@ local function AutoHatcher()
 			pcall(function()
 				Functions:WaitForChild("Hatch"):InvokeServer(selectedEgg, selectedMode)
 			end)
-			task.wait(0) -- Delay to handle remote yielding and prevent freezing
+			task.wait(0.1) -- Delay to handle remote yielding and prevent freezing
 		end
 	end)
 end
@@ -76,7 +82,7 @@ local function AutoCollectObjects()
 				local hrp = char and char:FindFirstChild("HumanoidRootPart")
 				
 				if hrp then
-					-- Collectables generally spawn inside folders starting with Collectables_ 
+					-- 1. Collectables generally spawn inside folders starting with Collectables_ 
 					-- and have an attribute OwnerUserId that matches the player.
 					for _, folder in pairs(workspace:GetChildren()) do
 						if string.match(folder.Name, "^Collectables_") then
@@ -91,9 +97,66 @@ local function AutoCollectObjects()
 							end
 						end
 					end
+					
+					-- 2. New Collectables (Diamonds/Gems) check based on Dex Dump
+					local scriptedFolder = workspace:FindFirstChild("Scripted")
+					if scriptedFolder then
+						local collectablesFolder = scriptedFolder:FindFirstChild("Collectables")
+						if collectablesFolder then
+							for _, obj in pairs(collectablesFolder:GetChildren()) do
+								-- We check if it is a model containing a BasePart or a BasePart itself
+								local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+								if part then
+									firetouchinterest(hrp, part, 0)
+									firetouchinterest(hrp, part, 1)
+								end
+							end
+						end
+					end
 				end
 			end)
 			task.wait(0.2)
+		end
+	end)
+end
+
+local function AutoSniper()
+	task.spawn(function()
+		while getgenv().AutoSnipeLimiteds do
+			pcall(function()
+				local data = Functions:WaitForChild("GetLimitedPetsData"):InvokeServer()
+				if data then
+					for petId, petInfo in pairs(data) do
+						-- If there is stock left, attempt to buy immediately
+						if petInfo.Stock and petInfo.Stock > 0 then
+							Functions:WaitForChild("BuyLimitedPet"):InvokeServer(petId)
+						end
+					end
+				end
+			end)
+			task.wait(0.5) -- Check every half second
+		end
+	end)
+end
+
+local function CodeRedeemerLoop()
+	task.spawn(function()
+		while getgenv().AutoRedeemCodes do
+			pcall(function()
+				-- Testing common remote names since it wasn't statically named in Dex e REMOTES
+				local codeRemote = Functions:FindFirstChild("RedeemCode") or Events:FindFirstChild("RedeemCode")
+				if codeRemote then
+					for _, code in ipairs(codesList) do
+						if codeRemote:IsA("RemoteFunction") then
+							codeRemote:InvokeServer(string.lower(code))
+						else
+							codeRemote:FireServer(string.lower(code))
+						end
+						task.wait(1)
+					end
+				end
+			end)
+			task.wait(60) -- Verify once per minute
 		end
 	end)
 end
@@ -158,6 +221,104 @@ Tabs.Eggs:CreateToggle({
 	end,
 })
 
+-- =================[ LIMITED PETS ]================= --
+Tabs.Limiteds:CreateToggle({
+	Name = "Auto Snipe Limited Pets",
+	CurrentValue = false,
+	Flag = "AutoSnipeToggle",
+	Callback = function(Value)
+		getgenv().AutoSnipeLimiteds = Value
+		if Value then
+			AutoSniper()
+		end
+	end,
+})
+
+-- =================[ EXPLOITS / BYPASSES ]================= --
+
+local GamePassesList = {
+	"AutoHatch", "FastHatch", "TripleHatch", "OctupleHatch", 
+	"AllGamePasses", "+500 Storage", "+1000 Storage", "x2 Gems", "x2 Coins"
+}
+
+Tabs.Exploits:CreateButton({
+	Name = "Unlock Game Passes & Event Upgrades (Spoof)",
+	Callback = function()
+		pcall(function()
+			local ReplicaController
+			for _, v in pairs(getgc(true)) do
+				if type(v) == "table" and rawget(v, "ReplicaOfClassCreated") then
+					ReplicaController = v
+				end
+			end
+			
+			if ReplicaController then
+				local function InjectSpoofs(replica)
+					if replica.Class == "PlayerData" and type(replica.Data) == "table" then
+						-- 1. Game Passes
+						if not replica.Data.Passes then replica.Data.Passes = {} end
+						for _, passName in pairs(GamePassesList) do
+							if not table.find(replica.Data.Passes, passName) then
+								table.insert(replica.Data.Passes, passName)
+							end
+						end
+						
+						-- 2. Upgrade Trees (Easter, Galaxy, Spawn, Summer, Collectable)
+						local upgradeTrees = {"EasterUpgrades", "GalaxyUpgrades", "SpawnUpgrades", "SummerUpgrades", "CollectableUpgrades"}
+						for _, treeName in ipairs(upgradeTrees) do
+							if not replica.Data[treeName] then
+								replica.Data[treeName] = {}
+							end
+							-- Inject OP values
+							replica.Data[treeName].MoreStorage = 999
+							replica.Data[treeName].PetEquip = 99
+							replica.Data[treeName].CollectRadius = 9999
+						end
+					end
+				end
+
+				-- Inject into existing PlayerData replicas
+				if ReplicaController._replicas then
+					for _, replica in pairs(ReplicaController._replicas) do
+						InjectSpoofs(replica)
+					end
+				end
+				
+				-- Hook for future updates
+				ReplicaController.ReplicaOfClassCreated("PlayerData", function(replica)
+					replica:ListenToChange({"Passes"}, function()
+						InjectSpoofs(replica)
+					end)
+				end)
+				
+				Rayfield:Notify({
+					Title = "Success",
+					Content = "Passes & Event Upgrades successfully spoofed!",
+					Duration = 5
+				})
+			else
+				Rayfield:Notify({
+					Title = "Error",
+					Content = "ReplicaController not found via GC",
+					Duration = 5
+				})
+			end
+		end)
+	end,
+})
+
+Tabs.Exploits:CreateToggle({
+	Name = "Auto Redeem Custom Codes",
+	CurrentValue = false,
+	Flag = "AutoCodesToggle",
+	Callback = function(Value)
+		getgenv().AutoRedeemCodes = Value
+		if Value then
+			CodeRedeemerLoop()
+		end
+	end,
+})
+
 -- =================[ ANTI AFK ]================= --
 Players.LocalPlayer.Idled:Connect(function()
 	VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
@@ -166,3 +327,4 @@ Players.LocalPlayer.Idled:Connect(function()
 end)
 
 Rayfield:LoadConfiguration()
+
