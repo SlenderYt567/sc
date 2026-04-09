@@ -31,10 +31,9 @@ local Functions = Remotes:WaitForChild("Functions")
 --// 4. Game Data
 local EggsList = {
     "Common Egg", "Spotted Egg", "Rocky Egg", "Mushroom Egg", "Leaf Egg",
-    "Arctic Egg", "Icy Egg", "Release Egg", "Lovely Egg", "Valentines Egg",
-    "100K Egg", "Desert Egg", "Fiery Egg", "Magma Egg", "500K Egg",
-    "Crystal Egg", "Floral Egg", "Mystical Egg", "Celebration Egg", "1M Egg", 
-    "Season 1 Egg", "Light Egg", "Bounty Pets", "Exclusive Pets"
+    "Arctic Egg", "Icy Egg",  "Desert Egg", "Fiery Egg", "Magma Egg", "Crystal Egg",
+    "Floral Egg", "Mystical Egg", "Celebration Egg", "Season 1 Egg", "Light Egg"
+    "Easter Egg", "Coral Egg"
 }
 
 local UpgradesList = {
