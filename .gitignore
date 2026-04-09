@@ -13,8 +13,7 @@ local LoaderConfig = {
 
 --// 2. Game Mapping (PlaceId -> Module Name)
 local GameModules = {
-    [120405647949186] = "RoyalHatchers_Module.lua", -- Placeholder for Royal Hatchers
-    [987654321] = "RebirthHatchers_Module.lua" -- Placeholder for Rebirth Hatchers
+    [120405647949186] = "RoyalHatchers_Module.lua" -- Royal Hatchers
 }
 
 --// 3. UI Singleton
@@ -60,19 +59,31 @@ end)
 --// 7. Dynamic Module Loading
 local function LoadModule(moduleName)
     print("[SlenderHub] Loading module: " .. moduleName)
-    -- In a real scenario, this would be game:HttpGet(LoaderConfig.ModulesPath .. moduleName)
-    -- Here we wrap it in a pcall
-    local moduleSuccess, moduleFunc = pcall(function()
-        -- For testing purposes, we assume modules are local or have a specific loading method
-        -- For now, we'll just print that it would load here.
-        return true
+    
+    local url = LoaderConfig.ModulesPath .. moduleName
+    local moduleContent = nil
+    
+    local fetchSuccess, result = pcall(function()
+        return game:HttpGet(url)
     end)
     
-    if moduleSuccess then
-        print("[SlenderHub] " .. moduleName .. " initialized successfully.")
+    if fetchSuccess and result then
+        local moduleFunc, err = loadstring(result)
+        if moduleFunc then
+            local moduleTable = moduleFunc()
+            if moduleTable and type(moduleTable.Init) == "function" then
+                moduleTable.Init(Window)
+                return true
+            else
+                warn("[SlenderHub] Formato do módulo inválido: Falta função Init")
+            end
+        else
+            warn("[SlenderHub] Falha ao compilar módulo: " .. tostring(err))
+        end
     else
-        warn("[SlenderHub] Failed to load module: " .. tostring(moduleFunc))
+        warn("[SlenderHub] Falha ao baixar módulo: " .. tostring(result))
     end
+    return false
 end
 
 -- Detection Logic
@@ -81,9 +92,17 @@ local targetModule = GameModules[currentPlaceId]
 
 if targetModule then
     local TabLoading = Window:Tab("Loading...")
-    TabLoading:Label("Detectando jogo: " .. targetModule)
-    task.wait(1)
-    LoadModule(targetModule)
+    TabLoading:Label("Detectando jogo...")
+    TabLoading:Label("Carregando módulos: " .. targetModule)
+    
+    task.spawn(function()
+        local success = LoadModule(targetModule)
+        if success then
+            TabLoading:Label("[SUCESSO] Módulos carregados!")
+        else
+            TabLoading:Label("[ERRO] Falha ao carregar script remoto.")
+        end
+    end)
 else
     local TabNone = Window:Tab("Not Supported")
     TabNone:Label("Jogo não suportado pelo SlenderHub.")
