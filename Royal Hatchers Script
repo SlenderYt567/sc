@@ -30,11 +30,11 @@ local Functions = Remotes:WaitForChild("Functions")
 
 --// 4. Game Data
 local EggsList = {
-   "Common Egg", "Spotted Egg", "Rocky Egg", "Mushroom Egg", "Leaf Egg",
+    "Common Egg", "Spotted Egg", "Rocky Egg", "Mushroom Egg", "Leaf Egg",
     "Arctic Egg", "Icy Egg", "Release Egg", "Lovely Egg", "Valentines Egg",
     "100K Egg", "Desert Egg", "Fiery Egg", "Magma Egg", "500K Egg",
     "Crystal Egg", "Floral Egg", "Mystical Egg", "Celebration Egg", "1M Egg", 
-    "Season 1 Egg", "Light Egg", "Easter Egg", "Coral Egg"
+    "Season 1 Egg", "Light Egg", "Bounty Pets", "Exclusive Pets"
 }
 
 local UpgradesList = {
@@ -97,7 +97,7 @@ TabFarming:Toggle("Auto Click", false, "AutoClick", "Automatically clicks for yo
             if LocalPlayer.Character then
                 pcall(function() Functions.Click:InvokeServer() end)
             end
-            task.wait(0)
+            task.wait(0.05)
         end
     end)
 end)
@@ -162,7 +162,7 @@ TabEggs:Toggle("Auto Hatch", false, "AutoEgg", "Spam buys selected egg", functio
                     end
                 end)
             end
-            task.wait(0) -- Increased slightly to prevent remote spam detection
+            task.wait(0.1) -- Increased slightly to prevent remote spam detection
         end
     end)
 end)
@@ -210,7 +210,7 @@ TabShop:Toggle("Auto Buy Merchant (1M Event)", false, "Auto1MMerchant", "Buys al
                     Functions.BuyMerchant:InvokeServer("1MMerchant", i)
                 end
             end)
-            task.wait(0.5)
+            task.wait(2)
         end
     end)
 end)
