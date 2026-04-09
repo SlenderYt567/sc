@@ -32,8 +32,8 @@ local Functions = Remotes:WaitForChild("Functions")
 local EggsList = {
     "Common Egg", "Spotted Egg", "Rocky Egg", "Mushroom Egg", "Leaf Egg",
     "Arctic Egg", "Icy Egg", "Release Egg", "Lovely Egg", "Valentines Egg",
-    "100K Egg", "Desert Egg", "Fiery Egg", "Magma Egg", "500K Egg",
-    "Crystal Egg", "Floral Egg", "Mystical Egg", "Celebration Egg", "1M Egg", 
+    "100K Egg", "Desert Egg", "Fiery Egg", "Magma Egg", "500K Eg",
+    "Crystal Egg", "Floral Egg", "Mystical Egg", "Coral Egg", "Easter Egg", 
     "Season 1 Egg", "Light Egg", "Bounty Pets", "Exclusive Pets"
 }
 
@@ -97,7 +97,7 @@ TabFarming:Toggle("Auto Click", false, "AutoClick", "Automatically clicks for yo
             if LocalPlayer.Character then
                 pcall(function() Functions.Click:InvokeServer() end)
             end
-            task.wait(0.05)
+            task.wait(0)
         end
     end)
 end)
@@ -162,7 +162,7 @@ TabEggs:Toggle("Auto Hatch", false, "AutoEgg", "Spam buys selected egg", functio
                     end
                 end)
             end
-            task.wait(0.1) -- Increased slightly to prevent remote spam detection
+            task.wait(0) -- Increased slightly to prevent remote spam detection
         end
     end)
 end)
