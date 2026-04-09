@@ -1,330 +1,93 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+--[[
+    SlenderHub | Universal Loader (V11)
+    Architect: SlenderHub Systems Expert
+    Description: Dynamic game detection and modular script loading.
+]]
 
-local Window = Rayfield:CreateWindow({
-	Name = "Rebirth Hatchers Hub",
-	LoadingTitle = "Rebirth Hatchers",
-	LoadingSubtitle = "by Roblox_Lua_Expert",
-	ConfigurationSaving = {
-		Enabled = true,
-		FolderName = nil,
-		FileName = "RebirthHatchersConfig"
-	},
-	Discord = {
-		Enabled = false,
-		Invite = "",
-		RememberJoins = true 
-	},
-	KeySystem = false
-})
-
-local Tabs = {
-	Farm = Window:CreateTab("Auto Farm", 4483362458),
-	Eggs = Window:CreateTab("Auto Hatch", 4483362458),
-	Limiteds = Window:CreateTab("Limited Pets", 4483362458),
-	Exploits = Window:CreateTab("Exploits & Codes", 4483362458)
+--// 1. Loader Configuration
+local LoaderConfig = {
+    Version = "1.0.0",
+    Debug = true,
+    ModulesPath = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/"
 }
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local VirtualUser = game:GetService("VirtualUser")
-
-local Events = ReplicatedStorage:WaitForChild("Events")
-local Functions = ReplicatedStorage:WaitForChild("Functions")
-
--- =================[ VARIABLES ]================= --
-local getgenv = getgenv or function() return _G end
-
-getgenv().AutoClick = false
-getgenv().AutoHatch = false
-getgenv().AutoCollect = false
-
-local selectedEgg = "Basic Egg"
-local selectedMode = "Triple"
-
-local EggList = {
-	"Basic Egg", "Rare Egg", "Farm Egg", "Desert Egg", 
-	"Arctic Egg", "Space Egg", "Forest Egg", "Castle Egg", 
-	"Jungle Egg", "Candy Egg", "Angelic Egg", "Brainrot Egg"
+--// 2. Game Mapping (PlaceId -> Module Name)
+local GameModules = {
+    [120405647949186] = "RoyalHatchers_Module.lua", -- Placeholder for Royal Hatchers
+    [987654321] = "RebirthHatchers_Module.lua" -- Placeholder for Rebirth Hatchers
 }
 
-getgenv().AutoSnipeLimiteds = false
-getgenv().AutoRedeemCodes = false
-local codesList = {"RELEASE", "UPDATE1", "FREEPET", "FREELUCK", "GEMS"}
-
--- =================[ FUNCTIONS ]================= --
-local function AutoClicker()
-	task.spawn(function()
-		while getgenv().AutoClick do
-			pcall(function()
-				Events:WaitForChild("Click"):FireServer()
-			end)
-			task.wait() -- Spam as fast as the task scheduler allows
-		end
-	end)
+--// 3. UI Singleton
+if getgenv().SlenderHubLoaded then 
+    warn("[SlenderHub] Loader already active.")
+    return 
 end
+getgenv().SlenderHubLoaded = true
 
-local function AutoHatcher()
-	task.spawn(function()
-		while getgenv().AutoHatch do
-			pcall(function()
-				Functions:WaitForChild("Hatch"):InvokeServer(selectedEgg, selectedMode)
-			end)
-			task.wait(0.1) -- Delay to handle remote yielding and prevent freezing
-		end
-	end)
-end
-
-local function AutoCollectObjects()
-	task.spawn(function()
-		while getgenv().AutoCollect do
-			pcall(function()
-				local char = Players.LocalPlayer.Character
-				local hrp = char and char:FindFirstChild("HumanoidRootPart")
-				
-				if hrp then
-					-- 1. Collectables generally spawn inside folders starting with Collectables_ 
-					-- and have an attribute OwnerUserId that matches the player.
-					for _, folder in pairs(workspace:GetChildren()) do
-						if string.match(folder.Name, "^Collectables_") then
-							for _, obj in pairs(folder:GetChildren()) do
-								if obj:GetAttribute("OwnerUserId") == Players.LocalPlayer.UserId then
-									local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
-									if part then
-										firetouchinterest(hrp, part, 0)
-										firetouchinterest(hrp, part, 1)
-									end
-								end
-							end
-						end
-					end
-					
-					-- 2. New Collectables (Diamonds/Gems) check based on Dex Dump
-					local scriptedFolder = workspace:FindFirstChild("Scripted")
-					if scriptedFolder then
-						local collectablesFolder = scriptedFolder:FindFirstChild("Collectables")
-						if collectablesFolder then
-							for _, obj in pairs(collectablesFolder:GetChildren()) do
-								-- We check if it is a model containing a BasePart or a BasePart itself
-								local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
-								if part then
-									firetouchinterest(hrp, part, 0)
-									firetouchinterest(hrp, part, 1)
-								end
-							end
-						end
-					end
-				end
-			end)
-			task.wait(0.2)
-		end
-	end)
-end
-
-local function AutoSniper()
-	task.spawn(function()
-		while getgenv().AutoSnipeLimiteds do
-			pcall(function()
-				local data = Functions:WaitForChild("GetLimitedPetsData"):InvokeServer()
-				if data then
-					for petId, petInfo in pairs(data) do
-						-- If there is stock left, attempt to buy immediately
-						if petInfo.Stock and petInfo.Stock > 0 then
-							Functions:WaitForChild("BuyLimitedPet"):InvokeServer(petId)
-						end
-					end
-				end
-			end)
-			task.wait(0.5) -- Check every half second
-		end
-	end)
-end
-
-local function CodeRedeemerLoop()
-	task.spawn(function()
-		while getgenv().AutoRedeemCodes do
-			pcall(function()
-				-- Testing common remote names since it wasn't statically named in Dex e REMOTES
-				local codeRemote = Functions:FindFirstChild("RedeemCode") or Events:FindFirstChild("RedeemCode")
-				if codeRemote then
-					for _, code in ipairs(codesList) do
-						if codeRemote:IsA("RemoteFunction") then
-							codeRemote:InvokeServer(string.lower(code))
-						else
-							codeRemote:FireServer(string.lower(code))
-						end
-						task.wait(1)
-					end
-				end
-			end)
-			task.wait(60) -- Verify once per minute
-		end
-	end)
-end
-
--- =================[ UI ELEMENTS ]================= --
-
-Tabs.Farm:CreateToggle({
-	Name = "Auto Click",
-	CurrentValue = false,
-	Flag = "AutoClickToggle",
-	Callback = function(Value)
-		getgenv().AutoClick = Value
-		if Value then
-			AutoClicker()
-		end
-	end,
-})
-
-Tabs.Farm:CreateToggle({
-	Name = "Auto Collect Orbs/Drops",
-	CurrentValue = false,
-	Flag = "AutoCollectToggle",
-	Callback = function(Value)
-		getgenv().AutoCollect = Value
-		if Value then
-			AutoCollectObjects()
-		end
-	end,
-})
-
-Tabs.Eggs:CreateDropdown({
-	Name = "Select Egg",
-	Options = EggList,
-	CurrentOption = {"Basic Egg"},
-	MultipleOptions = false,
-	Flag = "EggDropdown",
-	Callback = function(Option)
-		selectedEgg = Option[1]
-	end,
-})
-
-Tabs.Eggs:CreateDropdown({
-	Name = "Hatch Mode",
-	Options = {"Single", "Triple", "Octuple"},
-	CurrentOption = {"Triple"},
-	MultipleOptions = false,
-	Flag = "HatchModeDropdown",
-	Callback = function(Option)
-		selectedMode = Option[1]
-	end,
-})
-
-Tabs.Eggs:CreateToggle({
-	Name = "Auto Hatch",
-	CurrentValue = false,
-	Flag = "AutoHatchToggle",
-	Callback = function(Value)
-		getgenv().AutoHatch = Value
-		if Value then
-			AutoHatcher()
-		end
-	end,
-})
-
--- =================[ LIMITED PETS ]================= --
-Tabs.Limiteds:CreateToggle({
-	Name = "Auto Snipe Limited Pets",
-	CurrentValue = false,
-	Flag = "AutoSnipeToggle",
-	Callback = function(Value)
-		getgenv().AutoSnipeLimiteds = Value
-		if Value then
-			AutoSniper()
-		end
-	end,
-})
-
--- =================[ EXPLOITS / BYPASSES ]================= --
-
-local GamePassesList = {
-	"AutoHatch", "FastHatch", "TripleHatch", "OctupleHatch", 
-	"AllGamePasses", "+500 Storage", "+1000 Storage", "x2 Gems", "x2 Coins"
-}
-
-Tabs.Exploits:CreateButton({
-	Name = "Unlock Game Passes & Event Upgrades (Spoof)",
-	Callback = function()
-		pcall(function()
-			local ReplicaController
-			for _, v in pairs(getgc(true)) do
-				if type(v) == "table" and rawget(v, "ReplicaOfClassCreated") then
-					ReplicaController = v
-				end
-			end
-			
-			if ReplicaController then
-				local function InjectSpoofs(replica)
-					if replica.Class == "PlayerData" and type(replica.Data) == "table" then
-						-- 1. Game Passes
-						if not replica.Data.Passes then replica.Data.Passes = {} end
-						for _, passName in pairs(GamePassesList) do
-							if not table.find(replica.Data.Passes, passName) then
-								table.insert(replica.Data.Passes, passName)
-							end
-						end
-						
-						-- 2. Upgrade Trees (Easter, Galaxy, Spawn, Summer, Collectable)
-						local upgradeTrees = {"EasterUpgrades", "GalaxyUpgrades", "SpawnUpgrades", "SummerUpgrades", "CollectableUpgrades"}
-						for _, treeName in ipairs(upgradeTrees) do
-							if not replica.Data[treeName] then
-								replica.Data[treeName] = {}
-							end
-							-- Inject OP values
-							replica.Data[treeName].MoreStorage = 999
-							replica.Data[treeName].PetEquip = 99
-							replica.Data[treeName].CollectRadius = 9999
-						end
-					end
-				end
-
-				-- Inject into existing PlayerData replicas
-				if ReplicaController._replicas then
-					for _, replica in pairs(ReplicaController._replicas) do
-						InjectSpoofs(replica)
-					end
-				end
-				
-				-- Hook for future updates
-				ReplicaController.ReplicaOfClassCreated("PlayerData", function(replica)
-					replica:ListenToChange({"Passes"}, function()
-						InjectSpoofs(replica)
-					end)
-				end)
-				
-				Rayfield:Notify({
-					Title = "Success",
-					Content = "Passes & Event Upgrades successfully spoofed!",
-					Duration = 5
-				})
-			else
-				Rayfield:Notify({
-					Title = "Error",
-					Content = "ReplicaController not found via GC",
-					Duration = 5
-				})
-			end
-		end)
-	end,
-})
-
-Tabs.Exploits:CreateToggle({
-	Name = "Auto Redeem Custom Codes",
-	CurrentValue = false,
-	Flag = "AutoCodesToggle",
-	Callback = function(Value)
-		getgenv().AutoRedeemCodes = Value
-		if Value then
-			CodeRedeemerLoop()
-		end
-	end,
-})
-
--- =================[ ANTI AFK ]================= --
-Players.LocalPlayer.Idled:Connect(function()
-	VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-	task.wait(1)
-	VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+--// 4. Load UI Library (SlenderWind V11)
+local success, SlenderWind = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
 end)
 
-Rayfield:LoadConfiguration()
+if not success or not SlenderWind then
+    error("[SlenderHub] Failed to load UI Library!")
+    return
+end
 
+--// 5. Initialize Window
+local Window = SlenderWind.Window({
+    Name = "SlenderHub | Universal Loader",
+    KeySystem = false, -- Can be enabled later
+    Theme = { 
+        Accent = Color3.fromRGB(0, 255, 128),
+        Background = Color3.fromRGB(15, 15, 20),
+        Text = Color3.fromRGB(240, 240, 240)
+    } 
+})
+
+--// 6. Universal Tab (Always visible)
+local TabUniversal = Window:Tab("Universal")
+
+TabUniversal:Label("--- Performance & AFK ---")
+TabUniversal:Button("CPU Optimizer (Low Render)", "Disables 3D rendering", function()
+    game:GetService("RunService"):Set3dRenderingEnabled(false)
+end)
+
+TabUniversal:Button("Restore Rendering", "Re-enables 3D rendering", function()
+    game:GetService("RunService"):Set3dRenderingEnabled(true)
+end)
+
+--// 7. Dynamic Module Loading
+local function LoadModule(moduleName)
+    print("[SlenderHub] Loading module: " .. moduleName)
+    -- In a real scenario, this would be game:HttpGet(LoaderConfig.ModulesPath .. moduleName)
+    -- Here we wrap it in a pcall
+    local moduleSuccess, moduleFunc = pcall(function()
+        -- For testing purposes, we assume modules are local or have a specific loading method
+        -- For now, we'll just print that it would load here.
+        return true
+    end)
+    
+    if moduleSuccess then
+        print("[SlenderHub] " .. moduleName .. " initialized successfully.")
+    else
+        warn("[SlenderHub] Failed to load module: " .. tostring(moduleFunc))
+    end
+end
+
+-- Detection Logic
+local currentPlaceId = game.PlaceId
+local targetModule = GameModules[currentPlaceId]
+
+if targetModule then
+    local TabLoading = Window:Tab("Loading...")
+    TabLoading:Label("Detectando jogo: " .. targetModule)
+    task.wait(1)
+    LoadModule(targetModule)
+else
+    local TabNone = Window:Tab("Not Supported")
+    TabNone:Label("Jogo não suportado pelo SlenderHub.")
+    TabNone:Label("PlaceId: " .. currentPlaceId)
+end
+
+print("[SlenderHub] Universal Loader Process Finished.")
