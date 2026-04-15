@@ -1,0 +1,802 @@
+Luau é a linguagem de script que os criadores usam no Roblox Studio. É uma linguagem de script embutida rápida, pequena, segura e tipada gradualmente, derivada do Lua 5.1.
+
+Contribuir com seus scripts Luau para o treinamento de IA pode ajudar a aprimorar ferramentas de IA focadas em Luau no Studio. Para mais informações, veja Capacitar a criação de Luau.
+
+Suporte no Studio
+O Editor de Script no Studio suporta Luau com autocompletar, realce de sintaxe, linting estático, verificação de tipos e análise de scripts. Ele também exibe documentação e assinaturas de funções para membros do Roblox Engine API.
+
+Tipos
+Luau inclui os seguintes tipos de dados:
+
+Nil representa não-existência ou nada. É diferente de qualquer outro valor ou tipo de dado.
+Booleanos, ou bool, têm um valor de false ou true.
+Números, ou double, representam números de ponto flutuante de dupla precisão (64 bits).
+Strings são sequências de caracteres, como letras, números e símbolos.
+Tabelas são arrays ou dicionários de qualquer valor, exceto nil.
+Enums são listas fixas de itens.
+Luau é tipado dinamicamente por padrão. Variáveis, parâmetros de função e valores de retorno podem ser de qualquer tipo de dado. Isso ajuda você a escrever o código mais rapidamente, pois não precisa fornecer tipos para cada peça de dado. Você ainda pode declarar tipos explícitos para variáveis em Luau e habilitar verificação de tipos rígida para tornar problemas de tipo óbvios e fáceis de localizar.
+
+Estruturas de dados
+Você também pode implementar as seguintes estruturas de dados usando tipos de dados primitivos:
+
+Pilhas são coleções de itens do tipo Último a Entrar é o Primeiro a Sair que você pode implementar usando tabelas.
+Filas são coleções de itens do tipo Primeiro a Entrar é o Primeiro a Sair que você pode implementar usando tabelas.
+Metatabelas são tabelas com configurações avançadas que podem alcançar funcionalidades como armazenar pares de chaves e valores e calcular operações aritméticas.
+Recursos
+Em Luau, variáveis e funções podem ter escopo global e local dentro de um script. Luau tem operadores lógicos, relacionais e de atribuição composta. Você pode usar estruturas de controle e funções para controlar quando Luau executa o código. Muitos operadores e atribuições de variáveis realizam coerção de tipos para mudar valores para os tipos que Luau espera.
+
+Nil
+In Luau, nil represents non-existence or nothingness. It's different from any other value or data type. You can use it to destroy a variable or remove a value in a table. It's the only value other than false which doesn't evaluate to true.
+
+Luau has a garbage collector that removes data that is no longer accessible by any script. For best performance, redefine large variables as nil in long-running scripts when you don't need them anymore so the garbage collector removes them.
+
+local variableToDelete = 5
+print(variableToDelete) -- 5
+variableToDelete = nil
+print(variableToDelete) -- nil
+
+local dictionaryTable = {
+	Monday = 1,
+	Tuesday = 2,
+	Wednesday = 3
+}
+-- Output value of 'Tuesday' key
+print(dictionaryTable.Tuesday) -- 2
+-- Clear 'Tuesday' key
+dictionaryTable.Tuesday = nil
+-- Output value of key again
+print(dictionaryTable.Tuesday) -- nil
+You can use nil to clear some properties of objects. For example, you can set the Parent of an object to nil to effectively remove the object from the experience. To return the object to the experience after you remove it, reassign the Parent. The following example demonstrates how to use nil to remove a Part:
+
+local Workspace = game:GetService("Workspace")
+
+-- Create a new brick
+local part = Instance.new("Part")
+-- Parent new part to the workspace, making it viewable
+part.Parent = Workspace
+task.wait(1)
+-- Remove the part from view but not from memory
+part.Parent = nil
+task.wait(1)
+-- Part still exists because it's referenced by the variable "part", so it can be returned to view
+part.Parent = Workspace
+task.wait(1)
+-- Remove the part from view again
+part.Parent = nil
+-- Clear part reference so it gets picked up by the garbage collector
+part = nil
+
+Booleans
+The boolean data type, or bool, has a value of either true or false.
+
+Conditionals
+If a value isn't false or nil, Luau evaluates it as true in conditional statements. Unlike many other languages, Luau considers both zero and the empty string as true.
+
+Operators
+You can formulate complex conditions with relational and logical operators.
+
+Numbers
+The number data type, or double, represents a double-precision (64-bit) floating-point number. Numbers can range from -1.7 * 10308 to 1.7 * 10308 (around 15 digits of precision, positive or negative).
+
+Signed and unsigned
+The sign of the number indicates whether it's positive or negative. For example, 1 is positive and -1 is negative. In Luau, the number -0 is equivalent to 0.
+
+print(0 == -0)  --> true
+print(-0 > 1)  --> false
+print(-0 < 1)  --> true
+print(-0 > -1)  --> true
+print(-0 < -1)  --> false
+Number classifications
+Luau doesn't distinguish between integers and numbers, but the API reference sometimes distinguishes between them to be more specific about how to use each API.
+
+float
+The float number type refers to a real number with a decimal place. In computer science terms, they are single-precision (32-bit) floating-point number, which isn't as precise as double-precision floating-point numbers, but is sufficiently precise for most use cases and requires less memory and storage.
+
+int
+The integer number type, or int, refers to a 32-bit whole number, which ranges from -231 to 231 - 1. Properties and functions that expect integers may automatically round or raise errors when you assign or pass non-integers to them.
+
+int64
+The int64 number type refers to a signed 64-bit integer, which ranges from -263 to 263 - 1. This type of integer is common for methods that use ID numbers from the Roblox website. For example, Player.UserId is an int64, and MarketplaceService:PromptPurchase() and TeleportService:Teleport() each expect int64 for the ID arguments.
+
+Notation
+Numbers are notated with the most significant digits first (big-endian). There are multiple ways to notate number literals in Luau:
+
+Decimal (base-10) — Write the digits of the number normally using digits 0–9 with a single optional decimal point, for example 7, 1.25, or -22.5.
+Scientific notation — Write a decimal number followed by e or e+, then an integer to raise the decimal number to a power of 10. For instance, 12e3 is 12 × 10^3 (12,000).
+Hexadecimal (base-16) — Begin the number with 0x followed by digits 0–9 or A–F (capitalization ignored). For example, 0xF is 15 and 0x3FC is 1020.
+Binary (base-2) — Begin the number with 0b followed by 0s or 1s, for instance 0b1100 (12 in decimal format).
+To aid in the readability of long numbers, you can include underscores anywhere within a number literal without changing the value, except at the beginning where this would make it an identifier. For example, 1_234_567 is the same as 1234567, both of which are equal to 1,234,567.
+
+Operations
+You can use logical and relational operators to manipulate and compare numbers. You can also use mathematical functions such as math.sqrt() and math.exp() in the math library and bitwise operations in the bit32 library.
+
+Type introspection
+You can determine if a value x is a number by using type(x) or typeof(x). Both return the string number if x is a number.
+
+local testInt = 5
+local testDecimal = 9.12761656
+local testString = "Hello"
+
+print(type(testInt))  --> number
+print(type(testDecimal))  --> number
+print(type(testString))  --> string
+
+print(typeof(testInt))  --> number
+print(typeof(testDecimal))  --> number
+print(typeof(testString))  --> string
+Round functions
+You can round numbers using math.floor(), math.ceil(), or math.modf(). These functions return an integer result if Luau can represent it as an integer. If the number is too large, Luau returns it as a float.
+
+To determine if a number x is an integer, use math.floor(x) == x.
+To round a number down, use math.floor().
+To round a number up, use math.ceil().
+To round a number towards zero, use math.modf(). It also returns the fractional difference of the rounded number as a second result.
+print(math.floor(3.3))  --> 3
+print(math.floor(-3.3))  --> -4
+print(math.ceil(3.3))  --> 4
+print(math.ceil(-3.3))  --> -3
+print(math.modf(3.3))  --> 3 0.2999999999999998
+print(math.modf(-3.3))  --> -3 -0.2999999999999998
+
+Strings
+The string data type is a sequence of characters, such as letters, numbers, and symbols. It's the data type for storing most text-based information.
+
+Declare strings
+To declare a string variable, put quotes around the characters. It's more common to use double quotes ("), but single quotes (') also work. If you want to include a single or double quote in your string, enclose your string in the other type of quote, or use an escaped quote.
+
+local string1 = "Hello world!"
+print(string1)  --> Hello world!
+
+local string2 = 'Hello "world"!'
+print(string2)  --> Hello "world"!
+To include both single and double quotes in a string, or to create multi-line strings, declare them using double brackets:
+
+local string1 = [[Hello
+world!
+Hello "world"!
+Hello 'world'!]]
+
+print(string1)
+--> Hello
+--> world!
+--> Hello "world"!
+--> Hello 'world'!
+If necessary, you can nest multiple brackets inside a string using the same number of equal signs in both the beginning and ending bracket:
+
+local string1 = [=[Hello
+[[world!]]
+]=]
+
+print(string1)
+--> Hello
+--> [[world!]]
+Combine strings
+To combine strings, concatenate them with two dots (..). Concatenating strings doesn't insert a space between them, so you'll need to include space(s) at the end/beginning of a preceding/subsequent string, or concatenate a space between the two strings.
+
+local hello = "Hello"
+local helloWithSpace = "Hello "
+local world = "world!"
+
+local string1 = hello .. world
+local string2 = helloWithSpace .. world
+local string3 = hello .. " " .. world
+
+print(string1)  --> Helloworld!
+print(string2)  --> Hello world!
+print(string3)  --> Hello world!
+Note that the print() command takes multiple arguments and combines them with spaces, so you can use , instead of .. to yield spaces in print() outputs.
+
+local hello = "Hello"
+local world = "world"
+local exclamationMark = "!"
+
+print(hello .. world .. exclamationMark)  --> Helloworld!
+print(hello, world .. exclamationMark)  --> Hello world!
+print(hello, world, exclamationMark)  --> Hello world !
+Convert strings
+To convert a string to a number, use the tonumber() function. If the string doesn't have a number representation, tonumber() returns nil.
+
+local numericString = "123"
+print(tonumber(numericString))  --> 123
+
+local alphanumericString = "Hello123"
+print(tonumber(alphanumericString))  --> nil
+Escape strings
+To escape a double- or single-quote string declaration and embed almost any character, put a backslash (\) before the character. For example:
+
+To embed a single quote in a single-quote string, use \'.
+To embed a double quote in a double-quote string, use \".
+local string1 = 'Hello \'world\'!'
+print(string1)  --> Hello 'world'!
+
+local string2 = "Hello \"world\"!"
+print(string2)  --> Hello "world"!
+Certain characters following backslashes produce special characters rather than escaped characters:
+
+To embed a new line, use \n.
+To embed a horizontal tab, use \t.
+local string1 = "Hello\nworld!"
+print(string1)
+--> Hello
+--> world!
+
+local string2 = "Hello\tworld!"
+print(string2)  --> Hello	world!
+String interpolation
+Luau supports string interpolation, a feature that lets you insert expressions into strings. Use backticks (`) to declare an interpolated string, then add expressions inside of curly brackets:
+
+local world = "world"
+
+local string1 = `Hello {world}!`
+print(string1)  --> Hello world!
+Although variables are the most common usage, you can use any expression, including math:
+
+local world = "world"
+local number = 1
+local letters = {"w", "o", "r", "l", "d"}
+
+local string1 = `Hello {world}, {number} time!`
+local string2 = `Hello {world}, {number + 1} times!`
+local string3 = `Hello {table.concat(letters)} a third time!`
+
+print(string1)  --> Hello world, 1 time!
+print(string2)  --> Hello world, 2 times!
+print(string3)  --> Hello world a third time!
+Standard escape rules apply for backticks, curly brackets, and backslashes:
+
+local string1 = `Hello \`\{world\}\`!`
+print(string1)  --> Hello `{world}`!
+Math conversion
+If you perform math operations on a string, Luau automatically converts the string to a number. If the string doesn't have a number representation, it throws an error.
+
+print("55" + 10)  --> 65
+print("55" - 10)  --> 45
+print("55" * 10)  --> 550
+print("55" / 10)  --> 5.5
+print("55" % 10)  --> 5
+print("Hello" + 10)	 --> print("Hello" + 10):1: attempt to perform arithmetic (add) on string and number
+Comparisons
+Strings can be compared using the <, <=, > and >= operators which compare using lexicographical order based on the ASCII codes of each character in a string. This will result in numbers in strings not being compared correctly, for example, "100" will be less than "20", since the bytes "0" and "1" have lower ASCII codes than byte "2".
+
+print("Apple" < "apple") --> true
+print("Banana" < "apple") --> true (B is before a in ASCII)
+print("number100" < "number20") --> true
+String pattern reference
+A string pattern is a combination of characters that you can use with string.match(), string.gmatch(), and other functions to find a piece, or substring, of a longer string.
+
+Direct matches
+You can use direct matches in a Luau function like string.match(), except for magic characters. For example, these commands look for the word Roblox within a string:
+
+local match1 = string.match("Welcome to Roblox!", "Roblox")
+local match2 = string.match("Welcome to my awesome game!", "Roblox")
+print(match1)  --> Roblox
+print(match2)  --> nil
+Character classes
+Character classes are essential for more advanced string searches. You can use them to search for something that isn't necessarily character-specific but fits within a known category (class), including letters, digits, spaces, punctuation, and more.
+
+The following table shows the official character classes for Luau string patterns:
+
+Class	Represents	Example Match
+.	Any character	32kasGJ1%fTlk?@94
+%a	An uppercase or lowercase letter	aBcDeFgHiJkLmNoPqRsTuVwXyZ
+%l	A lowercase letter	abcdefghijklmnopqrstuvwxyz
+%u	An uppercase letter	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+%d	Any digit (number)	0123456789
+%p	Any punctuation character	!@#;,.
+%w	An alphanumeric character (either a letter or a number)	aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789
+%s	A space or whitespace character	 , \n, and \r
+%c	A special control character	
+%x	A hexadecimal character	0123456789ABCDEF
+%z	The NULL character (\0)	
+For single-letter character classes such as %a and %s, the corresponding uppercase letter represents the "opposite" of the class. For instance, %p represents a punctuation character while %P represents all characters except punctuation.
+
+Magic characters
+There are 12 "magic characters" which are reserved for special purposes in patterns:
+
+$	%	^	*	(	)
+.	[	]	+	-	?
+You can escape and search for magic characters using the % symbol. For example, to search for roblox.com, escape the . (period) symbol by preceding it with a % as in %..
+
+-- "roblox.com" matches "roblox#com" because the period is interpreted as "any character"
+local match1 = string.match("What is roblox#com?", "roblox.com")
+print(match1)  --> roblox#com
+
+-- Escape the period with % so it is interpreted as a literal period character
+local match2 = string.match("I love roblox.com!", "roblox%.com")
+print(match2)  --> roblox.com
+Anchors
+You can search for a pattern at the beginning or end of a string by using the ^ and $ symbols.
+
+local start1 = string.match("first second third", "^first")  -- Matches because "first" is at the beginning
+print(start1)  --> first
+
+local start2 = string.match("third second first", "^first")  -- Doesn't match because "first" isn't at the beginning
+print(start2)  --> nil
+
+local end1 = string.match("first second third", "third$")  -- Matches because "third" is at the end
+print(end1)  --> third
+
+local end2 = string.match("third second first", "third$")  -- Doesn't match because "third" isn't at the end
+print(end2)  --> nil
+You can also use both ^ and $ together to ensure a pattern matches only the full string and not just some portion of it.
+
+-- Using both ^ and $ to match across a full string
+local match1 = string.match("Roblox", "^Roblox$")  -- Matches because "Roblox" is the entire string (equality)
+print(match1)  --> Roblox
+
+local match2 = string.match("I play Roblox", "^Roblox$")  -- Doesn't match because "Roblox" isn't at the beginning AND end
+print(match2)  --> nil
+
+local match3 = string.match("I play Roblox", "Roblox")  -- Matches because "Roblox" is contained within "I play Roblox"
+print(match3)  --> Roblox
+Class modifiers
+By itself, a character class only matches one character in a string. For instance, the following pattern ("%d") starts reading the string from left to right, finds the first digit (2), and stops.
+
+local match = string.match("The Cloud Kingdom has 25 power gems", "%d")
+print(match)  --> 2
+You can use modifiers with any character class to control the result:
+
+Quantifier	Meaning
++	Match 1 or more of the preceding character class
+-	Match as few of the preceding character class as possible
+*	Match 0 or more of the preceding character class
+?	Match 1 or less of the preceding character class
+%n	For n between 1 and 9, matches a substring equal to the nth captured string.
+%bxy	The balanced capture matching x, y, and everything between (for example, %b() matches a pair of parentheses and everything between them)
+Adding a modifier to the same pattern ("%d+" instead of "%d"), outputs 25 instead of 2:
+
+local match1 = string.match("The Cloud Kingdom has 25 power gems", "%d")
+print(match1)  --> 2
+
+local match2 = string.match("The Cloud Kingdom has 25 power gems", "%d+")
+print(match2)  --> 25
+Class sets
+Sets should be used when a single character class can't do the whole job. For instance, you might want to match both lowercase letters (%l) and punctuation characters (%p) using a single pattern.
+
+Sets are defined by brackets [] around them. In the following example, notice the difference between using a set ("[%l%p]+") and not using a set ("%l%p+").
+
+local match1 = string.match("Hello!!! I am another string.", "[%l%p]+")  -- Set
+print(match1)  --> ello!!!
+
+local match2 = string.match("Hello!!! I am another string.", "%l%p+")  -- Non-set
+print(match2)  --> o!!!
+The first command (set) tells Luau to find both lowercase characters and punctuation. With the + quantifier added after the entire set, it finds all of those characters (ello!!!), stopping when it reaches the space.
+
+In the second command (non-set), the + quantifier only applies to the %p class before it, so Luau grabs only the first lowercase character (o) before the series of punctuation (!!!).
+
+Like character classes, sets can be "opposites" of themselves. This is done by adding a ^ character at the beginning of the set, directly after the opening [. For instance, "[%p%s]+" represents both punctuation and spaces, while "[^%p%s]+" represents all characters except punctuation and spaces.
+
+Sets also support ranges which let you find an entire range of matches between a starting and ending character. This is an advanced feature which is outlined in more detail on the Lua 5.1 Manual.
+
+String captures
+String captures are sub-patterns within a pattern. These are enclosed in parentheses () and are used to get (capture) matching substrings and save them to variables. For example, the following pattern contains two captures, (%a+) and (%d+), which return two substrings upon a successful match.
+
+local pattern = "(%a+)%s?=%s?(%d+)"
+
+local key1, val1 = string.match("TwentyOne = 21", pattern)
+print(key1, val1)  --> TwentyOne 21
+
+local key2, val2 = string.match("TwoThousand= 2000", pattern)
+print(key2, val2)  --> TwoThousand 2000
+
+local key3, val3 = string.match("OneMillion=1000000", pattern)
+print(key3, val3)  --> OneMillion 1000000
+The ? quantifier that follows both of the %s classes is a safe addition because it makes the space on either side of the = sign optional. That means the match succeeds if one (or both) spaces are missing around the equal sign.
+
+In the string.gsub() function, you can include capture groups in the replacement string using %1, %2, %3, etc., up to %9. Even though Luau supports up to 32 capture groups before throwing an error, you can only reference the first nine with this syntax:
+
+local str = "love2play Roblox"
+local pattern = "(%w+)(%d+)(%w+)%s+(%w+)"
+local replacement = "I %1 %2 %3 %4!"
+
+local result = string.gsub(str, pattern, replacement)
+print(result) --> I love 2 play Roblox!
+You can also nest string captures:
+
+local places = "The Cloud Kingdom is heavenly, The Forest Kingdom is peaceful"
+local pattern = "(The%s(%a+%sKingdom)[%w%s]+)"
+
+for description, kingdom in string.gmatch(places, pattern) do
+	print(description)
+	print(kingdom)
+end
+--> The Cloud Kingdom is heavenly
+--> Cloud Kingdom
+--> The Forest Kingdom is peaceful
+--> Forest Kingdom
+This pattern search works as follows:
+
+The string.gmatch() iterator looks for a match on the entire "description" pattern defined by the outer pair of parentheses. This stops at the first comma and captures the following:
+
+#	Pattern	Capture
+1	(The%s(%a+%sKingdom)[%w%s]+)	The Cloud Kingdom is heavenly
+Using its successful first capture, the iterator then looks for a match on the "kingdom" pattern defined by the inner pair of parentheses. This nested pattern simply captures the following:
+
+#	Pattern	Capture
+2	(%a+%sKingdom)	Cloud Kingdom
+The iterator then backs out and continues searching the full string, capturing the following:
+
+#	Pattern	Capture
+3	(The%s(%a+%sKingdom)[%w%s]+)	The Forest Kingdom is peaceful
+4	(%a+%sKingdom)	Forest Kingdom
+In addition to all of the above, there is a special case with an empty capture (()). If a capture is empty, then the position in the string will be captured:
+
+local match1 = "Where does the capture happen? Who knows!"
+local match2 = "This string is longer than the first one. Where does the capture happen? Who knows?!"
+
+local pattern = "()Where does the capture happen%? Who knows!()"
+
+local start1, finish1 = string.match(match1, pattern)
+print(start1, finish1)  --> 1 42
+
+local start2, finish2 = string.match(match2, pattern)
+print(start2, finish2)  --> 43 84
+These special captures may be nested like normal ones:
+
+local places = "The Cloud Kingdom is heavenly, The Forest Kingdom is peaceful."
+local pattern = "The (%a+()) Kingdom is %a+"
+
+for kingdom, position in string.gmatch(places, pattern) do
+	print(kingdom, position)
+end
+--> Cloud 10
+--> Forest 42
+The returned values are unusual in that they are numbers rather than strings:
+
+local match = "This is an example"
+local pattern = "This is an ()example"
+
+local position = string.match(match, pattern)
+print(typeof(position))  --> number
+
+Tables
+The table data type can store multiple values of any type that isn't nil, including booleans, numbers, strings, functions, and other tables. Construct tables with curly braces ({}):
+
+-- Construct an empty table assigned to variable "t"
+local t = {}
+print(t) -- {}
+You can use a table as an array or dictionary. Arrays use an ordered list of numbers as indices, but dictionaries can have numbers, strings, and objects as indices.
+
+For more information on built-in functions for working with tables, see the table library.
+
+Arrays
+An array is an ordered list of values. Arrays are useful for storing collections of data, such as a group of players with special permissions.
+
+Create arrays
+To create an array using a Luau table, declare the values in sequential order, separated by commas.
+
+-- Construct an array with three items
+local testArray = {"A string", 3.14159, true}
+print(testArray)
+Read from arrays
+To read from an array, add a pair of square brackets after its reference and specify the index number of the element inside ([pos]):
+
+-- Construct an array with three items
+local testArray = {"A string", 3.14159, true}
+
+print(testArray[1]) -- A string
+print(testArray[2]) -- 3.14159
+print(testArray[3]) -- true
+Unlike some languages, Luau uses 1-based indexing for arrays, so the first item in the array is [1], not [0].
+
+Write to arrays
+To define or rewrite the value of an array at an index, declare the index number in square brackets ([index]) followed by = and the value:
+
+local testArray = {"A string", 3.14159, true}
+
+testArray[2] = 12345
+testArray[4] = "New string"
+
+print(testArray[2]) --12345
+print(testArray[4]) -- New string
+Iterate over arrays
+To iterate over an array, you can use a for loop. Because the arrays have numerical indices, you can also use a numeric for loop from 1 to the length of the array (#array).
+
+local testArray = {"A string", 3.14159, true, "New string"}
+
+-- Loop using general iteration
+for index, value in testArray do
+	print(index, value)
+end
+
+-- Iterate using the array length operator (#)
+for index = 1, #testArray do
+	print(index, testArray[index])
+end
+Insert items
+There are two built-in ways to insert an item to the end of an array:
+
+Pass a reference to the array and the item value to Luau's table.insert() function.
+Add the new item to the array using the array[#array+1] syntax.
+local testArray = {"A string", 3.14159}
+
+table.insert(testArray, "New string")
+testArray[#testArray+1] = "Another new string"
+
+print(testArray[3]) -- New string
+print(testArray[4]) -- Another new string
+To insert an item between the start and end of an array, include a position value as the second argument of table.insert(). This inserts the new item and pushes the following items up one index position.
+
+local testArray = {"First item", "Next item"}
+
+table.insert(testArray, 2, "NEW ITEM #2")
+
+print(testArray[1]) -- First item
+print(testArray[2]) -- NEW ITEM #2
+print(testArray[3]) -- Next item
+Remove items
+To remove an item from an array, use table.remove(). This removes the item at the specified position and moves any following items back one index position.
+
+local testArray = {"First item", "Next item", "Last item"}
+
+table.remove(testArray, 2)
+
+print(testArray[1]) -- First item
+print(testArray[2]) -- Last item
+Dictionaries
+Dictionaries are an extension of arrays. Dictionaries store a set of key-value pairs, where the keys can be any number, string, or object.
+
+Create dictionaries
+To create a dictionary table, define each key followed by = and the value. Separate each key-value pair with a comma:
+
+local testDictionary = {
+	fruitName = "Lemon",
+	fruitColor = "Yellow",
+	sour = true
+}
+The keys for dictionaries can be numbers, strings, and objects. For example, a key may also be an Instance. To use objects as keys, declare the key in square brackets ([key]):
+
+local part = Instance.new("Part")
+
+local testDictionary = {
+	partType = "Block",
+	[part] = true
+}
+Read from dictionaries
+To read from a dictionary, add a pair of brackets after its reference and specify the key name. Directly reference a string key using either (["key"]) or (.key), or instead use a variable value ([key]).
+
+local part = Instance.new("Part")
+
+local testDictionary = {
+	partType = "Block",
+	[part] = true
+}
+-- Include quotes for string keys
+print(testDictionary["partType"]) -- Block
+-- Or use . to index string keys without spaces
+print(testDictionary.partType) -- Block
+-- Omit quotes for non-string keys
+print(testDictionary[part]) -- true
+Write to dictionaries
+To define or rewrite the value of a new or existing dictionary key, declare the key name in brackets ([key]) or, if the key is a string, use (.key) followed by = and the value:
+
+local testDictionary = {
+	fruitName = "Lemon",
+	sour = true
+}
+
+-- Change value of existing keys
+testDictionary["fruitName"] = "Cherry"
+testDictionary.sour = false
+
+-- Insert new key-value pair
+testDictionary.fruitCount = 10
+
+print(testDictionary.fruitName) -- Cherry
+print(testDictionary.sour) -- false
+print(testDictionary.fruitCount) -- 10
+Iterate over dictionaries
+To iterate over a dictionary, use a for loop:
+
+local testDictionary = {
+	fruitName = "Lemon",
+	fruitColor = "Yellow",
+	sour = true
+}
+
+for key, value in testDictionary do
+	print(key, value)
+end
+
+--[[ Resulting output:
+fruitName Lemon
+sour true
+fruitColor Yellow
+]]
+Remove key-value pairs
+To remove or erase a key-value pair from a dictionary, set its value for a key to nil.
+
+local testDictionary = {
+	fruitName = "Lemon",
+	fruitColor = "Yellow",
+	sour = true
+}
+
+testDictionary.sour = nil
+
+for key, value in testDictionary do
+	print(key, value)
+end
+--[[ Resulting output:
+fruitName Lemon
+fruitColor Yellow
+]]
+Tables as references
+If you store a table in a new variable, Luau doesn't create a copy of that table. Instead, the variable becomes a reference, or pointer, to the original table. Any reference to a table reflects any changes to the original table:
+
+local originalArray = {10, 20}
+
+local arrayReference = originalArray
+
+print("Original:", originalArray[1], originalArray[2])
+print("Reference:", arrayReference[1], arrayReference[2])
+
+-- Change values in original array
+originalArray[1] = 1000
+originalArray[2] = 2000
+
+print("Reference:", arrayReference[1], arrayReference[2])
+
+--[[ Resulting output:
+Original: 10 20
+Reference: 10 20
+Reference: 1000 2000
+]]
+Clone tables
+Shallow clones
+To copy a table without any nested tables, Luau offers the table.clone() method.
+
+local original = {
+	key = "value",
+	engine = "Roblox",
+	playerID = 505306092
+}
+
+local clone = table.clone(original)
+Deep clones
+To copy a more complex table with nested tables inside it, you'll need to use a recursive function similar to the following:
+
+-- The function used for deep cloning a table
+local function deepClone(original)
+	-- Define the new table for the copy
+	local clone = table.clone(original) 
+
+	-- Loop through the original table to check for table values
+	-- If a table is found as a value, deep clone it to the key (index)
+	for key, value in original do
+		if type(value) == "table" then
+			clone[key] = deepClone(value)
+		end
+	end
+
+	-- Return the finalized copy of the deep cloned table
+	return clone
+end
+With the function in place, you can make a deep copy as follows:
+
+local original = {
+	key = "value",
+	playerInfo = {
+		playerID = 505306092,
+		playerName = "PlayerName"
+	},
+	otherInfo = {
+		{
+			{1, 3, 5, 7, 9}
+		}
+	}
+}
+
+local clone = deepClone(original)
+Freeze tables
+Freezing a table makes it read-only, which is useful for creating constant values that you don't want to change. Freezing is permanent; there's no "unfreeze" or "thaw" method. To check if a table is frozen, use table.isfrozen().
+
+Shallow freezes
+To freeze a table without any nested tables, Luau offers the table.freeze() method.
+
+local target = {
+	key = "value",
+	engine = "Roblox",
+	playerID = 505306092
+}
+
+table.freeze(target)
+target.playerID = 1 --> attempt to modify a readonly table
+Deep freezes
+To freeze a more complex table with nested tables inside it, use a recursive function similar to the following:
+
+local function deepFreeze(target)
+	-- Shallow freeze the table
+	table.freeze(target)
+
+	-- Check each key of the table and freeze it if it's a table
+	for _, value in target do
+		-- Make sure the value isn't frozen; if it already is, an error will occur
+		if type(value) == "table" and table.isfrozen(value) == false then
+			deepFreeze(value)
+		end
+	end
+end
+With the function in place, you can deep freeze a table as follows:
+
+local target = {
+	key = "value",
+	playerInfo = {
+		playerID = 505306092,
+		playerName = "PlayerName"
+	},
+	otherInfo = {
+		{
+			{1, 3, 5, 7, 9}
+		}
+	}
+}
+
+deepFreeze(target)
+target.playerInfo.playerID = 1 --> attempt to modify a readonly table
+
+
+Enums
+Enums are not a built-in Luau type and they exist only in Roblox, but they're conceptually similar to other Luau data types and are something you'll work with frequently in Roblox development.
+
+The enumeration data type, or Enum, is a fixed list of items. You can access enums through the global object called Enum. For a full list and their respective items, see Enums.
+
+Enum items
+To get all items of an enum, call the GetEnumItems() method on it. The following code sample demonstrates how to call GetEnumItems() on the Enum.PartType enum.
+
+local partTypes = Enum.PartType:GetEnumItems()
+
+for index, enumItem in partTypes do
+	print(enumItem)
+end
+
+--[[
+	Enum.PartType.Ball
+	Enum.PartType.Block
+	Enum.PartType.Cylinder
+	Enum.PartType.Wedge
+	Enum.PartType.CornerWedge
+]]
+Data type
+The EnumItem is the data type for items in enums. An EnumItem has three properties:
+
+Name — The name of the EnumItem.
+Value — The numerical index of the EnumItem.
+EnumType — The parent Enum of the EnumItem.
+Some properties of objects can only be items of certain enums. For example, the Shape property of a Part object is an item of the Enum.PartType enum. The following code sample demonstrates how to print the properties of the Enum.PartType.Cylinder enum item.
+
+print(Enum.PartType.Cylinder.Name) --> "Cylinder"
+print(Enum.PartType.Cylinder.Value) --> 2
+print(Enum.PartType.Cylinder.EnumType) --> PartType
+To assign an EnumItem as the value of a property, use the full Enum declaration. You can also use the item's Name property as a string.
+
+local Workspace = game:GetService("Workspace")
+
+local part = Instance.new("Part") -- Create a new part
+
+part.Shape = Enum.PartType.Cylinder -- By full enum item declaration (best practice)
+part.Shape = "Cylinder" -- By enum item's name as a string
+
+part.Parent = Workspace
+
+Tuples
+A tuple is a list of values. Many methods and callbacks in the Roblox Engine API accept and return multiple values, but the API Reference says "Tuple" instead of those values.
+
+Parameters
+If a method or callback accepts a tuple as a parameter, then it accepts multiple values. For example, the API Reference shows that the BindableFunction:Invoke() method accepts a "Tuple" as a parameter, so it accepts multiple arguments.
+
+BindableFunction:Invoke(1, true, "string", Vector3.new(0, 0, 0))
+Returns
+If a method or callback returns a tuple, then it returns multiple values. For example, the API Reference shows that the Players:GetUserThumbnailAsync() method returns a "Tuple", so it returns multiple values. The first return value is a Content URL, and the second is a boolean.
+
+local Players = game:GetService("Players")
+
+local userId = 156 -- builderman
+local thumbType = Enum.ThumbnailType.HeadShot
+local thumbSize = Enum.ThumbnailSize.Size420x420
+local content, isReady = Players:GetUserThumbnailAsync(userId, thumbType, thumbSize)
+print(content, isReady) -- rbxthumb://type=AvatarHeadShot&id=156&w=420&h=420 true
+
+Userdata
+Userdata is one of the basic types in Luau. Userdata represents arbitrary C/C++ data that exists in Luau. See Userdata for more information.
+

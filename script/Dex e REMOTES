@@ -1,0 +1,4845 @@
+local v1 = game:GetService("Players")
+local v2 = game:GetService("RunService")
+local v3 = game:GetService("ReplicatedStorage")
+local v_u_4 = v1.LocalPlayer
+v_u_4:WaitForChild("PlayerGui")
+local v_u_5 = v3:WaitForChild("Events"):WaitForChild("ClientViolation")
+local v_u_6 = {
+	["NORMAL_WALKSPEED"] = 16,
+	["SPRINT_WALKSPEED"] = 28,
+	["SPEED_TOLERANCE"] = 6,
+	["SPEED_CONSEC_REQUIRED"] = 5,
+	["NORMAL_JUMPPOWER"] = 50,
+	["JUMP_TOLERANCE"] = 8,
+	["JUMP_CONSEC_REQUIRED"] = 4,
+	["HUMANOID_CHECK_INTERVAL"] = 1.5,
+	["CAMERA_CHECK_INTERVAL"] = 2,
+	["ENV_CHECK_INTERVAL"] = 8,
+	["SPAWN_GRACE"] = 5,
+	["EXECUTOR_GLOBALS"] = {
+		"getgenv",
+		"getrenv",
+		"getsenv",
+		"hookfunction",
+		"hookmetamethod",
+		"newcclosure",
+		"checkcaller",
+		"isexecutorclosure",
+		"getrawmetatable",
+		"setrawmetatable",
+		"fireclickdetector",
+		"firetouchinterest",
+		"fireproximityprompt",
+		"firesignal",
+		"syn",
+		"SENTINEL_V2",
+		"KRNL_LOADED",
+		"fluxus",
+		"carbon",
+		"pebc"
+	}
+}
+local v_u_7 = {}
+local v_u_8 = 0
+local v_u_9 = 0
+local v_u_10 = nil
+local v_u_11 = true
+local function v_u_14(p_u_12)
+	-- upvalues: (ref) v_u_11, (copy) v_u_7, (copy) v_u_5
+	if v_u_11 then
+		return
+	else
+		local v13 = os.clock()
+		if not v_u_7[p_u_12] or v13 - v_u_7[p_u_12] >= 15 then
+			v_u_7[p_u_12] = v13
+			warn("[AntiCheat Client] " .. p_u_12)
+			pcall(function()
+				-- upvalues: (ref) v_u_5, (copy) p_u_12
+				v_u_5:FireServer(p_u_12)
+			end)
+		end
+	end
+end
+local function v_u_15()
+	-- upvalues: (ref) v_u_8, (ref) v_u_9
+	v_u_8 = 0
+	v_u_9 = 0
+end
+local function v_u_16()
+	-- upvalues: (ref) v_u_11, (copy) v_u_15, (ref) v_u_10, (copy) v_u_6
+	v_u_11 = true
+	v_u_15()
+	v_u_10 = nil
+	task.delay(v_u_6.SPAWN_GRACE, function()
+		-- upvalues: (ref) v_u_11
+		v_u_11 = false
+	end)
+end
+local function v_u_21()
+	-- upvalues: (ref) v_u_11, (copy) v_u_4, (copy) v_u_6, (ref) v_u_8, (copy) v_u_14, (ref) v_u_9
+	if v_u_11 then
+		return
+	else
+		local v17 = v_u_4.Character
+		if v17 then
+			local v18 = v17:FindFirstChild("Humanoid")
+			if v18 and v18.Health > 0 then
+				local v19 = v_u_6.SPRINT_WALKSPEED + v_u_6.SPEED_TOLERANCE
+				if v19 < v18.WalkSpeed then
+					v_u_8 = v_u_8 + 1
+					if v_u_8 >= v_u_6.SPEED_CONSEC_REQUIRED then
+						v_u_14(string.format("WalkSpeed tampered: %.1f (max %d)", v18.WalkSpeed, v19))
+						v18.WalkSpeed = v_u_6.NORMAL_WALKSPEED
+						v_u_8 = 0
+					end
+				else
+					v_u_8 = 0
+				end
+				local v20 = v_u_6.NORMAL_JUMPPOWER + v_u_6.JUMP_TOLERANCE
+				if v20 < v18.JumpPower then
+					v_u_9 = v_u_9 + 1
+					if v_u_9 >= v_u_6.JUMP_CONSEC_REQUIRED then
+						v_u_14(string.format("JumpPower tampered: %.1f (max %d)", v18.JumpPower, v20))
+						v18.JumpPower = v_u_6.NORMAL_JUMPPOWER
+						v_u_9 = 0
+						return
+					end
+				else
+					v_u_9 = 0
+				end
+			end
+		else
+			return
+		end
+	end
+end
+local function v_u_23()
+	-- upvalues: (ref) v_u_11, (ref) v_u_10, (copy) v_u_14
+	if v_u_11 then
+		return
+	else
+		local v22 = workspace.CurrentCamera
+		if v22 then
+			if v22.CameraType == Enum.CameraType.Scriptable then
+				if not v_u_10 then
+					v_u_10 = os.clock()
+					return
+				end
+				if os.clock() - v_u_10 > 12 then
+					v_u_14("Camera Scriptable for >12s (possible fly hack)")
+					v22.CameraType = Enum.CameraType.Custom
+					v_u_10 = nil
+					return
+				end
+			else
+				v_u_10 = nil
+			end
+		end
+	end
+end
+local function v_u_28()
+	-- upvalues: (copy) v_u_6, (copy) v_u_14
+	pcall(function()
+		-- upvalues: (ref) v_u_6, (ref) v_u_14
+		local v24 = getfenv(0)
+		for _, v25 in v_u_6.EXECUTOR_GLOBALS do
+			local v26, v27 = pcall(rawget, v24, v25)
+			if v26 and v27 ~= nil then
+				v_u_14("Executor global detected: " .. v25)
+			end
+		end
+	end)
+end
+local v_u_29 = 0
+local v_u_30 = 0
+local v_u_31 = 0
+v2.Heartbeat:Connect(function(p32)
+	-- upvalues: (ref) v_u_29, (ref) v_u_30, (ref) v_u_31, (copy) v_u_6, (copy) v_u_21, (copy) v_u_23, (copy) v_u_28
+	v_u_29 = v_u_29 + p32
+	v_u_30 = v_u_30 + p32
+	v_u_31 = v_u_31 + p32
+	if v_u_29 >= v_u_6.HUMANOID_CHECK_INTERVAL then
+		v_u_29 = 0
+		pcall(v_u_21)
+	end
+	if v_u_30 >= v_u_6.CAMERA_CHECK_INTERVAL then
+		v_u_30 = 0
+		pcall(v_u_23)
+	end
+	if v_u_31 >= v_u_6.ENV_CHECK_INTERVAL then
+		v_u_31 = 0
+		pcall(v_u_28)
+	end
+end)
+v_u_16()
+if v_u_4.Character then
+	v_u_16()
+end
+v_u_4.CharacterAdded:Connect(function()
+	-- upvalues: (copy) v_u_16
+	v_u_16()
+end)
+return {}
+
+Collectibles client 
+local v1 = game:GetService("Players")
+local v2 = game:GetService("ReplicatedStorage")
+local v3 = game:GetService("RunService")
+local v_u_4 = v1.LocalPlayer
+local v_u_5 = v_u_4.UserId
+local v6 = v2.Events:WaitForChild("CollectableVisibility")
+local v7 = require(v2.Modules.Libraries.ReplicaController)
+local v_u_8 = 0
+v7.ReplicaOfClassCreated("PlayerData", function(p9)
+	-- upvalues: (ref) v_u_8
+	v_u_8 = p9.Data.CollectableUpgrades and (p9.Data.CollectableUpgrades.CollectRadius or 0) or 0
+	p9:ListenToChange({ "CollectableUpgrades", "CollectRadius" }, function(p10)
+		-- upvalues: (ref) v_u_8
+		v_u_8 = p10 or 0
+	end)
+end)
+local v_u_11 = workspace:WaitForChild("Scripted"):WaitForChild("Collectables")
+local v_u_12 = {}
+local v_u_13 = Color3.fromRGB(0, 170, 255)
+local v_u_14 = nil
+local v_u_15 = {}
+local v_u_16 = -1
+local function v_u_24(p17)
+	-- upvalues: (copy) v_u_13
+	local v18 = Instance.new("Model")
+	v18.Name = "CollectRadiusRing"
+	local v19 = p17 * 0.07853981633974483 * 1.05
+	local v20 = {}
+	for v21 = 1, 80 do
+		local v22 = (v21 - 1) * 0.07853981633974483
+		local v23 = Instance.new("Part")
+		v23.Anchored = true
+		v23.CanCollide = false
+		v23.CanTouch = false
+		v23.CanQuery = false
+		v23.CastShadow = false
+		v23.Material = Enum.Material.Neon
+		v23.Color = v_u_13
+		v23.Transparency = 0
+		v23.Size = Vector3.new(0.18, 0.12, v19)
+		v23.CFrame = CFrame.new(0, -50000, 0)
+		v23.Parent = v18
+		v20[v21] = {
+			["part"] = v23,
+			["angle"] = v22
+		}
+	end
+	v18.Parent = workspace
+	return v18, v20
+end
+local function v_u_41(p25, p26)
+	-- upvalues: (copy) v_u_4, (ref) v_u_14, (ref) v_u_15
+	local v27 = v_u_4.Character
+	local v28 = v27 and { v27 } or {}
+	if v_u_14 then
+		local v29 = v_u_14
+		table.insert(v28, v29)
+	end
+	local v30 = RaycastParams.new()
+	v30.FilterType = Enum.RaycastFilterType.Exclude
+	v30.FilterDescendantsInstances = v28
+	local v31 = workspace
+	local v32 = p25.X
+	local v33 = p25.Y + 5
+	local v34 = p25.Z
+	local v35 = v31:Raycast(Vector3.new(v32, v33, v34), Vector3.new(0, -30, 0), v30)
+	local v36 = (v35 and v35.Position.Y or p25.Y - 3) + 0.06 + 0.06
+	for _, v37 in v_u_15 do
+		local v38 = v37.angle
+		local v39 = p25.X + math.cos(v38) * p26
+		local v40 = p25.Z + math.sin(v38) * p26
+		v37.part.CFrame = CFrame.new(v39, v36, v40) * CFrame.Angles(0, -(v38 + 1.5707963267948966), 0)
+	end
+end
+local function v_u_50(p42)
+	-- upvalues: (copy) v_u_11
+	for _, v43 in v_u_11:GetChildren() do
+		if v43:IsA("Model") and v43.Name == "CollectArea" then
+			local v44 = v43.PrimaryPart or v43:FindFirstChildWhichIsA("BasePart")
+			if v44 then
+				local v45 = v44.Size.X / 2
+				local v46 = v44.Size.Z / 2
+				local v47 = v44.CFrame:PointToObjectSpace(p42)
+				local v48 = v47.X
+				if math.abs(v48) <= v45 then
+					local v49 = v47.Z
+					if math.abs(v49) <= v46 then
+						return true
+					end
+				end
+			end
+		end
+	end
+	return false
+end
+local function v_u_55(p51, p52)
+	local v53 = p52 and 0 or 1
+	for _, v54 in p51:GetDescendants() do
+		if v54:IsA("BasePart") then
+			v54.LocalTransparencyModifier = v53
+		end
+		if v54:IsA("BillboardGui") or (v54:IsA("ParticleEmitter") or v54:IsA("PointLight")) then
+			v54.Enabled = p52
+		end
+	end
+end
+v3.Heartbeat:Connect(function()
+	-- upvalues: (copy) v_u_4, (ref) v_u_14, (ref) v_u_15, (ref) v_u_16, (copy) v_u_12, (copy) v_u_55, (copy) v_u_50, (ref) v_u_8, (copy) v_u_24, (copy) v_u_41
+	local v56 = v_u_4.Character
+	if not v56 then
+		if v_u_14 then
+			v_u_14:Destroy()
+			v_u_14 = nil
+			v_u_15 = {}
+			v_u_16 = -1
+		end
+		return
+	end
+	local v57 = v56:FindFirstChild("HumanoidRootPart")
+	if not v57 then
+		if v_u_14 then
+			v_u_14:Destroy()
+			v_u_14 = nil
+			v_u_15 = {}
+			v_u_16 = -1
+		end
+		return
+	end
+	local v58 = v57.Position
+	for v59, _ in v_u_12 do
+		if v59 and v59.Parent then
+			local v60 = v59.PrimaryPart
+			if v60 then
+				v_u_55(v59, (v58 - v60.Position).Magnitude <= 200)
+			end
+		else
+			v_u_12[v59] = nil
+		end
+	end
+	if not v_u_50(v58) or v_u_8 <= 0 then
+		if v_u_14 and v_u_14 then
+			v_u_14:Destroy()
+			v_u_14 = nil
+			v_u_15 = {}
+			v_u_16 = -1
+		end
+		return
+	end
+	local v61 = v_u_8 * 3 + 3
+	if v_u_14 then
+		local v62 = v_u_16 - v61
+		if math.abs(v62) <= 0.01 then
+			::l26::
+			v_u_41(v58, v61)
+			return
+		end
+	end
+	if v_u_14 then
+		v_u_14:Destroy()
+		v_u_14 = nil
+		v_u_15 = {}
+		v_u_16 = -1
+	end
+	local v63, v64 = v_u_24(v61)
+	v_u_14 = v63
+	v_u_15 = v64
+	v_u_16 = v61
+	goto l26
+end)
+v6.OnClientEvent:Connect(function(p65)
+	-- upvalues: (copy) v_u_5, (copy) v_u_12, (copy) v_u_55
+	if p65 and p65.Parent then
+		if p65:GetAttribute("OwnerUserId") == v_u_5 then
+			v_u_12[p65] = true
+		else
+			v_u_55(p65, false)
+		end
+	else
+		return
+	end
+end)
+task.defer(function()
+	-- upvalues: (copy) v_u_5, (copy) v_u_12, (copy) v_u_55
+	for _, v66 in workspace:GetChildren() do
+		if v66.Name:match("^Collectables_") then
+			local function v69(p67)
+				-- upvalues: (ref) v_u_5, (ref) v_u_12, (ref) v_u_55
+				local v68 = p67:GetAttribute("OwnerUserId")
+				if v68 then
+					if v68 == v_u_5 then
+						v_u_12[p67] = true
+					else
+						v_u_55(p67, false)
+					end
+				else
+					return
+				end
+			end
+			for _, v70 in v66:GetChildren() do
+				local v71 = v70:GetAttribute("OwnerUserId")
+				if v71 then
+					if v71 == v_u_5 then
+						v_u_12[v70] = true
+					else
+						v_u_55(v70, false)
+					end
+				end
+			end
+			v66.ChildAdded:Connect(v69)
+			v66.ChildRemoved:Connect(function(p72)
+				-- upvalues: (ref) v_u_12
+				v_u_12[p72] = nil
+			end)
+		end
+	end
+	workspace.ChildAdded:Connect(function(p73)
+		-- upvalues: (ref) v_u_5, (ref) v_u_12, (ref) v_u_55
+		if p73.Name:match("^Collectables_") then
+			p73.ChildAdded:Connect(function(p74)
+				-- upvalues: (ref) v_u_5, (ref) v_u_12, (ref) v_u_55
+				local v75 = p74:GetAttribute("OwnerUserId")
+				if v75 then
+					if v75 == v_u_5 then
+						v_u_12[p74] = true
+					else
+						v_u_55(p74, false)
+					end
+				else
+					return
+				end
+			end)
+			p73.ChildRemoved:Connect(function(p76)
+				-- upvalues: (ref) v_u_12
+				v_u_12[p76] = nil
+			end)
+		end
+	end)
+end)
+
+ReplicaClient
+local v1 = game:GetService("Players")
+local v_u_2 = game:GetService("ReplicatedStorage")
+local v3 = game:GetService("StarterGui")
+local v4 = v1.LocalPlayer
+local v5 = require(v_u_2:WaitForChild("Modules"):WaitForChild("Libraries"):WaitForChild("ReplicaController"))
+local v_u_6 = script:GetFullName()
+local v_u_7 = "unknown"
+local v_u_8 = nil
+local v_u_9 = {}
+task.defer(function()
+	-- upvalues: (copy) v_u_2, (ref) v_u_8, (copy) v_u_9, (ref) v_u_7
+	for _, v_u_10 in v_u_2:GetDescendants() do
+		if v_u_10:IsA("RemoteFunction") then
+			getmetatable(v_u_10)
+			local v_u_11 = nil
+			pcall(function()
+				-- upvalues: (ref) v_u_11, (copy) v_u_10, (ref) v_u_8, (ref) v_u_9, (ref) v_u_7
+				v_u_11 = v_u_10.InvokeServer
+				function v_u_10.InvokeServer(p12, ...)
+					-- upvalues: (ref) v_u_8, (ref) v_u_9, (ref) v_u_7, (ref) v_u_11
+					v_u_8 = {
+						["source"] = "InvokeServer",
+						["detail"] = string.format("RemoteFunction %q called InvokeServer \226\128\148 if server OnServerInvoke is not set this yields forever", p12:GetFullName()),
+						["startTick"] = tick(),
+						["timestamp"] = os.date("%H:%M:%S")
+					}
+					v_u_9[v_u_7] = v_u_8
+					local v13 = table.pack(v_u_11(p12, ...))
+					v_u_8 = nil
+					v_u_9[v_u_7] = nil
+					local v14 = v13.n
+					return table.unpack(v13, 1, v14)
+				end
+			end)
+		end
+	end
+	v_u_2.DescendantAdded:Connect(function(p_u_15)
+		-- upvalues: (ref) v_u_8, (ref) v_u_9, (ref) v_u_7
+		if p_u_15:IsA("RemoteFunction") then
+			getmetatable(p_u_15)
+			local v_u_16 = nil
+			pcall(function()
+				-- upvalues: (ref) v_u_16, (copy) p_u_15, (ref) v_u_8, (ref) v_u_9, (ref) v_u_7
+				v_u_16 = p_u_15.InvokeServer
+				function p_u_15.InvokeServer(p17, ...)
+					-- upvalues: (ref) v_u_8, (ref) v_u_9, (ref) v_u_7, (ref) v_u_16
+					v_u_8 = {
+						["source"] = "InvokeServer",
+						["detail"] = string.format("RemoteFunction %q called InvokeServer \226\128\148 if server OnServerInvoke is not set this yields forever", p17:GetFullName()),
+						["startTick"] = tick(),
+						["timestamp"] = os.date("%H:%M:%S")
+					}
+					v_u_9[v_u_7] = v_u_8
+					local v18 = table.pack(v_u_16(p17, ...))
+					v_u_8 = nil
+					v_u_9[v_u_7] = nil
+					local v19 = v18.n
+					return table.unpack(v18, 1, v19)
+				end
+			end)
+		end
+	end)
+end)
+local v_u_20 = nil
+local v_u_21 = nil
+local function v_u_46(p_u_22)
+	-- upvalues: (ref) v_u_7, (copy) v_u_9, (ref) v_u_20, (ref) v_u_21
+	v_u_7 = p_u_22:GetFullName()
+	v_u_9[v_u_7] = nil
+	local v_u_23 = false
+	local v_u_24 = nil
+	local v_u_25 = nil
+	local v_u_28 = task.spawn(function()
+		-- upvalues: (copy) p_u_22, (ref) v_u_23, (ref) v_u_24, (ref) v_u_25
+		local v26, v27 = pcall(require, p_u_22)
+		v_u_23 = true
+		v_u_24 = v26
+		v_u_25 = v27
+	end)
+	local v_u_29 = v_u_7
+	v_u_20 = v_u_28
+	v_u_21 = nil
+	task.spawn(function()
+		-- upvalues: (ref) v_u_20, (copy) v_u_28, (ref) v_u_9, (copy) v_u_29, (ref) v_u_21
+		local v30 = tick()
+		while true do
+			if v_u_20 ~= v_u_28 then
+				return
+			end
+			task.wait(0.5)
+			if coroutine.status(v_u_28) == "suspended" and tick() - v30 > 2 then
+				local v31 = {}
+				for v32 = 1, 10 do
+					local v33, v34, v35, v36 = pcall(debug.info, v_u_28, v32, "sln")
+					if not (v33 and v34) then
+						break
+					end
+					if v34 ~= "" then
+						local v37 = string.format
+						local v38 = tostring(v35)
+						local v39 = v36 == "" and "" or (" in " .. v36 or "")
+						table.insert(v31, v37("      [%d] %s:%s%s", v32, v34, v38, v39))
+					end
+				end
+				local v40 = #v31 > 0 and table.concat(v31, "\n") or "      (stack unavailable)"
+				local v41 = v_u_9[v_u_29]
+				local v42 = v41 and string.format("    Yield type : %s\n    Detail     : %s\n    Waiting for: %.1fs", v41.source, v41.detail, tick() - v41.startTick) or "    Yield type : unknown (bare task.wait loop, WaitForChild, or event:Wait())"
+				v_u_21 = string.format("%s\n    Call stack :\n%s", v42, v40)
+			end
+		end
+	end)
+	local v43 = v_u_25
+	local v44 = v_u_24
+	local v45 = 0
+	while not v_u_23 and v45 < 10 do
+		task.wait(0.1)
+		v45 = v45 + 0.1
+	end
+	v_u_20 = nil
+	v_u_21 = nil
+	if v_u_23 then
+		v_u_7 = "unknown"
+		return v44, v43
+	else
+		task.cancel(v_u_28)
+		return false, "TIMED OUT\n" .. (v_u_21 or "No stack captured \226\128\148 module hung immediately or debug.info unavailable.")
+	end
+end
+local function v_u_50(p47, p48, p49)
+	-- upvalues: (copy) v_u_6
+	warn(string.format("[%s] %s\n  Module : %s\n  Script : %s\n  Line   : %s\n  Error  : %s", os.date("%H:%M:%S"), p47, p48:GetFullName(), v_u_6, p49:match(":(%d+):") or "?", p49:match(":%d+: (.+)") or p49))
+end
+repeat
+	task.wait()
+until v4:FindFirstChild("PlayerGui") and (v4:FindFirstChild("Loaded") and v4.Loaded.Value)
+print(string.format("[%s] Player loaded, waiting for PlayerGui...", os.date("%H:%M:%S")))
+while true do
+	task.wait(1)
+	local v51 = true
+	for _, v52 in v3:GetChildren() do
+		if not v4.PlayerGui:FindFirstChild(v52.Name) then
+			print(string.format("[%s] Missing GUI: %s", os.date("%H:%M:%S"), v52.Name))
+			v51 = false
+		end
+		if v52:FindFirstChildWhichIsA("ModuleScript") and not v4.PlayerGui[v52.Name]:FindFirstChildWhichIsA("ModuleScript") then
+			print(string.format("[%s] Missing ModuleScript in: %s", os.date("%H:%M:%S"), v52.Name))
+			v51 = false
+		end
+	end
+	if v51 then
+		print(string.format("[%s] PlayerGui fully replicated, requiring modules...", os.date("%H:%M:%S")))
+		local v_u_53 = 0
+		local v_u_54 = 0
+		local v_u_55 = {}
+		local function v64(p56)
+			-- upvalues: (copy) v_u_46, (ref) v_u_53, (ref) v_u_54, (copy) v_u_55, (copy) v_u_50
+			if p56:IsA("ModuleScript") then
+				print(string.format("[%s] \226\134\146 %s", os.date("%H:%M:%S"), p56:GetFullName()))
+				local v57 = tick()
+				local v58, v59 = v_u_46(p56)
+				local v60 = tick() - v57
+				if v58 then
+					v_u_53 = v_u_53 + 1
+					if v60 >= 2 then
+						warn(string.format("[%s] SLOW (%.1fs): %s", os.date("%H:%M:%S"), v60, p56:GetFullName()))
+						return
+					end
+				else
+					v_u_54 = v_u_54 + 1
+					if v59 and v59:find("TIMED OUT") then
+						local v61 = string.format("\n\226\149\148\226\149\144\226\149\144 HUNG MODULE \226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\n\226\149\145  Module  : %s\n\226\149\145  Elapsed : %.1fs\n\226\149\145  %s\n\226\149\154\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144", p56:GetFullName(), v60, v59:gsub("TIMED OUT\n", ""):gsub("\n", "\n\226\149\145  "))
+						warn(v61)
+						local v62 = v_u_55
+						local v63 = {
+							["name"] = p56:GetFullName(),
+							["reason"] = v59
+						}
+						table.insert(v62, v63)
+						return
+					end
+					v_u_50("FAILED", p56, v59 or "unknown")
+				end
+			end
+		end
+		local v65 = v_u_54
+		local v66 = v_u_53
+		for _, v67 in v4.PlayerGui:GetDescendants() do
+			v64(v67)
+		end
+		print(string.format("[%s] PlayerGui done \226\128\148 %d ok, %d failed", os.date("%H:%M:%S"), v66, v65))
+		v_u_53 = 0
+		v_u_54 = 0
+		local v68 = v_u_54
+		local v69 = v_u_53
+		for _, v70 in script.Parent.Modules:GetChildren() do
+			v64(v70)
+		end
+		print(string.format("[%s] Modules done \226\128\148 %d ok, %d failed", os.date("%H:%M:%S"), v69, v68))
+		if #v_u_55 > 0 then
+			warn(string.format("\n[%s] \226\149\144\226\149\144 INFINITE LOAD SUMMARY \226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144", os.date("%H:%M:%S")))
+			for v71, v72 in v_u_55 do
+				warn(string.format("  [%d] %s", v71, v72.name))
+				warn("      " .. v72.reason:gsub("\n", "\n      "))
+			end
+			warn("\n  COMMON FIXES:")
+			warn("    InvokeServer with no handler  \226\134\146  set OnServerInvoke BEFORE client loads")
+			warn("    WaitForChild with no timeout  \226\134\146  :WaitForChild(\'x\', 5)")
+			warn("    repeat task.wait() until ...  \226\134\146  add a tick()-based timeout")
+			warn("\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144\226\149\144")
+		end
+		print(string.format("[%s] Requesting ReplicaController data...", os.date("%H:%M:%S")))
+		v5.RequestData()
+		local v73 = Instance.new("BoolValue", v4)
+		v73.Name = "ClientLoaded"
+		v73.Value = true
+		print(string.format("[%s] ClientLoaded set \226\128\148 initialization complete.", os.date("%H:%M:%S")))
+		return
+	end
+end
+LivesHatches 
+local v1 = game:GetService("RunService")
+local v2 = workspace.Scripted.LiveLB.GUIHolder.SurfaceGui.ScrollingFrame
+local v_u_3 = {}
+local v_u_4 = {}
+v1.RenderStepped:Connect(function()
+	-- upvalues: (copy) v_u_3, (copy) v_u_4
+	local v5 = tick() % 5 / 5
+	local v6 = Color3.fromHSV(v5, 1, 1)
+	local v7 = Color3.fromHSV
+	local v8 = tick()
+	local v9 = v7(math.sin(v8) * 0.15 + 0.7, 1, 1)
+	for _, v10 in v_u_3 do
+		if v10:IsDescendantOf(workspace) then
+			v10.PetImage.ImageColor3 = v6
+		end
+	end
+	for _, v11 in v_u_4 do
+		if v11:IsDescendantOf(workspace) then
+			v11.PetImage.ImageColor3 = v9
+		end
+	end
+end)
+for _, v12 in v2:GetChildren() do
+	local v13 = v12:FindFirstChild("PetImage")
+	if v13 and v13.ImageColor3 == Color3.fromRGB(254, 254, 254) then
+		table.insert(v_u_3, v12)
+	elseif v13 and v13.ImageColor3 == Color3.fromRGB(254, 254, 253) then
+		table.insert(v_u_4, v12)
+	end
+end
+v2.ChildAdded:Connect(function(p14)
+	-- upvalues: (copy) v_u_3, (copy) v_u_4
+	task.wait(0.5)
+	local v15 = p14:FindFirstChild("PetImage")
+	if v15 and v15.ImageColor3 == Color3.fromRGB(254, 254, 254) then
+		local v16 = v_u_3
+		table.insert(v16, p14)
+	elseif v15 and v15.ImageColor3 == Color3.fromRGB(254, 254, 253) then
+		local v17 = v_u_4
+		table.insert(v17, p14)
+	end
+end)
+v2.ChildRemoved:Connect(function(p18)
+	-- upvalues: (copy) v_u_3, (copy) v_u_4
+	local v19 = table.find(v_u_3, p18)
+	if v19 then
+		table.remove(v_u_3, v19)
+	end
+	local v20 = table.find(v_u_4, p18)
+	if v20 then
+		table.remove(v_u_4, v20)
+	end
+end)
+return {}
+PetDisplayManager 
+local v_u_1 = game:GetService("Players")
+local v_u_2 = game:GetService("RunService")
+local v_u_3 = game:GetService("ReplicatedStorage")
+local v4 = require(v_u_3.Modules.Libraries.ReplicaController)
+local v_u_5 = v_u_1.LocalPlayer
+local v_u_6 = false
+local v_u_7 = false
+local v_u_8 = false
+local v_u_9 = 0
+local v_u_10 = workspace:WaitForChild("Scripted"):WaitForChild("PetModels")
+local v_u_11 = v_u_3.Clones.PetOverhead
+local v_u_12 = CFrame.new(0, 100000, 0)
+local v_u_13 = RaycastParams.new()
+v_u_13.FilterType = Enum.RaycastFilterType.Blacklist
+local v_u_14 = {}
+local v_u_15 = {
+	[1] = {
+		["name"] = "Basic",
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(100, 100, 100),
+		["light"] = Color3.fromRGB(255, 255, 255),
+		["stroke1"] = Color3.fromRGB(120, 120, 120),
+		["stroke2"] = Color3.fromRGB(255, 255, 255)
+	},
+	[2] = {
+		["name"] = "Unique",
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(0, 160, 180),
+		["light"] = Color3.fromRGB(160, 255, 255),
+		["stroke1"] = Color3.fromRGB(0, 140, 160),
+		["stroke2"] = Color3.fromRGB(140, 255, 255)
+	},
+	[3] = {
+		["name"] = "Rare",
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(60, 0, 180),
+		["light"] = Color3.fromRGB(180, 100, 255),
+		["stroke1"] = Color3.fromRGB(50, 0, 160),
+		["stroke2"] = Color3.fromRGB(160, 80, 255)
+	},
+	[4] = {
+		["name"] = "Legendary",
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(180, 0, 100),
+		["light"] = Color3.fromRGB(255, 130, 210),
+		["stroke1"] = Color3.fromRGB(160, 0, 90),
+		["stroke2"] = Color3.fromRGB(255, 120, 200)
+	},
+	[5] = {
+		["name"] = "Mythical",
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(180, 40, 0),
+		["light"] = Color3.fromRGB(255, 225, 70),
+		["stroke1"] = Color3.fromRGB(160, 30, 0),
+		["stroke2"] = Color3.fromRGB(255, 210, 50)
+	},
+	[6] = {
+		["name"] = "Divine",
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(120, 140, 255),
+		["light"] = Color3.fromRGB(255, 255, 255),
+		["stroke1"] = Color3.fromRGB(100, 120, 255),
+		["stroke2"] = Color3.fromRGB(240, 240, 255)
+	},
+	[7] = {
+		["name"] = "Huge",
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(120, 0, 0),
+		["light"] = Color3.fromRGB(255, 70, 70),
+		["stroke1"] = Color3.fromRGB(100, 0, 0),
+		["stroke2"] = Color3.fromRGB(255, 60, 60)
+	},
+	[100] = {
+		["name"] = "Exclusive",
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(120, 80, 0),
+		["light"] = Color3.fromRGB(255, 235, 90),
+		["stroke1"] = Color3.fromRGB(100, 70, 0),
+		["stroke2"] = Color3.fromRGB(255, 220, 80)
+	}
+}
+local v_u_16 = {
+	[0] = {
+		["text"] = Color3.fromRGB(220, 220, 220),
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(140, 140, 140),
+		["light"] = Color3.fromRGB(220, 220, 220),
+		["stroke1"] = Color3.fromRGB(120, 120, 120),
+		["stroke2"] = Color3.fromRGB(200, 200, 200)
+	},
+	[1] = {
+		["text"] = Color3.fromRGB(255, 255, 255),
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(140, 90, 0),
+		["light"] = Color3.fromRGB(255, 225, 90),
+		["stroke1"] = Color3.fromRGB(160, 110, 0),
+		["stroke2"] = Color3.fromRGB(255, 220, 80)
+	},
+	[2] = {
+		["text"] = Color3.fromRGB(255, 255, 255),
+		["animate"] = true,
+		["dark"] = nil,
+		["light"] = nil,
+		["stroke1"] = Color3.fromRGB(160, 0, 0),
+		["stroke2"] = Color3.fromRGB(0, 160, 255)
+	},
+	[3] = {
+		["text"] = Color3.fromRGB(255, 255, 255),
+		["animate"] = true,
+		["dark"] = Color3.fromRGB(50, 110, 180),
+		["light"] = Color3.fromRGB(230, 250, 255),
+		["stroke1"] = Color3.fromRGB(60, 130, 200),
+		["stroke2"] = Color3.fromRGB(220, 245, 255)
+	}
+}
+local v_u_17 = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(180, 0, 0)),
+	ColorSequenceKeypoint.new(0.17, Color3.fromRGB(200, 140, 0)),
+	ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 160, 60)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 100, 200)),
+	ColorSequenceKeypoint.new(0.67, Color3.fromRGB(120, 0, 200)),
+	ColorSequenceKeypoint.new(0.83, Color3.fromRGB(200, 0, 120)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 0, 0))
+})
+local v_u_18 = {}
+local function v_u_21(p19, p20)
+	return ColorSequence.new({
+		ColorSequenceKeypoint.new(0, p20),
+		ColorSequenceKeypoint.new(0.35, p20),
+		ColorSequenceKeypoint.new(0.5, p19),
+		ColorSequenceKeypoint.new(0.65, p20),
+		ColorSequenceKeypoint.new(1, p20)
+	})
+end
+local function v_u_33(p_u_22, p23, p24, p25, p26)
+	-- upvalues: (copy) v_u_18, (copy) v_u_2
+	if p_u_22 then
+		if v_u_18[p_u_22] then
+			v_u_18[p_u_22]:Disconnect()
+			v_u_18[p_u_22] = nil
+		end
+		for _, v27 in p_u_22:GetChildren() do
+			if v27:IsA("UIGradient") then
+				v27:Destroy()
+			end
+		end
+		if p23 then
+			local v_u_28 = Instance.new("UIGradient")
+			v_u_28.Color = p23
+			v_u_28.Rotation = p24 or 45
+			v_u_28.Parent = p_u_22
+			if p25 then
+				local v_u_29 = p26 or 0.3
+				if v_u_18[p_u_22] then
+					v_u_18[p_u_22]:Disconnect()
+					v_u_18[p_u_22] = nil
+				end
+				local v_u_30 = -1
+				v_u_18[p_u_22] = v_u_2.Heartbeat:Connect(function(p31)
+					-- upvalues: (copy) v_u_28, (copy) p_u_22, (ref) v_u_18, (ref) v_u_30, (copy) v_u_29
+					if v_u_28 and v_u_28.Parent then
+						v_u_30 = v_u_30 + v_u_29 * 2 * p31
+						if v_u_30 > 1 then
+							v_u_30 = -1
+						end
+						v_u_28.Offset = Vector2.new(v_u_30, 0)
+					else
+						local v32 = p_u_22
+						if v_u_18[v32] then
+							v_u_18[v32]:Disconnect()
+							v_u_18[v32] = nil
+						end
+					end
+				end)
+			end
+		end
+	else
+		return
+	end
+end
+local function v_u_44(p34, p35)
+	-- upvalues: (copy) v_u_15, (copy) v_u_33, (copy) v_u_21, (copy) v_u_18, (copy) v_u_2
+	if p34 then
+		local v36 = v_u_15[p35]
+		if v36 then
+			p34.Text = v36.name
+			p34.TextColor3 = Color3.fromRGB(255, 255, 255)
+			v_u_33(p34, v_u_21(v36.dark, v36.light), 45, v36.animate, 0.3)
+			local v_u_37 = p34:FindFirstChildOfClass("UIStroke")
+			if v_u_37 then
+				for _, v38 in v_u_37:GetChildren() do
+					if v38:IsA("UIGradient") then
+						v38:Destroy()
+					end
+				end
+				local v_u_39 = Instance.new("UIGradient")
+				v_u_39.Color = v_u_21(v36.stroke1, v36.stroke2)
+				v_u_39.Rotation = 45
+				v_u_39.Parent = v_u_37
+				if v36.animate then
+					if v_u_18[v_u_37] then
+						v_u_18[v_u_37]:Disconnect()
+						v_u_18[v_u_37] = nil
+					end
+					local v_u_40 = -1
+					local v_u_41 = 0.3
+					v_u_18[v_u_37] = v_u_2.Heartbeat:Connect(function(p42)
+						-- upvalues: (copy) v_u_39, (copy) v_u_37, (ref) v_u_18, (ref) v_u_40, (copy) v_u_41
+						if v_u_39 and v_u_39.Parent then
+							v_u_40 = v_u_40 + v_u_41 * 2 * p42
+							if v_u_40 > 1 then
+								v_u_40 = -1
+							end
+							v_u_39.Offset = Vector2.new(v_u_40, 0)
+						else
+							local v43 = v_u_37
+							if v_u_18[v43] then
+								v_u_18[v43]:Disconnect()
+								v_u_18[v43] = nil
+							end
+						end
+					end)
+				end
+			end
+		else
+			p34.Text = "Unknown"
+		end
+	else
+		return
+	end
+end
+local function v_u_64(p_u_45, p46)
+	-- upvalues: (copy) v_u_16, (copy) v_u_17, (copy) v_u_21, (copy) v_u_18, (copy) v_u_2
+	if p_u_45 then
+		local v47 = v_u_16[p46]
+		if v47 then
+			p_u_45.TextColor3 = v47.text
+			for _, v48 in p_u_45:GetChildren() do
+				if v48:IsA("UIGradient") then
+					v48:Destroy()
+				end
+			end
+			local v_u_49 = p_u_45:FindFirstChildOfClass("UIStroke")
+			if not v_u_49 then
+				v_u_49 = Instance.new("UIStroke")
+				v_u_49.Thickness = 1.5
+				v_u_49.Parent = p_u_45
+			end
+			for _, v50 in v_u_49:GetChildren() do
+				if v50:IsA("UIGradient") then
+					v50:Destroy()
+				end
+			end
+			local v_u_51 = Instance.new("UIGradient")
+			v_u_51.Rotation = 45
+			v_u_51.Parent = v_u_49
+			if p46 == 2 then
+				v_u_51.Color = v_u_17
+			else
+				v_u_51.Color = v_u_21(v47.stroke1, v47.stroke2)
+			end
+			if v47.animate then
+				if v_u_18[v_u_49] then
+					v_u_18[v_u_49]:Disconnect()
+					v_u_18[v_u_49] = nil
+				end
+				local v_u_52 = -1
+				local v_u_53 = 0.3
+				v_u_18[v_u_49] = v_u_2.Heartbeat:Connect(function(p54)
+					-- upvalues: (copy) v_u_51, (copy) v_u_49, (ref) v_u_18, (ref) v_u_52, (copy) v_u_53
+					if v_u_51 and v_u_51.Parent then
+						v_u_52 = v_u_52 + v_u_53 * 2 * p54
+						if v_u_52 > 1 then
+							v_u_52 = -1
+						end
+						v_u_51.Offset = Vector2.new(v_u_52, 0)
+					else
+						local v55 = v_u_49
+						if v_u_18[v55] then
+							v_u_18[v55]:Disconnect()
+							v_u_18[v55] = nil
+						end
+					end
+				end)
+			end
+			if v47.animate then
+				local v_u_56 = Instance.new("UIGradient")
+				v_u_56.Rotation = 45
+				v_u_56.Parent = p_u_45
+				if p46 == 2 then
+					v_u_56.Color = v_u_17
+					local v_u_57 = 45
+					v_u_18[p_u_45] = v_u_2.Heartbeat:Connect(function(p58)
+						-- upvalues: (copy) p_u_45, (ref) v_u_18, (ref) v_u_57, (copy) v_u_56, (copy) v_u_51
+						if p_u_45 and p_u_45.Parent then
+							v_u_57 = (v_u_57 + 40 * p58) % 360
+							v_u_56.Rotation = v_u_57
+							v_u_51.Rotation = v_u_57
+						else
+							local v59 = p_u_45
+							if v_u_18[v59] then
+								v_u_18[v59]:Disconnect()
+								v_u_18[v59] = nil
+							end
+						end
+					end)
+				else
+					v_u_56.Color = v_u_21(v47.dark, v47.light)
+					if v_u_18[p_u_45] then
+						v_u_18[p_u_45]:Disconnect()
+						v_u_18[p_u_45] = nil
+					end
+					local v_u_60 = -1
+					local v_u_61 = 0.3
+					v_u_18[p_u_45] = v_u_2.Heartbeat:Connect(function(p62)
+						-- upvalues: (copy) v_u_56, (copy) p_u_45, (ref) v_u_18, (ref) v_u_60, (copy) v_u_61
+						if v_u_56 and v_u_56.Parent then
+							v_u_60 = v_u_60 + v_u_61 * 2 * p62
+							if v_u_60 > 1 then
+								v_u_60 = -1
+							end
+							v_u_56.Offset = Vector2.new(v_u_60, 0)
+						else
+							local v63 = p_u_45
+							if v_u_18[v63] then
+								v_u_18[v63]:Disconnect()
+								v_u_18[v63] = nil
+							end
+						end
+					end)
+				end
+			else
+				return
+			end
+		else
+			return
+		end
+	else
+		return
+	end
+end
+local function v_u_72(p65, p66, p67)
+	-- upvalues: (copy) v_u_3, (copy) v_u_11, (copy) v_u_64, (copy) v_u_44, (ref) v_u_8
+	local v68 = require(v_u_3.Modules.Eggs)
+	local v69 = v_u_11:Clone()
+	v69.PetName.Text = p67.PetName
+	local v70 = v69:FindFirstChild("PetType")
+	if v70 then
+		v70.Text = p66.name
+		v_u_64(v70, p67.PetType)
+	end
+	if p67.SerialNumber and p67.SerialNumber <= 99 then
+		v69.SerialNumber.Visible = true
+		v69.SerialNumber.Text = "#" .. p67.SerialNumber
+		v69.SerialNumber.TextColor3 = v68.getSerialColor(p67.SerialNumber)
+	end
+	v69.PetLevel.Text = "Level " .. v68.getLevel(p65.rarity, p67.PetExp)
+	local v71 = v69:FindFirstChild("PetRarity")
+	if v71 then
+		v_u_44(v71, p65.rarity)
+	end
+	v69.Enabled = not v_u_8
+	return v69
+end
+local function v_u_80(p_u_73, p_u_74)
+	-- upvalues: (copy) v_u_3, (copy) v_u_72
+	local v75 = require(v_u_3.Modules.Eggs)
+	local v_u_76 = v75.getIDData(p_u_74.PetId)
+	local v_u_77 = v75.getTypeData(p_u_74.PetType)
+	if v_u_76 and v_u_77 then
+		local v_u_78 = p_u_73:IsA("BasePart") and p_u_73 or p_u_73.PrimaryPart
+		if v_u_78 then
+			local v79 = v_u_78:FindFirstChild("PetOverhead")
+			if v79 then
+				v79:Destroy()
+			end
+			v_u_72(v_u_76, v_u_77, p_u_74).Parent = v_u_78
+		else
+			task.defer(function()
+				-- upvalues: (ref) v_u_78, (copy) p_u_73, (ref) v_u_72, (copy) v_u_76, (copy) v_u_77, (copy) p_u_74
+				v_u_78 = p_u_73:IsA("BasePart") and p_u_73 or p_u_73.PrimaryPart
+				if v_u_78 then
+					v_u_72(v_u_76, v_u_77, p_u_74).Parent = v_u_78
+				end
+			end)
+		end
+	else
+		return
+	end
+end
+local function v_u_83(p81)
+	if p81:IsA("BasePart") then
+		return p81
+	end
+	if p81:IsA("Model") then
+		if p81.PrimaryPart then
+			return p81.PrimaryPart
+		end
+		local v82 = p81:FindFirstChild("HumanoidRootPart") or (p81:FindFirstChild("MainPart") or p81:FindFirstChild("Root") or (p81:FindFirstChild("Body") or p81:FindFirstChildOfClass("BasePart")))
+		if v82 then
+			p81.PrimaryPart = v82
+			return v82
+		end
+	end
+	return nil
+end
+local function v_u_86(p84)
+	local v85 = p84:IsA("Model") and not p84.PrimaryPart and (p84:FindFirstChild("HumanoidRootPart") or (p84:FindFirstChild("MainPart") or p84:FindFirstChild("Root") or (p84:FindFirstChild("Body") or p84:FindFirstChildOfClass("BasePart"))))
+	if v85 then
+		p84.PrimaryPart = v85
+	end
+end
+local function v_u_91(p87)
+	-- upvalues: (copy) v_u_14
+	local v88 = v_u_14[p87]
+	if v88 and v88.hh then
+		return v88.hh
+	end
+	local v89
+	if p87:IsA("Model") then
+		local _, v90 = p87:GetBoundingBox()
+		v89 = v90.Y * 0.5
+	else
+		v89 = not p87:IsA("BasePart") and 1.5 or p87.Size.Y * 0.5
+	end
+	if v88 then
+		v88.hh = v89
+	end
+	return v89
+end
+local function v_u_93(p92)
+	-- upvalues: (copy) v_u_14
+	if not v_u_14[p92] then
+		v_u_14[p92] = {
+			["hh"] = nil,
+			["sx"] = nil,
+			["sz"] = nil,
+			["pvx"] = nil,
+			["pvz"] = nil,
+			["velX"] = 0,
+			["velZ"] = 0,
+			["groundY"] = nil,
+			["sy"] = nil,
+			["rayTimer"] = 0,
+			["rng"] = math.random() * 3.141592653589793 * 2
+		}
+	end
+end
+local function v_u_99(p94)
+	if not p94:IsA("BasePart") then
+		local v95 = tick()
+		local v96 = (math.sin(v95) + 1) * 102.5 + 50
+		for _, v97 in p94:GetDescendants() do
+			if v97:IsA("BasePart") then
+				local v98 = v97:GetAttribute("DefaultColor")
+				if v98 then
+					v97.Color = Color3.fromRGB(v98.R * v96, v98.G * v96, v98.B * v96)
+				else
+					v97:SetAttribute("DefaultColor", v97.Color)
+				end
+			end
+		end
+	end
+end
+local function v_u_111(p100)
+	-- upvalues: (copy) v_u_83, (ref) v_u_9, (copy) v_u_99
+	local v101 = p100:GetAttribute("PetType")
+	if v101 then
+		local v102 = v_u_83(p100)
+		if v102 then
+			v102 = v102:FindFirstChild("PetOverhead")
+		end
+		if v101 == 2 then
+			local v103 = Color3.fromHSV(v_u_9, 1, 1)
+			if not v102 then
+				return
+			end
+			local v104 = v102:FindFirstChild("PetType")
+			local v105 = v102:FindFirstChild("PetName")
+			if v104 then
+				v104.TextColor3 = v103
+			end
+			if v105 then
+				v105.TextColor3 = v103
+				return
+			end
+		elseif v101 == 3 then
+			local v106 = Color3.fromHSV
+			local v107 = tick()
+			local v108 = v106(math.sin(v107) * 0.15 + 0.7, 1, 1)
+			if v102 then
+				local v109 = v102:FindFirstChild("PetType")
+				local v110 = v102:FindFirstChild("PetName")
+				if v109 then
+					v109.TextColor3 = v108
+				end
+				if v110 then
+					v110.TextColor3 = v108
+				end
+			end
+			v_u_99(p100)
+		end
+	end
+end
+local function v_u_121(p112, p113, p114, p115, p116)
+	-- upvalues: (copy) v_u_13, (copy) v_u_10, (copy) v_u_91
+	v_u_13.FilterDescendantsInstances = { v_u_10, p115 }
+	local v117 = workspace
+	local v118 = p113 + 6
+	local v119 = v117:Raycast(Vector3.new(p112, v118, p114), Vector3.new(0, -100, 0), v_u_13)
+	if not v119 then
+		return p113
+	end
+	local v120 = v119.Position.Y + v_u_91(p116)
+	if v120 <= p113 + 3 then
+		p113 = v120 or p113
+	end
+	return p113
+end
+local function v_u_173(p122, p123, p124, p125, p126, p127)
+	-- upvalues: (copy) v_u_83, (copy) v_u_93, (copy) v_u_14, (copy) v_u_121
+	if v_u_83(p122) then
+		v_u_93(p122)
+		local v128 = v_u_14[p122]
+		local v129 = p125.HumanoidRootPart
+		local v130 = v129.Position
+		local v131 = 6 + p124 * 0.5
+		local v132 = 360 / p124 * p123 + p126 * 10
+		local v133 = math.rad(v132)
+		local v134 = v130.X + math.cos(v133) * v131
+		local v135 = v130.Z + math.sin(v133) * v131
+		if v128.sx == nil then
+			v128.sx = v134
+			v128.sz = v135
+		end
+		local v136 = (v134 - v128.sx) ^ 2 + (v135 - v128.sz) ^ 2
+		local v137 = -(math.sqrt(v136) > 15 and 36 or 12) * p127
+		local v138 = 1 - math.exp(v137)
+		v128.sx = v128.sx + (v134 - v128.sx) * v138
+		v128.sz = v128.sz + (v135 - v128.sz) * v138
+		if v128.pvx == nil then
+			local v139 = v128.sx
+			local v140 = v128.sz
+			v128.pvx = v139
+			v128.pvz = v140
+		end
+		local v141 = 1 / math.max(p127, 0.001)
+		v128.velX = (v128.sx - v128.pvx) * v141
+		v128.velZ = (v128.sz - v128.pvz) * v141
+		v128.pvx = v128.sx
+		v128.pvz = v128.sz
+		local v142 = v128.velX ^ 2 + v128.velZ ^ 2
+		local v143 = math.sqrt(v142)
+		v128.rayTimer = v128.rayTimer - p127
+		if v128.rayTimer <= 0 or v128.groundY == nil then
+			local v144 = 0.08 - v128.rayTimer
+			v128.rayTimer = 0.08
+			local v145 = v_u_121(v128.sx, v130.Y, v128.sz, p125, p122)
+			if v128.groundY == nil then
+				v128.groundY = v145
+			else
+				local v146 = v128.groundY
+				local v147 = v145 - v128.groundY
+				local v148 = -5 * v144
+				v128.groundY = v146 + v147 * (1 - math.exp(v148))
+			end
+		end
+		local v149 = p126 * 3.5 + v128.rng
+		local v150 = math.sin(v149) * 0.6
+		local v151
+		if v143 < 1 then
+			local v152 = p126 * 1.2 + v128.rng
+			v151 = math.sin(v152) * 0.25 or 0
+		else
+			v151 = 0
+		end
+		local v153 = v128.groundY + 2 + v150 + v151
+		if v128.sy == nil then
+			v128.sy = v153
+		end
+		local v154 = v128.sy
+		local v155 = v153 - v128.sy
+		local v156 = -12 * p127
+		v128.sy = v154 + v155 * (1 - math.exp(v156))
+		local v157 = v128.sx
+		local v158 = v128.sy
+		local v159 = v128.sz
+		local v160 = Vector3.new(v157, v158, v159)
+		local v161 = v129.CFrame.LookVector
+		local v162 = v161.X
+		local v163 = v161.Z
+		local v164 = Vector3.new(v162, 0, v163)
+		local v165 = v164.Magnitude < 0.001 and Vector3.new(1, 0, 0) or v164
+		local v166 = CFrame.new(v160, v160 - v165) * CFrame.Angles(0, 1.5707963267948966, 0)
+		local v167 = p126 * 3.5 + v128.rng + 2.5
+		local v168 = math.sin(v167) * 0.13962634015954636
+		local v169 = p126 * 2 + v128.rng * 0.5
+		local v170 = math.sin(v169) * 0.17453292519943295
+		local v171
+		if v143 > 0.5 then
+			local v172 = v129.CFrame.RightVector
+			v171 = (v128.velX * v172.X + v128.velZ * v172.Z) / math.max(v143, 0.001) * 0.08726646259971647
+		else
+			v171 = 0
+		end
+		p122:PivotTo(v166 * CFrame.Angles(v168, v170, v171))
+	end
+end
+local function v_u_185(p174, p175, p176, p177)
+	-- upvalues: (copy) v_u_12, (copy) v_u_86, (copy) v_u_83, (copy) v_u_111, (copy) v_u_173
+	if p176 then
+		for _, v178 in p175:GetChildren() do
+			v178:PivotTo(v_u_12)
+		end
+		return
+	elseif p174:FindFirstChild("HumanoidRootPart") then
+		local v179 = {}
+		for _, v180 in p175:GetChildren() do
+			v_u_86(v180)
+			if v_u_83(v180) then
+				v179[#v179 + 1] = v180
+			end
+		end
+		local v181 = #v179
+		if v181 ~= 0 then
+			local v182 = tick()
+			for v183, v184 in ipairs(v179) do
+				v_u_111(v184)
+				v_u_173(v184, v183, v181, p174, v182, p177)
+			end
+		end
+	else
+		return
+	end
+end
+local v_u_186 = {}
+local function v_u_191()
+	-- upvalues: (copy) v_u_10, (copy) v_u_83, (ref) v_u_8
+	for _, v187 in v_u_10:GetChildren() do
+		for _, v188 in v187:GetChildren() do
+			local v189 = v_u_83(v188)
+			if v189 then
+				local v190 = v189:FindFirstChild("PetOverhead")
+				if v190 then
+					v190.Enabled = not v_u_8
+				end
+			end
+		end
+	end
+end
+v4.ReplicaOfClassCreated("PlayerData", function(p192)
+	-- upvalues: (ref) v_u_6, (ref) v_u_7, (ref) v_u_8, (copy) v_u_5, (copy) v_u_186, (copy) v_u_191
+	v_u_6 = p192.Data.Settings.HideOwnPets or false
+	v_u_7 = p192.Data.Settings.HideOtherPets or false
+	v_u_8 = p192.Data.Settings.HidePetOverhead or false
+	local v_u_193 = v_u_5.Name
+	v_u_186[v_u_193] = {}
+	for v194, v195 in pairs(p192.Data.Pets or {}) do
+		v_u_186[v_u_193][v194] = v195
+	end
+	p192:ListenToChange({ "Pets" }, function(p196)
+		-- upvalues: (ref) v_u_186, (copy) v_u_193
+		v_u_186[v_u_193] = {}
+		for v197, v198 in pairs(p196 or {}) do
+			v_u_186[v_u_193][v197] = v198
+		end
+	end)
+	p192:ListenToChange({ "Settings", "HideOwnPets" }, function(p199)
+		-- upvalues: (ref) v_u_6
+		v_u_6 = p199
+	end)
+	p192:ListenToChange({ "Settings", "HideOtherPets" }, function(p200)
+		-- upvalues: (ref) v_u_7
+		v_u_7 = p200
+	end)
+	p192:ListenToChange({ "Settings", "HidePetOverhead" }, function(p201)
+		-- upvalues: (ref) v_u_8, (ref) v_u_191
+		v_u_8 = p201 or false
+		v_u_191()
+	end)
+end)
+local v_u_202 = tick()
+local v_u_203 = 0
+v_u_2.RenderStepped:Connect(function()
+	-- upvalues: (ref) v_u_202, (ref) v_u_9, (ref) v_u_203, (copy) v_u_1, (copy) v_u_10, (copy) v_u_185, (copy) v_u_5, (ref) v_u_6, (ref) v_u_7
+	local v204 = tick()
+	local v205 = v204 - v_u_202
+	local v206 = math.min(v205, 0.1)
+	v_u_202 = v204
+	v_u_9 = v204 % 10 / 10
+	v_u_203 = v_u_203 + 1
+	for _, v207 in v_u_1:GetPlayers() do
+		local v208 = v207.Character
+		if v208 and v208:FindFirstChild("HumanoidRootPart") then
+			local v209 = v_u_10:FindFirstChild(v207.Name)
+			if v209 then
+				v_u_185(v208, v209, v207 == v_u_5 and v_u_6 or v_u_7, v206)
+			end
+		end
+	end
+end)
+v_u_10.DescendantRemoving:Connect(function(p210)
+	-- upvalues: (copy) v_u_14
+	v_u_14[p210] = nil
+end)
+local function v_u_220(p_u_211)
+	-- upvalues: (copy) v
+DropPorcentages 
+local v1 = game:GetService("ReplicatedStorage")
+local v_u_2 = require(v1.Modules.Eggs)
+return {
+	["getPercentages"] = function(p3, p4)
+		-- upvalues: (copy) v_u_2
+		local v5 = v_u_2.eggs[p3]
+		if not v5 then
+			warn("[DropPercentages] No egg data found for: " .. tostring(p3))
+			return {}
+		end
+		local v6 = {}
+		for v7, v8 in v5 do
+			if typeof(v8) == "table" then
+				local v9 = v8.percentage
+				if type(v9) == "number" then
+					v6[v7] = v8.percentage
+				else
+					local v10 = warn
+					local v11 = string.format
+					local v12 = tostring(v7)
+					local v13 = v8.percentage
+					v10(v11("[DropPercentages] petId %s in egg \'%s\' has no valid percentage (%s) \226\128\147 skipping.", v12, p3, (tostring(v13))))
+				end
+			end
+		end
+		if v5.robuxPrice then
+			return v6
+		end
+		local v14 = nil
+		local v15 = 0
+		for v16, v17 in v6 do
+			if v6[v16 - 4] == nil then
+				if v14 == nil or v16 < v14 then
+					v14 = v16
+				end
+			else
+				local v18 = v17 * p4 - v17
+				v6[v16] = v17 * p4
+				v15 = v15 + v18
+			end
+		end
+		if v14 == nil then
+			warn(string.format("[DropPercentages] No base pet found in egg \'%s\' \226\128\147 luck subtraction skipped.", p3))
+			return v6
+		end
+		local v19 = v6[v14] - v15
+		v6[v14] = math.max(v19, 0.0001)
+		return v6
+	end
+}
+
+Inventory space 
+return {
+	["getPetEquip"] = function(p1, p2)
+		local v3 = p1.Passes or {}
+		local v4 = (table.find(v3, "AllGamePasses") or table.find(v3, "+1 Pet Equip")) and 1 or 0
+		local v5 = (table.find(v3, "AllGamePasses") or table.find(v3, "+2 Pet Equip")) and 2 or 0
+		local v6 = (table.find(v3, "AllGamePasses") or table.find(v3, "+4 Pet Equip")) and 4 or 0
+		local v7 = p1.SpawnUpgrades and (p1.SpawnUpgrades.PetEquip or 0) or 0
+		local v8 = p1.EasterUpgrades and (p1.EasterUpgrades.PetEquip or 0) or 0
+		local v9 = p1.GalaxyUpgrades and (p1.GalaxyUpgrades.PetEquip or 0) or 0
+		local v10 = p1.SummerUpgrades and (p1.SummerUpgrades.PetEquip or 0) or 0
+		local v11 = p2 and (shared.IndexPetEquip and shared.IndexPetEquip[p2.UserId]) or 0
+		local v12 = (p1.TotalIndexed or 0) >= 75 and 1 or 0
+		local v13 = p1.SeasonPass and p1.SeasonPass.OwnsPremium and 1 or 0
+		local v14 = p1.Upgrades2M and p1.Upgrades2M.PetEquip == true and 1 or 0
+		local v15 = p1.ClaimedAchievements or {}
+		local v16 = table.find(v15.Eggs or {}, 15) and 1 or 0
+		local v17 = table.find(v15.MythicalHatched or {}, 7) and 1 or 0
+		local v18 = table.find(v15.HugeHatched or {}, 11) and 1 or 0
+		local v19 = table.find(v15.TotalAchievements or {}, 4) and 2 or 0
+		return 3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v12 + v11 + v13 + v14 + v16 + v17 + v18 + v19
+	end,
+	["getPetStorage"] = function(p20)
+		local v21 = p20.Passes or {}
+		local v22 = (table.find(v21, "AllGamePasses") or table.find(v21, "+500 Storage")) and 500 or 0
+		local v23 = (table.find(v21, "AllGamePasses") or table.find(v21, "+1000 Storage")) and 1000 or 0
+		local v24 = (p20.SpawnUpgrades and (p20.SpawnUpgrades.MoreStorage or 0) or 0) * 5
+		local v25 = (p20.EasterUpgrades and (p20.EasterUpgrades.MoreStorage or 0) or 0) * 5
+		local v26 = (p20.GalaxyUpgrades and (p20.GalaxyUpgrades.MoreStorage or 0) or 0) * 5
+		local v27 = (p20.SummerUpgrades and (p20.SummerUpgrades.MoreStorage or 0) or 0) * 5
+		local v28 = (p20.PurchasedEasterTier or 0) >= 45 and 20 or ((p20.PurchasedEasterTier or 0) >= 35 and 15 or ((p20.PurchasedEasterTier or 0) >= 20 and 10 or ((p20.PurchasedEasterTier or 0) >= 17 and 5 or 0)))
+		local v29 = (p20.PurchasedGemTier or 0) >= 35 and 15 or ((p20.PurchasedGemTier or 0) >= 25 and 10 or ((p20.PurchasedGemTier or 0) >= 17 and 5 or 0))
+		return 200 + v22 + v23 + v24 + v25 + v26 + v27 + v28 + v29
+	end
+}
+
+ReplicaControler local v_u_1 = {
+	["RequestDataRepeat"] = 10,
+	["SetterError"] = "[ReplicaController]: Setters can only be called inside write functions",
+	["DEBUG"] = true,
+	["DEBUG_VERBOSE"] = false
+}
+local v_u_2 = {
+	["log"] = function(...)
+		-- upvalues: (copy) v_u_1
+		if v_u_1.DEBUG then
+			print("[ReplicaController]", ...)
+		end
+	end,
+	["verbose"] = function(...)
+		-- upvalues: (copy) v_u_1
+		if v_u_1.DEBUG_VERBOSE then
+			print("[ReplicaController] [VERBOSE]", ...)
+		end
+	end,
+	["warn"] = function(...)
+		warn("[ReplicaController]", ...)
+	end,
+	["err"] = function(...)
+		error("[ReplicaController]" .. " " .. tostring((...)), 2)
+	end
+}
+local v_u_3 = {}
+function v_u_2.startTimer(p4)
+	-- upvalues: (copy) v_u_3
+	v_u_3[p4] = os.clock()
+end
+function v_u_2.stopTimer(p5)
+	-- upvalues: (copy) v_u_3, (copy) v_u_1
+	if v_u_3[p5] and v_u_1.DEBUG then
+		local v6 = os.clock() - v_u_3[p5]
+		print("[ReplicaController]" .. " [PERF] " .. p5 .. " took " .. string.format("%.4f", v6) .. "s")
+		v_u_3[p5] = nil
+	end
+end
+local v_u_7 = game:GetService("RunService")
+local v_u_8 = game:GetService("ReplicatedStorage")
+local v_u_9 = game:GetService("ServerScriptService")
+local function v_u_20(p10, p_u_11, p12)
+	-- upvalues: (copy) v_u_2
+	local v13 = p10:FindFirstChild(p_u_11, true)
+	if v13 then
+		return v13
+	end
+	local v14 = os.clock()
+	local v15 = false
+	local v_u_16 = nil
+	local v18 = p10.DescendantAdded:Connect(function(p17)
+		-- upvalues: (copy) p_u_11, (ref) v_u_16
+		if p17.Name == p_u_11 then
+			v_u_16 = p17
+		end
+	end)
+	local v19 = v_u_16
+	while true do
+		task.wait()
+		if not v15 and os.clock() - v14 > 2 then
+			v_u_2.warn("Still waiting for " .. p12 .. " \"" .. p_u_11 .. "\" inside " .. p10:GetFullName() .. " \226\128\148 check your setup! (elapsed: " .. string.format("%.1f", os.clock() - v14) .. "s)")
+			v15 = true
+		end
+		if os.clock() - v14 > 30 then
+			v18:Disconnect()
+			v_u_2.err("Timed out waiting for " .. p12 .. " \"" .. p_u_11 .. "\" in " .. p10:GetFullName() .. ". Game may not have initialized correctly.")
+		end
+		if v19 ~= nil then
+			v18:Disconnect()
+			v_u_2.log("Found " .. p12 .. " \"" .. p_u_11 .. "\" after " .. string.format("%.2f", os.clock() - v14) .. "s")
+			return v19
+		end
+	end
+end
+local v_u_21
+if v_u_7:IsServer() then
+	v_u_21 = Instance.new("Folder")
+	v_u_21.Name = "ReplicaRemoteEvents"
+	v_u_21.Parent = v_u_8
+	v_u_2.log("Server: Created RemoteEvent container")
+else
+	v_u_2.log("Client: Waiting for RemoteEvent container...")
+	v_u_21 = v_u_20(v_u_8, "ReplicaRemoteEvents", "folder")
+	v_u_2.log("Client: RemoteEvent container found")
+end
+local v_u_26 = {
+	["GetShared"] = function(_, p22)
+		-- upvalues: (copy) v_u_20, (copy) v_u_8
+		return v_u_20(v_u_8, p22, "module")
+	end,
+	["GetModule"] = function(_, p23)
+		-- upvalues: (copy) v_u_20, (copy) v_u_9
+		return v_u_20(v_u_9, p23, "module")
+	end,
+	["SetupRemoteEvent"] = function(p24)
+		-- upvalues: (copy) v_u_7, (ref) v_u_21, (copy) v_u_20
+		if not v_u_7:IsServer() then
+			return v_u_20(v_u_21, p24, "remote event")
+		end
+		local v25 = Instance.new("RemoteEvent")
+		v25.Name = p24
+		v25.Parent = v_u_21
+		return v25
+	end,
+	["Shared"] = {}
+}
+local v27 = require(v_u_26.GetShared("Madwork", "MadworkScriptSignal"))
+v_u_26.NewScriptSignal = v27.NewScriptSignal
+v_u_26.NewArrayScriptConnection = v27.NewArrayScriptConnection
+local v_u_28 = require(v_u_26.GetShared("Madwork", "MadworkMaid"))
+local v_u_29 = {
+	["RequestData"] = v_u_26.SetupRemoteEvent("Replica_ReplicaRequestData"),
+	["SetValue"] = v_u_26.SetupRemoteEvent("Replica_ReplicaSetValue"),
+	["SetValues"] = v_u_26.SetupRemoteEvent("Replica_ReplicaSetValues"),
+	["ArrayInsert"] = v_u_26.SetupRemoteEvent("Replica_ReplicaArrayInsert"),
+	["ArraySet"] = v_u_26.SetupRemoteEvent("Replica_ReplicaArraySet"),
+	["ArrayRemove"] = v_u_26.SetupRemoteEvent("Replica_ReplicaArrayRemove"),
+	["Write"] = v_u_26.SetupRemoteEvent("Replica_ReplicaWrite"),
+	["Signal"] = v_u_26.SetupRemoteEvent("Replica_ReplicaSignal"),
+	["SetParent"] = v_u_26.SetupRemoteEvent("Replica_ReplicaSetParent"),
+	["Create"] = v_u_26.SetupRemoteEvent("Replica_ReplicaCreate"),
+	["Destroy"] = v_u_26.SetupRemoteEvent("Replica_ReplicaDestroy")
+}
+local v_u_30 = {
+	["NewReplicaSignal"] = v_u_26.NewScriptSignal(),
+	["InitialDataReceivedSignal"] = v_u_26.NewScriptSignal(),
+	["InitialDataReceived"] = false,
+	["_replicas"] = {},
+	["_class_listeners"] = {},
+	["_child_listeners"] = {}
+}
+local v_u_31 = v_u_30._replicas
+local v_u_32 = v_u_30._class_listeners
+local v_u_33 = v_u_30._child_listeners
+local v_u_34 = v_u_30.NewReplicaSignal
+local v_u_35 = false
+local v_u_36 = {}
+local v_u_37 = {
+	["replicasCreated"] = 0,
+	["replicasDestroyed"] = 0,
+	["setValueCalls"] = 0,
+	["arrayOps"] = 0,
+	["writeCalls"] = 0
+}
+function v_u_30.GetStats()
+	-- upvalues: (copy) v_u_37, (copy) v_u_31
+	local v38 = {
+		["replicasCreated"] = v_u_37.replicasCreated,
+		["replicasDestroyed"] = v_u_37.replicasDestroyed,
+		["setValueCalls"] = v_u_37.setValueCalls,
+		["arrayOps"] = v_u_37.arrayOps,
+		["writeCalls"] = v_u_37.writeCalls
+	}
+	local v39 = 0
+	for _ in pairs(v_u_31) do
+		v39 = v39 + 1
+	end
+	v38.activeReplicas = v39
+	return v38
+end
+local function v_u_43(p40)
+	if type(p40) == "table" then
+		return p40
+	end
+	local v41 = {}
+	for v42 in p40:gmatch("[^%.]+") do
+		v41[#v41 + 1] = v42
+	end
+	return v41
+end
+local function v_u_55(p44, p45, p46)
+	local v47 = p44._table_listeners
+	for v48 = 1, #p45 do
+		local v49 = {}
+		local v50 = v47[1]
+		if v50 == nil then
+			v47[1] = v49
+		else
+			v49 = v50
+		end
+		local v51 = p45[v48]
+		v47 = {
+			{}
+		}
+		local v52 = v49[v51]
+		if v52 == nil then
+			v49[v51] = v47
+		else
+			v47 = v52
+		end
+	end
+	local v53 = {}
+	local v54 = v47[p46]
+	if v54 == nil then
+		v47[p46] = v53
+	else
+		v53 = v54
+	end
+	return v53
+end
+local function v_u_58(p56, ...)
+	if p56 then
+		for v57 = 1, #p56 do
+			p56[v57](...)
+		end
+	end
+end
+local function v_u_68(p59)
+	local v60 = p59[1]
+	local v61 = p59[2]
+	local v62 = { v60 }
+	for v63 = 1, #v61 do
+		local v64 = v60[1]
+		if v64 then
+			v60 = v60[1][v61[v63]]
+		else
+			v60 = v64
+		end
+		if not v60 then
+			return
+		end
+		v62[#v62 + 1] = v60
+	end
+	for v65 = #v62, 2, -1 do
+		local v66 = v62[v65]
+		if next(v66[1] or {}) then
+			return
+		end
+		for v67 = 2, 6 do
+			if v66[v67] and #v66[v67] > 0 then
+				return
+			end
+		end
+		v62[v65 - 1][1][v61[v65 - 1]] = nil
+	end
+end
+local function v_u_74(p69, p70, p71)
+	-- upvalues: (copy) v_u_74, (copy) v_u_2
+	for v72, v73 in pairs(p70) do
+		if type(v73) == "table" then
+			v_u_74(p69, v73, p71 .. v72 .. ".")
+		elseif type(v73) == "function" then
+			p69[#p69 + 1] = { p71 .. v72, v73 }
+		else
+			v_u_2.err("Invalid write function value \"" .. tostring(v73) .. "\" at \"" .. p71 .. v72 .. "\"")
+		end
+	end
+end
+local function v_u_83(p75)
+	-- upvalues: (copy) v_u_36, (copy) v_u_2, (copy) v_u_74
+	if v_u_36[p75] then
+		return v_u_36[p75]
+	end
+	v_u_2.log("Loading write lib from:", p75:GetFullName())
+	local v76 = {}
+	v_u_74(v76, require(p75), "")
+	table.sort(v76, function(p77, p78)
+		return p77[1] < p78[1]
+	end)
+	local v79 = {}
+	local v80 = {}
+	for v81, v82 in ipairs(v76) do
+		v79[v81] = v82[2]
+		v80[v82[1]] = v81
+	end
+	v_u_36[p75] = { v79, v80 }
+	v_u_2.log("Write lib loaded with", #v76, "functions from", p75:GetFullName())
+	return v_u_36[p75]
+end
+local function v_u_91(p84, p85)
+	-- upvalues: (copy) v_u_91, (copy) v_u_33, (copy) v_u_31, (copy) v_u_37, (copy) v_u_2
+	for _, v86 in ipairs(p84.Children) do
+		v_u_91(v86, true)
+	end
+	local v87 = p84.Id
+	v_u_33[v87] = nil
+	table.clear(p84._signal_listeners)
+	table.clear(p84._raw_listeners)
+	table.clear(p84._function_listeners)
+	table.clear(p84._table_listeners)
+	p84._table_listeners = {
+		{}
+	}
+	v_u_31[v87] = nil
+	p84._maid:Cleanup()
+	if not p85 and p84.Parent then
+		local v88 = p84.Parent.Children
+		local v89 = table.find(v88, p84)
+		if v89 then
+			table.remove(v88, v89)
+		end
+	end
+	local v90 = v_u_37
+	v90.replicasDestroyed = v90.replicasDestroyed + 1
+	v_u_2.log("Replica destroyed:", p84:Identify())
+end
+local function v_u_122(p92, p93)
+	-- upvalues: (copy) v_u_31, (copy) v_u_83, (copy) v_u_28, (copy) v_u_30, (copy) v_u_2, (copy) v_u_37
+	local v94 = {}
+	local v95 = p93 or {}
+	for v96, v97 in pairs(p92) do
+		v97[6] = tonumber(v96)
+		v94[#v94 + 1] = v97
+	end
+	table.sort(v94, function(p98, p99)
+		return p98[6] < p99[6]
+	end)
+	local v100 = {}
+	for _, v101 in ipairs(v94) do
+		local v102 = v101[6]
+		local v103 = v101[4]
+		local v104
+		if v103 == 0 then
+			v104 = nil
+		else
+			v104 = v_u_31[v103] or nil
+		end
+		local v105
+		if v103 == 0 then
+			v105 = false
+		else
+			v105 = v104 == nil
+		end
+		local v106, v107
+		if v101[5] then
+			local v108 = v_u_83(v101[5])
+			v106 = v108[1]
+			v107 = v108[2]
+		else
+			v106 = nil
+			v107 = nil
+		end
+		local v109 = {
+			["Data"] = v101[3],
+			["Id"] = v102,
+			["Class"] = v101[1],
+			["Tags"] = v101[2],
+			["Parent"] = v104,
+			["Children"] = {},
+			["_write_lib"] = v106,
+			["_write_lib_dictionary"] = v107,
+			["_table_listeners"] = {
+				{}
+			},
+			["_function_listeners"] = {},
+			["_raw_listeners"] = {},
+			["_signal_listeners"] = {},
+			["_maid"] = v_u_28.NewMaid()
+		}
+		local v110 = v_u_30._Replica
+		local v111 = setmetatable(v109, v110)
+		if v104 then
+			v104.Children[#v104.Children + 1] = v111
+		elseif v105 then
+			local v112 = {}
+			local v113 = v100[v103]
+			if v113 == nil then
+				v100[v103] = v112
+			else
+				v112 = v113
+			end
+			v112[#v112 + 1] = v111
+			v_u_2.warn("Replica", v102, "waiting for parent", v103, "\226\128\148 will resolve if parent arrives in this batch")
+		end
+		v_u_31[v102] = v111
+		v95[#v95 + 1] = v111
+		local v114 = v_u_37
+		v114.replicasCreated = v114.replicasCreated + 1
+		v_u_2.verbose("Replica created:", v111:Identify())
+		local v115 = v100[v102]
+		if v115 then
+			v100[v102] = nil
+			for _, v116 in ipairs(v115) do
+				v116.Parent = v111
+				v111.Children[#v111.Children + 1] = v116
+			end
+		end
+	end
+	if next(v100) then
+		local v117 = "[ReplicaService] BRANCH ERROR - Unresolved parents: "
+		for v118, v119 in pairs(v100) do
+			local v120 = {}
+			for _, v121 in ipairs(v119) do
+				v120[#v120 + 1] = v121:Identify()
+			end
+			v117 = v117 .. "[Parent " .. v118 .. "]: {" .. table.concat(v120, ", ") .. "}; "
+		end
+		v_u_2.err(v117)
+	end
+	return v95
+end
+local function v_u_135(p123, p124, p125)
+	-- upvalues: (copy) v_u_31, (copy) v_u_2, (copy) v_u_37, (copy) v_u_58
+	local v126 = v_u_31[p123]
+	if v126 then
+		local v127 = v126.Data
+		local v128 = v126._table_listeners
+		for v129 = 1, #p124 - 1 or #p124 do
+			local v130 = p124[v129]
+			v127 = v127[v130]
+			if v128 then
+				v128 = v128[1][v130]
+			end
+		end
+		local v131 = p124[#p124]
+		local v132 = v127[v131]
+		v127[v131] = p125
+		local v133 = v_u_37
+		v133.setValueCalls = v133.setValueCalls + 1
+		if v132 ~= p125 and v128 then
+			if v132 == nil then
+				v_u_58(v128[3], p125, v131)
+			end
+			local v134 = v128[1]
+			if v134 then
+				v134 = v128[1][p124[#p124]]
+			end
+			if v134 then
+				v_u_58(v134[2], p125, v132)
+			end
+		end
+		v_u_58(v126._raw_listeners, "SetValue", p124, p125)
+		v_u_2.verbose("SetValue replica", p123, "path", table.concat(p124, "."), "=", (tostring(p125)))
+	else
+		v_u_2.warn("SetValue: unknown replica id", p123)
+	end
+end
+local function v_u_149(p136, p137, p138)
+	-- upvalues: (copy) v_u_31, (copy) v_u_2, (copy) v_u_37, (copy) v_u_58
+	local v139 = v_u_31[p136]
+	if v139 then
+		local v140 = v139.Data
+		local v141 = v139._table_listeners
+		for v142 = 1, #p137 do
+			local v143 = p137[v142]
+			v140 = v140[v143]
+			if v141 then
+				v141 = v141[1][v143]
+			end
+		end
+		local v144 = v_u_37
+		v144.setValueCalls = v144.setValueCalls + 1
+		for v145, v146 in pairs(p138) do
+			local v147 = v140[v145]
+			v140[v145] = v146
+			if v147 ~= v146 and v141 then
+				if v147 == nil then
+					v_u_58(v141[3], v146, v145)
+				end
+				local v148 = v141[1]
+				if v148 then
+					v148 = v141[1][v145]
+				end
+				if v148 then
+					v_u_58(v148[2], v146, v147)
+				end
+			end
+		end
+		v_u_58(v139._raw_listeners, "SetValues", p137, p138)
+	else
+		v_u_2.warn("SetValues: unknown replica id", p136)
+	end
+end
+local function v_u_160(p150, p151, p152)
+	-- upvalues: (copy) v_u_31, (copy) v_u_2, (copy) v_u_37, (copy) v_u_58
+	local v153 = v_u_31[p150]
+	if v153 then
+		local v154 = v153.Data
+		local v155 = v153._table_listeners
+		for v156 = 1, #p151 do
+			local v157 = p151[v156]
+			v154 = v154[v157]
+			if v155 then
+				v155 = v155[1][v157]
+			end
+		end
+		table.insert(v154, p152)
+		local v158 = #v154
+		local v159 = v_u_37
+		v159.arrayOps = v159.arrayOps + 1
+		if v155 then
+			v_u_58(v155[4], v158, p152)
+		end
+		v_u_58(v153._raw_listeners, "ArrayInsert", p151, p152, v158)
+		return v158
+	end
+	v_u_2.warn("ArrayInsert: unknown replica id", p150)
+end
+local function v_u_171(p161, p162, p163, p164)
+	-- upvalues: (copy) v_u_31, (copy) v_u_2, (copy) v_u_37, (copy) v_u_58
+	local v165 = v_u_31[p161]
+	if v165 then
+		local v166 = v165.Data
+		local v167 = v165._table_listeners
+		for v168 = 1, #p162 do
+			local v169 = p162[v168]
+			v166 = v166[v169]
+			if v167 then
+				v167 = v167[1][v169]
+			end
+		end
+		v166[p163] = p164
+		local v170 = v_u_37
+		v170.arrayOps = v170.arrayOps + 1
+		if v167 then
+			v_u_58(v167[5], p163, p164)
+		end
+		v_u_58(v165._raw_listeners, "ArraySet", p162, p163, p164)
+	else
+		v_u_2.warn("ArraySet: unknown replica id", p161)
+	end
+end
+local function v_u_182(p172, p173, p174)
+	-- upvalues: (copy) v_u_31, (copy) v_u_2, (copy) v_u_37, (copy) v_u_58
+	local v175 = v_u_31[p172]
+	if v175 then
+		local v176 = v175.Data
+		local v177 = v175._table_listeners
+		for v178 = 1, #p173 do
+			local v179 = p173[v178]
+			v176 = v176[v179]
+			if v177 then
+				v177 = v177[1][v179]
+			end
+		end
+		local v180 = table.remove(v176, p174)
+		local v181 = v_u_37
+		v181.arrayOps = v181.arrayOps + 1
+		if v177 then
+			v_u_58(v177[6], p174, v180)
+		end
+		v_u_58(v175._raw_listeners, "ArrayRemove", p173, p174, v180)
+		return v180
+	end
+	v_u_2.warn("ArrayRemove: unknown replica id", p172)
+end
+local v183 = {}
+v183.__index = v183
+v_u_30._Replica = v183
+local function v_u_192(p184, p185, p186, p187, p188)
+	-- upvalues: (copy) v_u_2, (copy) v_u_43, (copy) v_u_55, (ref) v_u_26, (copy) v_u_68
+	if type(p187) ~= "function" then
+		v_u_2.err("Only functions can be set as listener in Replica:" .. p188 .. "()")
+	end
+	local v189 = v_u_43(p185)
+	local v190 = v_u_55(p184, v189, p186)
+	v190[#v190 + 1] = p187
+	local v191
+	if #v189 == 0 then
+		v191 = v_u_26.NewArrayScriptConnection(v190, p187)
+	else
+		v191 = v_u_26.NewArrayScriptConnection(v190, p187, v_u_68, { p184._table_listeners, v189 })
+	end
+	v_u_2.verbose("Listener added:", p188, "path:", table.concat(v189, "."))
+	return v191
+end
+function v183.ListenToChange(p193, p194, p195)
+	-- upvalues: (copy) v_u_43, (copy) v_u_2, (copy) v_u_192
+	if #v_u_43(p194) < 1 then
+		v_u_2.err("ListenToChange requires at least one key in path")
+	end
+	return v_u_192(p193, p194, 2, p195, "ListenToChange")
+end
+function v183.ListenToNewKey(p196, p197, p198)
+	-- upvalues: (copy) v_u_192
+	return v_u_192(p196, p197, 3, p198, "ListenToNewKey")
+end
+function v183.ListenToArrayInsert(p199, p200, p201)
+	-- upvalues: (copy) v_u_192
+	return v_u_192(p199, p200, 4, p201, "ListenToArrayInsert")
+end
+function v183.ListenToArraySet(p202, p203, p204)
+	-- upvalues: (copy) v_u_192
+	return v_u_192(p202, p203, 5, p204, "ListenToArraySet")
+end
+function v183.ListenToArrayRemove(p205, p206, p207)
+	-- upvalues: (copy) v_u_192
+	return v_u_192(p205, p206, 6, p207, "ListenToArrayRemove")
+end
+function v183.ListenToWrite(p208, p209, p210)
+	-- upvalues: (copy) v_u_2, (ref) v_u_26
+	if type(p210) ~= "function" then
+		v_u_2.err("Only functions can be listeners for ListenToWrite")
+	end
+	if not p208._write_lib then
+		v_u_2.err("_write_lib not declared for replica " .. p208:Identify())
+	end
+	local v211 = p208._write_lib_dictionary[p209]
+	if not v211 then
+		v_u_2.err("Write function \"" .. p209 .. "\" not found in write lib of " .. p208:Identify())
+	end
+	local v212 = p208._function_listeners
+	local v213 = {}
+	local v214 = v212[v211]
+	if v214 == nil then
+		v212[v211] = v213
+	else
+		v213 = v214
+	end
+	v213[#v213 + 1] = p210
+	return v_u_26.NewArrayScriptConnection(v213, p210)
+end
+function v183.ListenToRaw(p215, p216)
+	-- upvalues: (ref) v_u_26
+	local v217 = p215._raw_listeners
+	v217[#v217 + 1] = p216
+	return v_u_26.NewArrayScriptConnection(v217, p216)
+end
+function v183.ConnectOnClientEvent(p218, p219)
+	-- upvalues: (copy) v_u_2, (ref) v_u_26
+	if type(p219) ~= "function" then
+		v_u_2.err("Only functions can be passed to ConnectOnClientEvent")
+	end
+	p218._signal_listeners[#p218._signal_listeners + 1] = p219
+	return v_u_26.NewArrayScriptConnection(p218._signal_listeners, p219)
+end
+function v183.FireServer(p220, ...)
+	-- upvalues: (copy) v_u_29
+	v_u_29.Signal:FireServer(p220.Id, ...)
+end
+function v183.ListenToChildAdded(p221, p222)
+	-- upvalues: (copy) v_u_2, (copy) v_u_31, (copy) v_u_33, (ref) v_u_26
+	if type(p222) ~= "function" then
+		v_u_2.err("Only functions can be set as listener")
+	end
+	if v_u_31[p221.Id] then
+		local v223 = v_u_33
+		local v224 = p221.Id
+		local v225 = {}
+		local v226 = v223[v224]
+		if v226 == nil then
+			v223[v224] = v225
+		else
+			v225 = v226
+		end
+		v225[#v225 + 1] = p222
+		local v227 = v_u_26.NewArrayScriptConnection(v225, p222)
+		p221._maid:AddCleanupTask(v227)
+		return v227
+	end
+end
+function v183.FindFirstChildOfClass(p228, p229)
+	for _, v230 in ipairs(p228.Children) do
+		if v230.Class == p229 then
+			return v230
+		end
+	end
+	return nil
+end
+function v183.Identify(p231)
+	local v232 = {}
+	for v233, v234 in pairs(p231.Tags) do
+		v232[#v232 + 1] = tostring(v233) .. "=" .. tostring(v234)
+	end
+	return "[Id:" .. p231.Id .. ";Class:" .. p231.Class .. ";Tags:{" .. table.concat(v232, ";") .. "}]"
+end
+function v183.IsActive(p235)
+	-- upvalues: (copy) v_u_31
+	return v_u_31[p235.Id] ~= nil
+end
+function v183.AddCleanupTask(p236, p237)
+	return p236._maid:AddCleanupTask(p237)
+end
+function v183.RemoveCleanupTask(p238, p239)
+	p238._maid:RemoveCleanupTask(p239)
+end
+function v183.SetValue(p240, p241, p242)
+	-- upvalues: (ref) v_u_35, (copy) v_u_2, (copy) v_u_1, (copy) v_u_135, (copy) v_u_43
+	if not v_u_35 then
+		v_u_2.err(v_u_1.SetterError)
+	end
+	v_u_135(p240.Id, v_u_43(p241), p242)
+end
+function v183.SetValues(p243, p244, p245)
+	-- upvalues: (ref) v_u_35, (copy) v_u_2, (copy) v_u_1, (copy) v_u_149, (copy) v_u_43
+	if not v_u_35 then
+		v_u_2.err(v_u_1.SetterError)
+	end
+	v_u_149(p243.Id, v_u_43(p244), p245)
+end
+function v183.ArrayInsert(p246, p247, p248)
+	-- upvalues: (ref) v_u_35, (copy) v_u_2, (copy) v_u_1, (copy) v_u_160, (copy) v_u_43
+	if not v_u_35 then
+		v_u_2.err(v_u_1.SetterError)
+	end
+	return v_u_160(p246.Id, v_u_43(p247), p248)
+end
+function v183.ArraySet(p249, p250, p251, p252)
+	-- upvalues: (ref) v_u_35, (copy) v_u_2, (copy) v_u_1, (copy) v_u_171, (copy) v_u_43
+	if not v_u_35 then
+		v_u_2.err(v_u_1.SetterError)
+	end
+	v_u_171(p249.Id, v_u_43(p250), p251, p252)
+end
+function v183.ArrayRemove(p253, p254, p255)
+	-- upvalues: (ref) v_u_35, (copy) v_u_2, (copy) v_u_1, (copy) v_u_182, (copy) v_u_43
+	if not v_u_35 then
+		v_u_2.err(v_u_1.SetterError)
+	end
+	return v_u_182(p253.Id, v_u_43(p254), p255)
+end
+function v183.Write(p256, p257, ...)
+	-- upvalues: (ref) v_u_35, (copy) v_u_2, (copy) v_u_1, (copy) v_u_37, (copy) v_u_58
+	if not v_u_35 then
+		v_u_2.err(v_u_1.SetterError)
+	end
+	local v258 = p256._write_lib_dictionary[p257]
+	if not v258 then
+		v_u_2.err("Write function \"" .. p257 .. "\" not found in " .. p256:Identify())
+	end
+	local v259 = table.pack(p256._write_lib[v258](p256, ...))
+	local v260 = v_u_37
+	v260.writeCalls = v260.writeCalls + 1
+	v_u_58(p256._function_listeners[v258], ...)
+	local v261 = v259.n
+	return table.unpack(v259, 1, v261)
+end
+local v_u_262 = false
+function v_u_30.RequestData()
+	-- upvalues: (ref) v_u_262, (copy) v_u_2, (copy) v_u_29, (copy) v_u_1, (copy) v_u_30
+	if not v_u_262 then
+		v_u_262 = true
+		v_u_2.log("RequestData called - beginning data request loop")
+		task.spawn(function()
+			-- upvalues: (ref) v_u_2, (ref) v_u_29, (ref) v_u_1, (ref) v_u_30
+			local v263 = 0
+			while not game:IsLoaded() do
+
+			Passes 
+game:GetService("ReplicatedStorage")
+local v1 = {}
+local v_u_2 = {
+	["+1 Pet Equip"] = { 1739392268, "Equip 1 more pet than the default limit" },
+	["+2 Pet Equip"] = { 1738816698, "Equip 2 more pets than the default limit" },
+	["+4 Pet Equip"] = { 1739214421, "Equip 6 more pets than the default limit" },
+	["+500 Storage"] = { 1738260876, "Increase your storage capacity by 500" },
+	["+1000 Storage"] = { 1738668777, "Increase your storage capacity by 1000" },
+	["Super Lucky"] = { 1739174707, "Gain +2 Luck when hatching eggs" },
+	["Ultra Lucky"] = { 1739308342, "Gain bonus Luck when hatching eggs" },
+	["Magic Egg"] = { 1737781066, "Higher chances to hatch Shiny/Rainbow/Void Pets!" },
+	["Instant Hatch"] = { 1736976112, "Hatch eggs instantly without waiting" },
+	["Fast Hatch"] = { 1739362289, "Hatch eggs faster than normal" },
+	["X5 Hatch"] = { 1739276279, "Lets you hatch 5 more eggs!" },
+	["X2 Clicks"] = { 1739202552, "Multiply your Clicks by x2 permanently" },
+	["X2 Gems"] = { 1738840784, "Multiply your Gems by x2 Permanently" },
+	["X2 Rebirths"] = { 1737056146, "Multiply your Rebirths by x2 Permanently" },
+	["AutoRebirth"] = { 1740409327, "Auto rebirth!" },
+	["VIP"] = { 1738500946, "Multiplies most of your stats by 1.5x and gain hourly tokens!" },
+	["AllGamePasses"] = { 1737951080, "Grants you all the passes with a 30% discount!" },
+	["CurrencyBundle"] = { 1760384298, "Grants you all the currency passes with a 30% discount!" },
+	["+2Adventure"] = { 0, "Grants you all the passes with a 30% discount!" }
+}
+local v_u_3 = {
+	["Angelic Egg-Single"] = 3550985072,
+	["Angelic Egg-Triple"] = 3550985425,
+	["Angelic Egg-Octuple"] = 3550985700,
+	["BoostPack"] = 0,
+	["X3Luck"] = 3550990176,
+	["X4Luck"] = 3550990436,
+	["V1Bundle"] = 3551002615,
+	["ForeverPack"] = 3550986548,
+	["ClickPotion-1"] = 3550986884,
+	["ClickPotion-10"] = 3550987473,
+	["RebirthPotion-1"] = 3550989170,
+	["RebirthPotion-10"] = 3550989754,
+	["LuckPotion-1"] = 3550988453,
+	["LuckPotion-10"] = 3550988690,
+	["GemPotion-1"] = 3550987959,
+	["GemPotion-10"] = 3550988212,
+	["GalaxyCoinsPotion-1"] = 15,
+	["GalaxyCoinsPotion-10"] = 15,
+	["Tokenpack1"] = 3550995738,
+	["Tokenpack2"] = 3550995896,
+	["Tokenpack3"] = 3550996153,
+	["Tokenpack4"] = 3550996401,
+	["Tokenpack5"] = 3550996582,
+	["Tokenpack6"] = 3550996828,
+	["Gempack1"] = 3560629859,
+	["Gempack2"] = 3560626311,
+	["Gempack3"] = 3560626639,
+	["Gempack4"] = 3560626808,
+	["Gempack5"] = 3560627027,
+	["Gempack6"] = 3560627517,
+	["InstantDailyReward"] = 3551003543,
+	["MerchantWindColossal"] = 3557014919
+}
+local v_u_4 = {
+	["Gempack1"] = 10000,
+	["Gempack2"] = 100000,
+	["Gempack3"] = 1000000,
+	["Gempack4"] = 10000000,
+	["Gempack5"] = 100000000,
+	["Gempack6"] = 1000000000,
+	["Tokenpack1"] = 25,
+	["Tokenpack2"] = 100,
+	["Tokenpack3"] = 250,
+	["Tokenpack4"] = 500,
+	["Tokenpack5"] = 1000,
+	["Tokenpack6"] = 2500
+}
+function v1.getPassId(p5)
+	-- upvalues: (copy) v_u_2
+	if v_u_2[p5] then
+		return v_u_2[p5][1]
+	else
+		return nil
+	end
+end
+function v1.getPassDesc(p6)
+	-- upvalues: (copy) v_u_2
+	if v_u_2[p6] then
+		return v_u_2[p6][2]
+	else
+		return nil
+	end
+end
+function v1.isGamepass(p7)
+	-- upvalues: (copy) v_u_2
+	return v_u_2[p7] ~= nil
+end
+function v1.isDevProduct(p8)
+	-- upvalues: (copy) v_u_3
+	return v_u_3[p8] ~= nil
+end
+function v1.getProdId(p9)
+	-- upvalues: (copy) v_u_3
+	return v_u_3[p9]
+end
+function v1.getPassName(p10)
+	-- upvalues: (copy) v_u_2
+	for v11, v12 in pairs(v_u_2) do
+		if v12 and v12[1] == p10 then
+			return v11
+		end
+	end
+	return nil
+end
+function v1.getProdName(p13)
+	-- upvalues: (copy) v_u_3
+	for v14, v15 in pairs(v_u_3) do
+		if v15 == p13 then
+			return v14
+		end
+	end
+	return nil
+end
+function v1.getDevAmount(p16)
+	-- upvalues: (copy) v_u_4
+	return v_u_4[p16]
+end
+function v1.GetPasses()
+	-- upvalues: (copy) v_u_2
+	return v_u_2
+end
+return v1
+Ranks 
+local v1 = {
+	{
+		["RankName"] = "Bronze I",
+		["Cost"] = 250000,
+		["clickMulti"] = 1.6,
+		["rebirthMulti"] = 1.5,
+		["Image"] = "rbxassetid://89481522969120",
+		["GradientColor"] = ColorSequence.new(Color3.fromRGB(205, 127, 50), Color3.fromRGB(139, 69, 19))
+	},
+	{
+		["RankName"] = "Bronze II",
+		["Cost"] = 500000,
+		["clickMulti"] = 1.7,
+		["rebirthMulti"] = 1.6,
+		["Image"] = "rbxassetid://104269213294151",
+		["GradientColor"] = ColorSequence.new(Color3.fromRGB(218, 145, 70), Color3.fromRGB(160, 82, 30))
+	},
+	{
+		["RankName"] = "Silver I",
+		["Cost"] = 7500000,
+		["clickMulti"] = 2.1,
+		["rebirthMulti"] = 2,
+		["Image"] = "rbxassetid://72301399656502",
+		["GradientColor"] = ColorSequence.new(Color3.fromRGB(220, 220, 220), Color3.fromRGB(150, 150, 150))
+	},
+	{
+		["RankName"] = "Silver II",
+		["Cost"] = 25000000,
+		["clickMulti"] = 2.2,
+		["rebirthMulti"] = 2.1,
+		["Image"] = "rbxassetid://96228862841967",
+		["GradientColor"] = ColorSequence.new(Color3.fromRGB(235, 235, 235), Color3.fromRGB(170, 170, 170))
+	},
+	{
+		["RankName"] = "Gold I",
+		["Cost"] = 777777777,
+		["clickMulti"] = 2.6,
+		["rebirthMulti"] = 2.4,
+		["Image"] = "rbxassetid://101942397257939",
+		["GradientColor"] = ColorSequence.new(Color3.fromRGB(255, 215, 0), Color3.fromRGB(200, 155, 0))
+	},
+	{
+		["RankName"] = "Gold II",
+		["Cost"] = 2500000000,
+		["clickMulti"] = 2.7,
+		["rebirthMulti"] = 2.5,
+		["Image"] = "rbxassetid://76361216872402",
+		["GradientColor"] = ColorSequence.new(Color3.fromRGB(255, 230, 50), Color3.fromRGB(210, 170, 0))
+	},
+	{
+		["RankName"] = "Sapphire I",
+		["Cost"] = 75000000000,
+		["clickMulti"] = 3.1,
+		["rebirthMulti"] = 2.8,
+		["Image"] = "rbxassetid://132981457592743",
+		["GradientColor"] = ColorSequence.new(Color3.fromRGB(50, 130, 255), Color3.fromRGB(0, 60, 180))
+	},
+	{
+		["RankName"] = "Sapphire II",
+		["Cost"] = 150000000000,
+		["clickMulti"] = 3.2,
+		["rebirthMulti"] = 2.9,
+		["Image"] = "rbxassetid://82073949657574",
+		["GradientColor"] = ColorSequence.new(Color3.fromRGB(80, 160, 255), Color3.fromRGB(20, 80, 200))
+	}
+}
+return v1
+SuperMastery 
+local v1 = {}
+local v_u_2 = {
+	[0] = {
+		["name"] = "Noobling"
+	},
+	[1] = {
+		["name"] = "Amateur Tapper",
+		["price"] = 5
+	},
+	[2] = {
+		["name"] = "Novice Grinder",
+		["price"] = 10
+	},
+	[3] = {
+		["name"] = "Rising Star",
+		["price"] = 15
+	},
+	[4] = {
+		["name"] = "Pro Clicker",
+		["price"] = 20
+	},
+	[5] = {
+		["name"] = "OP Grinder",
+		["price"] = 25
+	},
+	[6] = {
+		["name"] = "Warrior of Taps",
+		["price"] = 30
+	},
+	[7] = {
+		["name"] = "Blitz Tapper",
+		["price"] = 35
+	},
+	[8] = {
+		["name"] = "Tapocalypse",
+		["price"] = 40
+	},
+	[9] = {
+		["name"] = "Godlike Tapper",
+		["price"] = 45
+	},
+	[10] = {
+		["name"] = "Immortal Clicker",
+		["price"] = 50
+	}
+}
+function v1.getSuperMasteryData(p3)
+	-- upvalues: (copy) v_u_2
+	[10] = {
+		["name"] = "Immortal Clicker",
+		["price"] = 50
+	}
+}
+function v1.getSuperMasteryData(p3)
+	-- upvalues: (copy) v_u_2
+	return v_u_2[p3]
+end
+function v1.getSuperMasteryMulti(p4)
+	return 10 ^ p4
+end
+return v1
+
+Mastery 
+local v1 = {}
+local v_u_2 = {
+	[0] = {
+		["name"] = "Noob"
+	},
+	[1] = {
+		["name"] = "Amateur",
+		["price"] = 50000000000
+	},
+	[2] = {
+		["name"] = "Starter",
+		["price"] = 300000000000
+	},
+	[3] = {
+		["name"] = "Pro",
+		["price"] = 1000000000000
+	},
+	[4] = {
+		["name"] = "Advanced",
+		["price"] = 24000000000000
+	},
+	[5] = {
+		["name"] = "OP Grinder",
+		["price"] = 90000000000000
+	},
+	[6] = {
+		["name"] = "Warrior",
+		["price"] = 500000000000000
+	},
+	[7] = {
+		["name"] = "Blitz Tapper",
+		["price"] = 3000000000000000
+	},
+	[8] = {
+		["name"] = "Tapper God",
+		["price"] = 2e16
+	},
+	[9] = {
+		["name"] = "Godlike",
+		["price"] = 1.2e17
+	},
+	[10] = {
+		["name"] = "Immortal",
+		["price"] = 8e17
+	},
+	[11] = {
+		["name"] = "Legend",
+		["price"] = 5e18
+	},
+	[12] = {
+		["name"] = "Beast",
+		["price"] = 3e19
+	},
+	[13] = {
+		["name"] = "Monster",
+		["price"] = 2e20
+	},
+	[14] = {
+		["name"] = "Fighter",
+		["price"] = 1.5e21
+	},
+	[15] = {
+		["name"] = "Insane Grinder",
+		["price"] = 1e22
+	},
+	[16] = {
+		["name"] = "Chosen",
+		["price"] = 8e22
+	},
+	[17] = {
+		["name"] = "Chosen One",
+		["price"] = 6e23
+	},
+	[18] = {
+		["name"] = "Clicker Grinder",
+		["price"] = 5e24
+	},
+	[19] = {
+		["name"] = "Angel",
+		["price"] = 4e25
+	},
+	[20] = {
+		["name"] = "Lord",
+		["price"] = 3e26
+	},
+	[21] = {
+		["name"] = "Hero",
+		["price"] = 2.5e27
+	},
+	[22] = {
+		["name"] = "Colossus",
+		["price"] = 2e28
+	},
+	[23] = {
+		["name"] = "Titan",
+		["price"] = 1.8e29
+	},
+	[24] = {
+		["name"] = "God",
+		["price"] = 1.5e30
+	},
+	[25] = {
+		["name"] = "Class Hero",
+		["price"] = 1.2e31
+	},
+	[26] = {
+		["name"] = "D Class Hero",
+		["price"] = 1e32
+	},
+	[27] = {
+		["name"] = "C Class Hero",
+		["price"] = 8e32
+	},
+	[28] = {
+		["name"] = "B Class Hero",
+		["price"] = 6e33
+	},
+	[29] = {
+		["name"] = "F Class Hero",
+		["price"] = 5e34
+	},
+	[30] = {
+		["name"] = "A Class Hero",
+		["price"] = 4e35
+	},
+	[31] = {
+		["name"] = "Warrior Master",
+		["price"] = 3e36
+	},
+	[32] = {
+		["name"] = "Bronze Fighter",
+		["price"] = 2.5e37
+	},
+	[33] = {
+		["name"] = "Silver Fighter",
+		["price"] = 2e38
+	},
+	[34] = {
+		["name"] = "Gold Fighter",
+		["price"] = 1.5e39
+	},
+	[35] = {
+		["name"] = "Godlike Tapper",
+		["price"] = 1.2e40
+	},
+	[36] = {
+		["name"] = "Professional Tapper",
+		["price"] = 1e41
+	},
+	[37] = {
+		["name"] = "Bronze Clicker",
+		["price"] = 8e41
+	},
+	[38] = {
+		["name"] = "Silver Clicker",
+		["price"] = 6e42
+	},
+	[39] = {
+		["name"] = "Gold Clicker",
+		["price"] = 5e43
+	},
+	[40] = {
+		["name"] = "Toxic Clicker",
+		["price"] = 4e44
+	},
+	[41] = {
+		["name"] = "Aquaman",
+		["price"] = 3e45
+	},
+	[42] = {
+		["name"] = "Apex",
+		["price"] = 2.5e46
+	},
+	[43] = {
+		["name"] = "Eternal Tapper",
+		["price"] = 2e47
+	},
+	[44] = {
+		["name"] = "Celestial Tapper",
+		["price"] = 1.5e48
+	},
+	[45] = {
+		["name"] = "Ultimate Tapper",
+		["price"] = 1.2e49
+	},
+	[46] = {
+		["name"] = "Armored Tapper",
+		["price"] = 1e50
+	},
+	[47] = {
+		["name"] = "Champion Tapper",
+		["price"] = 8e50
+	},
+	[48] = {
+		["name"] = "Fire Tapper",
+		["price"] = 6e51
+	},
+	[49] = {
+		["name"] = "Spirit Tapper",
+		["price"] = 5e52
+	},
+	[50] = {
+		["name"] = "Mighty Fighter",
+		["price"] = 4e53
+	},
+	[51] = {
+		["name"] = "Cosmic Fighter",
+		["price"] = 3e54
+	},
+	[52] = {
+		["name"] = "Mythic Fighter",
+		["price"] = 2.5e55
+	},
+	[53] = {
+		["name"] = "Diamond Fighter",
+		["price"] = 2e56
+	},
+	[54] = {
+		["name"] = "Eternal Fighter",
+		["price"] = 1.5e57
+	},
+	[55] = {
+		["name"] = "Abyssal Fighter",
+		["price"] = 1.2e58
+	},
+	[56] = {
+		["name"] = "Galaxy Fighter",
+		["price"] = 1e59
+	},
+	[57] = {
+		["name"] = "Nebula Fighter",
+		["price"] = 8e59
+	},
+	[58] = {
+		["name"] = "Omega Fighter",
+		["price"] = 6e60
+	},
+	[59] = {
+		["name"] = "Divine Fighter",
+		["price"] = 5e61
+	},
+	[60] = {
+		["name"] = "Infinity Fighter",
+		["price"] = 4e62
+	},
+	[61] = {
+		["name"] = "Cosmic Tapper",
+		["price"] = 3e63
+	},
+	[62] = {
+		["name"] = "Mythic Tapper",
+		["price"] = 2.5e64
+	},
+	[63] = {
+		["name"] = "Diamond Tapper",
+		["price"] = 2e65
+	},
+	[64] = {
+		["name"] = "Eternal Tapper+",
+		["price"] = 1.5e66
+	},
+	[65] = {
+		["name"] = "Abyssal Tapper",
+		["price"] = 1.2e67
+	},
+	[66] = {
+		["name"] = "Galaxy Tapper",
+		["price"] = 1e68
+	},
+	[67] = {
+		["name"] = "Nebula Tapper",
+		["price"] = 8e68
+	},
+	[68] = {
+		["name"] = "Omega Tapper",
+		["price"] = 6e69
+	},
+	[69] = {
+		["name"] = "Divine Tapper",
+		["price"] = 5e70
+	},
+	[70] = {
+		["name"] = "Infinity Tapper",
+		["price"] = 4e71
+	},
+	[71] = {
+		["name"] = "Cosmic Hero",
+		["price"] = 3e72
+	},
+	[72] = {
+		["name"] = "Mythic Hero",
+		["price"] = 2.5e73
+	},
+	[73] = {
+		["name"] = "Diamond Hero",
+		["price"] = 2e74
+	},
+	[74] = {
+		["name"] = "Eternal Hero",
+		["price"] = 1.5e75
+	},
+	[75] = {
+		["name"] = "Abyssal Hero",
+		["price"] = 1.2e76
+	},
+	[76] = {
+		["name"] = "Galaxy Hero",
+		["price"] = 1e77
+	},
+	[77] = {
+		["name"] = "Nebula Hero",
+		["price"] = 8e77
+	},
+	[78] = {
+		["name"] = "Omega Hero",
+		["price"] = 6e78
+	},
+	[79] = {
+		["name"] = "Divine Hero",
+		["price"] = 5e79
+	},
+	[80] = {
+		["name"] = "Infinity Hero",
+		["price"] = 4e80
+	},
+	[81] = {
+		["name"] = "Cosmic Legend",
+		["price"] = 3e81
+	},
+	[82] = {
+		["name"] = "Mythic Legend",
+		["price"] = 2.5e82
+	},
+	[83] = {
+		["name"] = "Diamond Legend",
+		["price"] = 2e83
+	},
+	[84] = {
+		["name"] = "Eternal Legend",
+		["price"] = 1.5e84
+	},
+	[85] = {
+		["name"] = "Abyssal Legend",
+		["price"] = 1.2e85
+	},
+	[86] = {
+		["name"] = "Galaxy Legend",
+		["price"] = 1e86
+	},
+	[87] = {
+		["name"] = "Nebula Legend",
+		["price"] = 8e86
+	},
+	[88] = {
+		["name"] = "Omega Legend",
+		["price"] = 6e87
+	},
+	[89] = {
+		["name"] = "Divine Legend",
+		["price"] = 5e88
+	},
+	[90] = {
+		["name"] = "Infinity Legend",
+		["price"] = 4e89
+	},
+	[91] = {
+		["name"] = "Cosmic God",
+		["price"] = 3e90
+	},
+	[92] = {
+		["name"] = "Mythic God",
+		["price"] = 2.5e91
+	},
+	[93] = {
+		["name"] = "Diamond God",
+		["price"] = 2e92
+	},
+	[94] = {
+		["name"] = "Eternal God",
+		["price"] = 1.5e93
+	},
+	[95] = {
+		["name"] = "Abyssal God",
+		["price"] = 1.2e94
+	},
+	[96] = {
+		["name"] = "Galaxy God",
+		["price"] = 1e95
+	},
+	[97] = {
+		["name"] = "Nebula God",
+		["price"] = 8e95
+	},
+	[98] = {
+		["name"] = "Omega God",
+		["price"] = 6e96
+	},
+	[99] = {
+		["name"] = "Divine God",
+		["price"] = 5e97
+	},
+	[100] = {
+		["name"] = "Infinity God",
+		["price"] = 4e98
+	}
+}
+function v1.getMasteryData(p3)
+	-- upvalues: (copy) v_u_2
+	return v_u_2[p3]
+end
+function v1.getMasteryMulti(p4)
+	return 2 ^ p4
+end
+return v1
+
+Uis 
+EggCombo
+local v1 = game:GetService("ReplicatedStorage")
+local v2 = require(v1.Modules.Libraries.ReplicaController)
+local v_u_3 = script.Parent.Amount
+v2.ReplicaOfClassCreated("PlayerData", function(p4)
+	-- upvalues: (copy) v_u_3
+	if p4.Data.EggStreak >= 5000 then
+		local v5 = v_u_3
+		local v6 = p4.Data.EggStreak
+		v5.Text = "Egg Luck Combo: +0.5 (" .. tostring(v6):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", "") .. "/\226\136\158)"
+	else
+		local v7 = v_u_3
+		local v8 = string.format
+		local v9 = p4.Data.EggStreak / 500
+		local v10 = v8("%g", math.floor(v9) * 2.5)
+		local v11 = p4.Data.EggStreak
+		local v12 = tostring(v11):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", "")
+		local v13 = p4.Data.EggStreak / 500
+		local v14 = (math.floor(v13) + 1) * 500
+		v7.Text = "Egg Luck Combo: +" .. v10 .. " (" .. v12 .. "/" .. tostring(v14):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", "") .. ")"
+	end
+	v_u_3.Amount.Text = v_u_3.Text
+	p4:ListenToChange({ "EggStreak" }, function(p15)
+		-- upvalues: (ref) v_u_3
+		if p15 >= 5000 then
+			v_u_3.Text = "Egg Luck Combo: +0.5 (" .. tostring(p15):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", "") .. "/\226\136\158)"
+		else
+			local v16 = v_u_3
+			local v17 = string.format
+			local v18 = p15 / 500
+			local v19 = v17("%g", math.floor(v18) * 2.5)
+			local v20 = tostring(p15):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", "")
+			local v21 = p15 / 500
+			local v22 = (math.floor(v21) + 1) * 500
+			v16.Text = "Egg Luck Combo: +" .. v19 .. " (" .. v20 .. "/" .. tostring(v22):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", "") .. ")"
+		end
+		v_u_3.Amount.Text = v_u_3.Text
+	end)
+end)
+return {}
+
+LimitedPet 
+local v1 = game:GetService("Players")
+local v2 = game:GetService("ReplicatedStorage")
+local v_u_3 = game:GetService("TweenService")
+local v_u_4 = game:GetService("RunService")
+local v_u_5 = v1.LocalPlayer:GetMouse()
+local v_u_6 = require(v2.Modules.Eggs)
+local v_u_7 = require(v2.Modules.Abbreviations)
+local v_u_8 = require(v2.Modules.GUI)
+local v_u_9 = require(v2.Modules.Sounds)
+local v_u_10 = require(v2.Modules.Notification)
+local v_u_11 = v2.Functions:WaitForChild("GetLimitedPetsData")
+local v_u_12 = v2.Functions:WaitForChild("BuyLimitedPet")
+local v13 = v2.Events:WaitForChild("LimitedPetStockUpdate")
+local v_u_14 = script.Parent
+local v15 = v_u_14:WaitForChild("Holder"):WaitForChild("Holder")
+local v16 = v15:WaitForChild("ScrollingFrame")
+local v17 = v15:FindFirstChild("CloseButton")
+local v_u_18 = v_u_14:WaitForChild("HoverDisplay")
+local v_u_19 = v_u_18:WaitForChild("Holder")
+local v_u_20 = v_u_19:FindFirstChild("PetImage")
+v_u_18.Visible = false
+local v_u_21 = {}
+for v22, v23 in { "Pet1", "Pet2", "Pet3" } do
+	v_u_21[v22] = v16:WaitForChild(v23)
+end
+local v_u_24 = {}
+local v_u_25 = nil
+local v_u_26 = {}
+local v_u_27 = nil
+local v_u_28 = nil
+local function v_u_34(p29, p30)
+	-- upvalues: (copy) v_u_6
+	if p30 < 5 then
+		local v31 = Color3.fromRGB(50, 110, 163)
+		p29.Color = ColorSequence.new(v31, v31)
+	else
+		local v32 = v_u_6.getRarityUIData(p30).color
+		local v33 = Color3.new(v32.R + (1 - v32.R) * 0.75, v32.G + (1 - v32.G) * 0.75, v32.B + (1 - v32.B) * 0.75)
+		p29.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, v32),
+			ColorSequenceKeypoint.new(0.2, v32),
+			ColorSequenceKeypoint.new(0.5, v33),
+			ColorSequenceKeypoint.new(0.8, v32),
+			ColorSequenceKeypoint.new(1, v32)
+		})
+	end
+end
+local function v_u_48()
+	-- upvalues: (copy) v_u_14, (copy) v_u_5, (copy) v_u_18
+	local v35 = v_u_14.AbsoluteSize.X
+	local v36 = v_u_14.AbsoluteSize.Y
+	if v35 ~= 0 and v36 ~= 0 then
+		local v37 = (v_u_5.X + 16) / v35
+		local v38 = (v_u_5.Y + 16) / v36
+		local v39 = v_u_18.AbsoluteSize.X / v35
+		local v40 = v_u_18.AbsoluteSize.Y / v36
+		local v41 = v_u_18
+		local v42 = UDim2.fromScale
+		local v43 = 1 - v39
+		local v44 = math.max(0, v43)
+		local v45 = math.clamp(v37, 0, v44)
+		local v46 = 1 - v40
+		local v47 = math.max(0, v46)
+		v41.Position = v42(v45, (math.clamp(v38, 0, v47)))
+	end
+end
+local function v_u_88(p49)
+	-- upvalues: (ref) v_u_24, (copy) v_u_21, (copy) v_u_6, (copy) v_u_20, (copy) v_u_19, (copy) v_u_7, (copy) v_u_3, (copy) v_u_18, (copy) v_u_34, (ref) v_u_25, (copy) v_u_48, (ref) v_u_27
+	local v50 = v_u_24[p49]
+	if v50 then
+		local v51 = v_u_21[p49]
+		if v51 then
+			local v52 = v51:FindFirstChild("Holder")
+			if v52 then
+				local v53, v54 = pcall(v_u_6.getIDData, v50.petId)
+				if v53 and v54 then
+					local v55 = v52:FindFirstChild("Pet")
+					local v56 = v50.petId
+					local v57
+					if v55 then
+						local v58 = v55:FindFirstChild((tostring(v56)))
+						v57 = v58 and (v58:IsA("ImageLabel") or v58:FindFirstChildOfClass("ImageLabel")) or v55:FindFirstChildOfClass("ImageLabel", true)
+					else
+						v57 = nil
+					end
+					if v_u_20 then
+						if v57 then
+							v_u_20.Image = v57.Image
+							v_u_20.ImageColor3 = Color3.new(1, 1, 1)
+						else
+							v_u_20.Image = ""
+						end
+					end
+					local v59 = v_u_19:FindFirstChild("DefaultName", true)
+					if v59 then
+						v59.Text = v54.name
+					end
+					local v60 = v_u_19:FindFirstChild("PetName", true)
+					if v60 then
+						v60.Text = "\"" .. v50.displayName .. "\""
+					end
+					local v61 = {
+						["PetId"] = v50.petId,
+						["PetType"] = 0,
+						["PetExp"] = 0,
+						["PetName"] = v50.displayName
+					}
+					local v62 = v_u_6.getClickMultiplier(v61)
+					local v63 = v_u_19:FindFirstChild("ClickDisplay", true)
+					if v63 then
+						if v62 >= 0 then
+							v63.Text = "x" .. v_u_7.abbreviate(v62)
+						else
+							local v64 = v54.scaledMulti
+							v63.Text = v64 and "x" .. v64 .. " Scaled" or "???"
+						end
+					end
+					local function v71(p65, p66, p67, p68)
+						-- upvalues: (ref) v_u_19, (ref) v_u_7
+						local v69 = v_u_19:FindFirstChild(p65, true)
+						local v70 = v_u_19:FindFirstChild(p66, true)
+						if v69 and v70 then
+							if p67 then
+								v69.Text = "x" .. v_u_7.abbreviate(p67)
+								v69.Visible = true
+								v70.Visible = true
+								return
+							elseif p68 then
+								v69.Text = "x" .. p68 .. "%"
+								v69.Visible = true
+								v70.Visible = true
+							else
+								v69.Visible = false
+								v70.Visible = false
+							end
+						else
+							return
+						end
+					end
+					v71("GemDisplay", "GemIcon", v54.gemMulti, v54.scaledMulti)
+					v71("RebirthDisplay", "RebirthIcon", v54.rebirthMulti, v54.scaledMulti)
+					local v72 = v_u_6.getRarityUIData(v54.rarity)
+					local v73 = v_u_6.getTypeData(0)
+					local v74 = v_u_19:FindFirstChild("RarityDisplay", true)
+					if v74 then
+						v74.Text = v72.name
+						v74.TextColor3 = v72.color
+					end
+					local v75 = v_u_19:FindFirstChild("TypeDisplay", true)
+					if v75 then
+						v75.Text = v73.name
+						v75.TextColor3 = v73.color
+					end
+					local _, v76, v77, v78 = v_u_6.getLevel(v54.rarity, 0)
+					local v79 = v_u_19:FindFirstChild("Bar", true)
+					if v79 then
+						v79.Size = UDim2.fromScale(0, 1)
+						local v80 = v_u_3
+						local v81 = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+						local v82 = {}
+						local v83 = UDim2.fromScale
+						local v84 = (v76 or 0) / 100
+						v82.Size = v83(math.clamp(v84, 0, 1), 1)
+						v80:Create(v79, v81, v82):Play()
+					end
+					local v85 = v_u_19:FindFirstChild("ExperienceDisplay", true)
+					if v85 then
+						v85.Text = v_u_7.abbreviate(v77 or 0) .. "/" .. v_u_7.abbreviate(v78 or 1)
+					end
+					local v86 = v_u_19:FindFirstChild("TotalExist", true)
+					if v86 then
+						v86.Text = "\226\154\150 " .. v50.remaining .. "/" .. v50.maxStock .. " Left"
+					end
+					local v87 = v_u_18:FindFirstChildOfClass("UIGradient") or v_u_19:FindFirstChildOfClass("UIGradient")
+					if v87 then
+						v_u_34(v87, v54.rarity)
+					end
+					v_u_25 = p49
+					v_u_48()
+					v_u_18.Visible = true
+					if v_u_27 then
+						v_u_27:Disconnect()
+						v_u_27 = nil
+					end
+					v_u_19:FindFirstChild("TypeHolder", true)
+				else
+					warn("[LimitedPets] getIDData failed for petId", v50.petId)
+				end
+			else
+				return
+			end
+		else
+			return
+		end
+	else
+		return
+	end
+end
+v_u_5.Move:Connect(function()
+	-- upvalues: (copy) v_u_14, (ref) v_u_25, (copy) v_u_48
+	if v_u_14.Enabled then
+		if v_u_25 then
+			v_u_48()
+		end
+	end
+end)
+v_u_14:GetPropertyChangedSignal("Enabled"):Connect(function()
+	-- upvalues: (copy) v_u_14, (copy) v_u_18, (ref) v_u_25, (ref) v_u_27
+	if not v_u_14.Enabled then
+		v_u_18.Visible = false
+		v_u_25 = nil
+		if v_u_27 then
+			v_u_27:Disconnect()
+			v_u_27 = nil
+		end
+	end
+end)
+local function v_u_104(p89)
+	-- upvalues: (ref) v_u_24, (copy) v_u_21, (copy) v_u_3
+	local v_u_90 = v_u_24[p89]
+	if v_u_90 then
+		local v91 = v_u_21[p89]
+		if v91 then
+			local v92 = v91:FindFirstChild("Holder")
+			if v92 then
+				local v93 = v92:FindFirstChild("Remaining")
+				if v93 then
+					v93.Text = v_u_90.remaining .. "/" .. v_u_90.maxStock .. " Left"
+				end
+				local v94 = v92:FindFirstChild("Title")
+				if v94 then
+					v94.Text = v_u_90.displayName
+				end
+				local v_u_95 = v92:FindFirstChild("Purchase")
+				if v_u_95 then
+					local v_u_96 = v_u_90.remaining <= 0
+					v_u_95.AutoButtonColor = not v_u_96
+					v_u_3:Create(v_u_95, TweenInfo.new(0.3), {
+						["BackgroundColor3"] = v_u_96 and Color3.fromRGB(80, 80, 80) or Color3.fromRGB(255, 215, 0)
+					}):Play()
+					if v91:GetAttribute("PriceFetched") then
+						local v97 = v_u_95:FindFirstChildOfClass("TextLabel")
+						if v97 then
+							v_u_95 = v97
+						elseif not v_u_95:IsA("TextButton") then
+							v_u_95 = v97
+						end
+						if v_u_95 and v_u_96 then
+							v_u_95.Text = "SOLD OUT"
+						end
+					else
+						v91:SetAttribute("PriceFetched", true)
+						task.spawn(function()
+							-- upvalues: (copy) v_u_90, (copy) v_u_95, (copy) v_u_96
+							local v_u_98 = game:GetService("MarketplaceService")
+							local v99, v100 = pcall(function()
+								-- upvalues: (copy) v_u_98, (ref) v_u_90
+								return v_u_98:GetProductInfo(v_u_90.productId, Enum.InfoType.Product)
+							end)
+							local v101 = v_u_95:FindFirstChildOfClass("TextLabel")
+							if not v101 and v_u_95:IsA("TextButton") then
+								v101 = v_u_95
+							end
+							if v101 then
+								if v_u_96 then
+									v101.Text = "SOLD OUT"
+									return
+								end
+								if v99 and v100 then
+									local v102 = v100.PriceInRobux or "?"
+									v101.Text = "R$ " .. tostring(v102)
+								end
+							end
+						end)
+					end
+				end
+				local v103 = v92:FindFirstChild("Bg")
+				if v103 and v_u_90.remaining <= 0 then
+					v_u_3:Create(v103, TweenInfo.new(0.4), {
+						["GroupTransparency"] = 0.55
+					}):Play()
+				end
+			end
+		else
+			return
+		end
+	else
+		return
+	end
+end
+local function v_u_117(p_u_105)
+	-- upvalues: (copy) v_u_21, (ref) v_u_24, (copy) v_u_88, (ref) v_u_25, (copy) v_u_18, (ref) v_u_27, (copy) v_u_8, (copy) v_u_9, (copy) v_u_26, (copy) v_u_10, (copy) v_u_12
+	local v106 = v_u_21[p_u_105]
+	if v106 then
+		local v107 = v106:FindFirstChild("Holder")
+		if v107 then
+			local v108 = v_u_24[p_u_105]
+			local v109 = v107:FindFirstChild("Pet")
+			if v109 then
+				if v108 then
+					local v110 = v108.petId
+					v108 = v109:FindFirstChild((tostring(v110)))
+				end
+			else
+				v108 = v109
+			end
+			local v111 = v108 or v109
+			if v111 then
+				v111.MouseEnter:Connect(function()
+					-- upvalues: (ref) v_u_88, (copy) p_u_105
+					v_u_88(p_u_105)
+				end)
+				v111.MouseLeave:Connect(function()
+					-- upvalues: (ref) v_u_25, (copy) p_u_105, (ref) v_u_18, (ref) v_u_27
+					if v_u_25 == p_u_105 then
+						v_u_18.Visible = false
+						v_u_25 = nil
+						if v_u_27 then
+							v_u_27:Disconnect()
+							v_u_27 = nil
+						end
+					end
+				end)
+			end
+			local v_u_112 = v107:FindFirstChild("Purchase")
+			if v_u_112 then
+				local v_u_113 = v_u_8.AddHoverAnimations(v_u_112)
+				v_u_112.MouseButton1Down:Connect(function()
+					-- upvalues: (ref) v_u_8, (copy) v_u_112, (copy) v_u_113
+					v_u_8.ScaleSize(v_u_112, v_u_113, 0.9)
+				end)
+				v_u_112.MouseButton1Up:Connect(function()
+					-- upvalues: (ref) v_u_8, (copy) v_u_112, (copy) v_u_113, (ref) v_u_9, (ref) v_u_26, (copy) p_u_105, (ref) v_u_24, (ref) v_u_10, (ref) v_u_12
+					v_u_8.ResetSize(v_u_112, v_u_113)
+					v_u_9.playSound("Click")
+					if v_u_26[p_u_105] then
+						return
+					else
+						local v114 = v_u_24[p_u_105]
+						if v114 then
+							if v114.remaining <= 0 then
+								v_u_10.showError("This pet is sold out!")
+							else
+								v_u_26[p_u_105] = true
+								task.delay(3, function()
+									-- upvalues: (ref) v_u_26, (ref) p_u_105
+									v_u_26[p_u_105] = nil
+								end)
+								local v115, v116 = v_u_12:InvokeServer(p_u_105)
+								if not v115 then
+									v_u_10.showError(v116 or "Could not open purchase dialog.")
+									v_u_26[p_u_105] = nil
+								end
+							end
+						else
+							return
+						end
+					end
+				end)
+			end
+		else
+			return
+		end
+	else
+		return
+	end
+end
+task.spawn(function()
+	-- upvalues: (copy) v_u_11, (ref) v_u_24, (copy) v_u_104, (ref) v_u_25, (copy) v_u_88, (copy) v_u_117, (copy) v_u_18, (copy) v_u_19, (ref) v_u_28, (copy) v_u_4
+	local v118 = v_u_11:InvokeServer()
+	if v118 then
+		v_u_24 = v118
+		v_u_104(1)
+		v_u_104(2)
+		v_u_104(3)
+		if v_u_25 then
+			v_u_88(v_u_25)
+		end
+		v_u_117(1)
+		v_u_117(2)
+		v_u_117(3)
+		local v_u_119 = v_u_18:FindFirstChildOfClass("UIGradient") or v_u_19:FindFirstChildOfClass("UIGradient")
+		if v_u_119 then
+			if v_u_28 then
+				v_u_28:Disconnect()
+				v_u_28 = nil
+			end
+			if not v_u_119 then
+				return
+			end
+			local v_u_120 = 0
+			v_u_28 = v_u_4.Heartbeat:Connect(function(p121)
+				-- upvalues: (copy) v_u_119, (ref) v_u_28, (ref) v_u_120
+				if v_u_119 and v_u_119.Parent then
+					v_u_120 = (v_u_120 + 90 * p121) % 360
+					v_u_119.Rotation = v_u_120
+				else
+					v_u_28:Disconnect()
+					v_u_28 = nil
+				end
+			end)
+		end
+	else
+		warn("[LimitedPets] Failed to get initial data from server.")
+	end
+end)
+v13.OnClientEvent:Connect(function(p122)
+	-- upvalues: (ref) v_u_24, (copy) v_u_104, (ref) v_u_25, (copy) v_u_88
+	v_u_24 = p122
+	v_u_104(1)
+	v_u_104(2)
+	v_u_104(3)
+	if v_u_25 then
+		v_u_88(v_u_25)
+	end
+end)
+if v17 then
+	v_u_8.AddCloseImageButton(v17, v_u_14)
+end
+return {}
+
+LuckUpgrade 
+local v1 = game:GetService("ReplicatedStorage")
+local v2 = require(v1.Modules.Libraries.ReplicaController)
+local v_u_3 = require(v1.Modules.GUI)
+local v_u_4 = require(v1.Modules.Abbreviations)
+local v_u_5 = require(v1.Modules.Notification)
+local v_u_6 = require(v1.Modules.Sounds)
+local v_u_7 = require(v1.Modules.LuckUpgraderPrices)
+local v8 = script.Parent
+local v_u_9 = v8.Holder.Holder
+local v_u_10 = v1.Functions.PurchaseLuckUpgrader
+local function v_u_15(p11)
+	-- upvalues: (copy) v_u_9, (copy) v_u_7
+	for _, v12 in v_u_9.RewardDisplays:GetChildren() do
+		local v13 = v12.Holder
+		local v14 = v12.Name
+		v13.TextColor3 = tonumber(v14) <= p11 and Color3.fromRGB(4, 255, 0) or Color3.fromRGB(255, 255, 255)
+	end
+	v_u_9.PointExperience.Point.Text = p11 .. "/" .. #v_u_7.priceList
+	v_u_9.PointExperience.Point.Holder.Text = v_u_9.PointExperience.Point.Text
+	v_u_9.PointExperience.Holder.Bar.Size = UDim2.fromScale(1, p11 / 50)
+end
+local function v_u_22(p16, p17)
+	-- upvalues: (copy) v_u_7, (copy) v_u_9, (copy) v_u_4
+	local v18 = v_u_7.priceList[p17 + 1]
+	if v18 then
+		v_u_9.Buy.Holder.Price.Text = v_u_4.abbreviate(v18) .. " Gems"
+		local v19 = v_u_9.ExperienceHolder.ExperienceDisplay
+		local v20
+		if p16 / v18 <= 1 then
+			local v21 = p16 / v18 * 10000
+			v20 = math.floor(v21) / 100 or 100
+		else
+			v20 = 100
+		end
+		v19.Text = v20 .. "%"
+		v_u_9.ExperienceHolder.Holder.Bar.Size = UDim2.fromScale(p16 / v18 <= 1 and (p16 / v18 or 1) or 1, 1)
+		if v18 <= p16 then
+			v_u_9.Buy.BackgroundColor3 = Color3.fromRGB(0, 163, 3)
+			v_u_9.Buy.UIStroke.Color = Color3.fromRGB(0, 150, 0)
+			v_u_9.Buy.Holder.BackgroundColor3 = Color3.fromRGB(0, 250, 8)
+			v_u_9.Buy.Holder.UIStroke.Color = Color3.fromRGB(0, 150, 0)
+			v_u_9.Buy.Holder.UIGradient.Color = ColorSequence.new(Color3.fromRGB(0, 220, 5), Color3.fromRGB(0, 250, 8))
+			v_u_9.Buy.Holder.Price.UIStroke.Color = Color3.fromRGB(0, 150, 0)
+		else
+			v_u_9.Buy.BackgroundColor3 = Color3.fromRGB(163, 3, 0)
+			v_u_9.Buy.UIStroke.Color = Color3.fromRGB(150, 0, 0)
+			v_u_9.Buy.Holder.BackgroundColor3 = Color3.fromRGB(250, 8, 0)
+			v_u_9.Buy.Holder.UIStroke.Color = Color3.fromRGB(150, 0, 0)
+			v_u_9.Buy.Holder.UIGradient.Color = ColorSequence.new(Color3.fromRGB(220, 5, 0), Color3.fromRGB(250, 8, 0))
+			v_u_9.Buy.Holder.Price.UIStroke.Color = Color3.fromRGB(150, 0, 0)
+		end
+	else
+		v_u_9.Buy.Holder.Price.Text = "Max Level"
+		v_u_9.ExperienceHolder.ExperienceDisplay.Text = "100%"
+		v_u_9.ExperienceHolder.Holder.Bar.Size = UDim2.fromScale(1, 1)
+		v_u_9.Buy.Visible = false
+		return
+	end
+end
+v2.ReplicaOfClassCreated("PlayerData", function(p_u_23)
+	-- upvalues: (copy) v_u_22, (copy) v_u_15
+	p_u_23:ListenToChange({ "Gems" }, function(p24)
+		-- upvalues: (ref) v_u_22, (copy) p_u_23
+		v_u_22(p24, p_u_23.Data.LuckUpgraderLevel)
+	end)
+	p_u_23:ListenToChange({ "LuckUpgraderLevel" }, function(p25)
+		-- upvalues: (ref) v_u_15, (ref) v_u_22, (copy) p_u_23
+		v_u_15(p25)
+		v_u_22(p_u_23.Data.Gems, p25)
+	end)
+	v_u_15(p_u_23.Data.LuckUpgraderLevel)
+	v_u_22(p_u_23.Data.Gems, p_u_23.Data.LuckUpgraderLevel)
+end)
+local v_u_26 = v_u_3.AddHoverAnimations(v_u_9.Buy)
+v_u_9.Buy.Click.MouseButton1Down:Connect(function()
+	-- upvalues: (copy) v_u_3, (copy) v_u_9, (copy) v_u_26
+	v_u_3.ScaleSize(v_u_9.Buy, v_u_26, 0.9)
+end)
+v_u_9.Buy.Click.MouseButton1Up:Connect(function()
+	-- upvalues: (copy) v_u_3, (copy) v_u_9, (copy) v_u_26, (copy) v_u_6, (copy) v_u_10, (copy) v_u_5
+	v_u_3.ResetSize(v_u_9.Buy, v_u_26)
+	v_u_6.playSound("Click")
+	local v27 = v_u_10:InvokeServer()
+	if v27 == false then
+		v_u_5.showError("You don\'t have enough Gems!")
+	elseif v27 == nil then
+		v_u_5.showError("Please slow down!")
+	end
+end)
+v_u_3.AddCloseImageButton(v_u_9.CloseButton, v8)
+return {}
+
+Pets 
+local v1 = game:GetService("Players")
+local v_u_2 = game:GetService("ReplicatedStorage")
+local v_u_3 = game:GetService("TweenService")
+game:GetService("RunService")
+local v_u_4 = v1.LocalPlayer:GetMouse()
+local v5 = require(v_u_2.Modules.Libraries.ReplicaController)
+local v_u_6 = require(v_u_2.Modules.Eggs)
+local v_u_7 = require(v_u_2.Modules.Abbreviations)
+local v_u_8 = require(v_u_2.Modules.GUI)
+local v_u_9 = require(v_u_2.Modules.Sounds)
+local v_u_10 = require(v_u_2.Modules.Calculators.InventorySpace)
+local v_u_11 = require(v_u_2.Modules.Notification)
+local v_u_12 = script.Parent
+local v_u_13 = v_u_12.Holder.Holder
+local v_u_14 = v_u_13.PetHolder.ScrollingFrame
+local v_u_15 = v_u_12.HoverDisplay
+local v_u_16 = v_u_13.Buttons.SortBy
+local v_u_17 = v_u_13.Buttons.EquipBest
+local v18 = v_u_13.Buttons.PetCrafting
+local v_u_19 = v_u_2.Clones.InventoryTemplate
+local v_u_20 = v_u_2.Functions.EquipPet
+local v_u_21 = v_u_2.Functions.RenamePet
+local v_u_22 = v_u_2.Events.DeletePets
+local v_u_23 = v_u_2.Events.LockPets
+local v24 = v_u_2.Events.PetsDeleted
+local v_u_25 = {}
+local v_u_26 = {}
+local v_u_27 = {}
+local v_u_28 = {}
+local v_u_29 = {}
+local v_u_30 = nil
+local v_u_31 = false
+local v_u_32 = 0
+local v_u_33 = 0
+local function v_u_46(p34)
+	-- upvalues: (ref) v_u_25, (ref) v_u_26, (copy) v_u_12, (copy) v_u_6
+	local v35 = v_u_25[p34]
+	if not v35 then
+		return 2100000000
+	end
+	local v36 = table.find(v_u_26, p34) ~= nil
+	if v_u_12:GetAttribute("SortBy") ~= "clickMulti" then
+		return v36 and 0 or 1000000000
+	end
+	local v37, v38 = v_u_6.getClickMultiplier(v35)
+	local v39
+	if v37 >= 0 then
+		local v40 = v37 + 1
+		v39 = -math.log10(v40) * 1000
+	else
+		local v41 = v_u_6.getIDData(v35.PetId)
+		if v41 and v41.scaledMulti then
+			local v42 = v41.scaledMulti * 10000 + 1
+			v39 = -math.log10(v42) * 1000
+		else
+			v39 = -(v38 * 100)
+		end
+	end
+	if v36 then
+		local v43 = v39 + 500000000
+		v45 = math.floor(v43)
+		if v45 then
+			::l16::
+			return v45
+		end
+	end
+	local v44 = 1000000000 + v39 + 500000000
+	local v45 = math.floor(v44)
+	goto l16
+end
+local function v_u_63()
+	-- upvalues: (ref) v_u_32, (ref) v_u_25, (ref) v_u_26, (copy) v_u_17, (copy) v_u_6
+	local v47 = v_u_32
+	local v48 = 0
+	for _ in v_u_25 do
+		v48 = v48 + 1
+	end
+	local v49 = math.min(v47, v48)
+	if #v_u_26 ~= v49 then
+		v_u_17.Icon.Visible = true
+		v_u_17.Title.Text = "Equip Best"
+		return
+	end
+	local v50 = {}
+	for _, v51 in v_u_25 do
+		local v52, _ = v_u_6.getClickMultiplier(v51)
+		if v52 < 0 then
+			local v53 = v_u_6.getIDData(v51.PetId)
+			v52 = not (v53 and v53.scaledMulti) and 0 or v53.scaledMulti * 10000
+		end
+		table.insert(v50, v52)
+	end
+	table.sort(v50, function(p54, p55)
+		return p55 < p54
+	end)
+	local v56 = table.clone(v50)
+	local v57 = true
+	for _, v58 in v_u_26 do
+		local v59 = v_u_25[v58]
+		local v60, _ = v_u_6.getClickMultiplier(v59)
+		if v60 < 0 then
+			local v61 = v_u_6.getIDData(v59.PetId)
+			v60 = not (v61 and v61.scaledMulti) and 0 or v61.scaledMulti * 10000
+		end
+		local v62 = table.find(v56, v60)
+		if not v62 or v49 < v62 then
+			v57 = false
+			break
+		end
+		v56[v62] = -1
+	end
+	v_u_17.Icon.Visible = not v57
+	v_u_17.Title.Text = v57 and "Unequip" or "Equip"
+end
+local function v_u_95(p_u_64, p_u_65)
+	-- upvalues: (copy) v_u_6, (copy) v_u_19, (copy) v_u_7, (ref) v_u_25, (copy) v_u_8, (ref) v_u_31, (copy) v_u_13, (copy) v_u_20, (copy) v_u_9, (copy) v_u_11, (copy) v_u_46, (ref) v_u_28, (ref) v_u_29, (copy) v_u_12, (copy) v_u_14
+	local v66 = v_u_6.getIDData(p_u_65.PetId)
+	if v66 then
+		local v_u_67 = v_u_19:Clone()
+		local v_u_68 = v_u_67.Holder.Holder
+		v_u_67.Name = p_u_64
+		v_u_68.NameDisplay.Text = p_u_65.PetName
+		local v69, _ = v_u_6.getClickMultiplier(p_u_65)
+		if v69 >= 0 then
+			v_u_68.ClickDisplay.Text = v_u_7.abbreviate(v69)
+		else
+			local v70 = v_u_6.getIDData(p_u_65.PetId)
+			if v70 and v70.scaledMulti then
+				v_u_68.ClickDisplay.Text = "x" .. v70.scaledMulti .. "%"
+			else
+				v_u_68.ClickDisplay.Text = "???"
+				local function v_u_71()
+					-- upvalues: (ref) v_u_25, (copy) p_u_64
+					return v_u_25[p_u_64]
+				end
+				local function v_u_72()
+					-- upvalues: (copy) v_u_68
+					v_u_68.ClickDisplay.TextColor3 = Color3.fromHSV(tick() * 0.5 % 1, 1, 1)
+				end
+				coroutine.wrap(function()
+					-- upvalues: (copy) v_u_71, (copy) v_u_72
+					while v_u_71() do
+						v_u_72()
+						task.wait()
+					end
+				end)()
+			end
+		end
+		v_u_67.ImageColor3 = v_u_6.getRarityUIData(v66.rarity).color
+		v_u_68.LevelHolder.LevelDisplay.Text = v_u_6.getLevel(v66.rarity, p_u_65.PetExp)
+		v_u_68.NameDisplay.UIGradient.Color = v_u_6.getTypeData(p_u_65.PetType).gradColor
+		local v73 = p_u_65.PetType
+		if v73 == 1 then
+			local v74 = v66.shinyId or v66.imageId
+			v_u_68.PetImage.Image = "rbxassetid://" .. v74
+			v_u_68.PetImage.ImageColor3 = v66.shinyId and Color3.new(1, 1, 1) or Color3.fromRGB(234, 255, 0)
+			v_u_68.NameDisplay.TextColor3 = Color3.fromRGB(234, 255, 0)
+		else
+			if v66.imageId then
+				v_u_68.PetImage.Image = "rbxassetid://" .. v66.imageId
+			end
+			if v73 == 2 then
+				v_u_68.NameDisplay.UIGradient.Enabled = false
+				local function v_u_75()
+					-- upvalues: (ref) v_u_25, (copy) p_u_64
+					return v_u_25[p_u_64]
+				end
+				local function v_u_80()
+					-- upvalues: (copy) v_u_68
+					local v76 = Color3.fromHSV
+					local v77 = tick()
+					local v78 = tick() / 10
+					local v79 = v76((v77 - math.floor(v78) * 10) / 10, 1, 1)
+					v_u_68.PetImage.ImageColor3 = v79
+					v_u_68.NameDisplay.TextColor3 = v79
+				end
+				coroutine.wrap(function()
+					-- upvalues: (copy) v_u_75, (copy) v_u_80
+					while v_u_75() do
+						v_u_80()
+						task.wait()
+					end
+				end)()
+			elseif v73 == 3 then
+				v_u_68.NameDisplay.UIGradient.Enabled = false
+				local function v_u_81()
+					-- upvalues: (ref) v_u_25, (copy) p_u_64
+					return v_u_25[p_u_64]
+				end
+				local function v_u_85()
+					-- upvalues: (copy) v_u_68
+					local v82 = tick()
+					local v83 = (math.sin(v82) + 1) * 102.5 + 50
+					local v84 = Color3.fromRGB(v83, v83, v83)
+					v_u_68.PetImage.ImageColor3 = v84
+					v_u_68.NameDisplay.TextColor3 = v84
+				end
+				coroutine.wrap(function()
+					-- upvalues: (copy) v_u_81, (copy) v_u_85
+					while v_u_81() do
+						v_u_85()
+						task.wait()
+					end
+				end)()
+			elseif v73 == 4 then
+				if v66.diamondId then
+					v_u_68.PetImage.Image = "rbxassetid://" .. v66.diamondId
+					v_u_68.PetImage.ImageColor3 = Color3.new(1, 1, 1)
+				else
+					v_u_68.PetImage.ImageColor3 = Color3.fromRGB(0, 220, 255)
+				end
+			end
+		end
+		local v86 = p_u_65.SerialNumber
+		if v86 and v86 <= 99 then
+			v_u_68.SerialHolder.Visible = true
+			v_u_68.SerialHolder.SerialDisplay.Text = "#" .. v86
+			v_u_68.SerialHolder.SerialDisplay.TextColor3 = v_u_6.getSerialColor(v86)
+		else
+			v_u_68.SerialHolder.Visible = false
+		end
+		if p_u_65.IsLocked then
+			v_u_68.IsLocked.Visible = true
+		end
+		local v_u_87 = v_u_8.AddHoverAnimations(v_u_67.Holder)
+		v_u_68.Click.MouseButton1Down:Connect(function()
+			-- upvalues: (ref) v_u_8, (copy) v_u_67, (copy) v_u_87
+			v_u_8.ScaleSize(v_u_67.Holder, v_u_87, 0.9)
+		end)
+		v_u_68.Click.MouseButton1Up:Connect(function()
+			-- upvalues: (ref) v_u_8, (copy) v_u_67, (copy) v_u_87, (ref) v_u_31, (ref) v_u_13, (copy) v_u_68, (ref) v_u_20, (copy) p_u_64, (ref) v_u_9, (ref) v_u_11, (ref) v_u_46, (copy) p_u_65, (ref) v_u_28, (ref) v_u_29, (ref) v_u_25, (ref) v_u_12, (ref) v_u_6
+			v_u_8.ResetSize(v_u_67.Holder, v_u_87)
+			if v_u_31 then
+				return
+			else
+				v_u_31 = true
+				task.delay(0.1, function()
+					-- upvalues: (ref) v_u_31
+					v_u_31 = false
+				end)
+				if v_u_13.Delete.Visible or (v_u_13.Lock.Visible or v_u_13.Rename.Visible) then
+					if v_u_13.Delete.Visible then
+						v_u_9.playSound("Click")
+						if p_u_65.IsLocked then
+							v_u_11.showError("You can\'t delete locked Pets!")
+							return
+						elseif v_u_68.EquippedIcon.Visible then
+							v_u_11.showError("You can\'t delete equipped Pets!")
+						else
+							local v88 = table.find(v_u_28, p_u_64)
+							if v88 then
+								table.remove(v_u_28, v88)
+								v_u_68.DeleteDisplay.Visible = false
+							else
+								v_u_68.DeleteDisplay.Visible = true
+								local v89 = v_u_28
+								local v90 = p_u_64
+								table.insert(v89, v90)
+							end
+							v_u_13.Delete.Holder.AmountDisplay.Text = #v_u_28 == 1 and "1 Pet" or #v_u_28 .. " Pets"
+						end
+					elseif v_u_13.Lock.Visible then
+						v_u_9.playSound("Click")
+						v_u_68.IsLocked.Visible = not v_u_68.IsLocked.Visible
+						v_u_29[p_u_64] = v_u_68.IsLocked.Visible
+					else
+						local v91 = p_u_64
+						local v92 = v_u_25[v91]
+						if v92 then
+							local v93 = v_u_12.Rename.Holder
+							v93.TextDisplay.Text = "Rename your " .. v_u_6.getIDData(v92.PetId).name
+							v93.UserInput.Input.Text = v92.PetName
+							v_u_12.Rename:SetAttribute("CurrentPet", v91)
+							v_u_12.Rename.Visible = true
+						end
+						v_u_13.Rename.Visible = false
+					end
+				else
+					if v_u_68.EquippedIcon.Visible then
+						if v_u_20:InvokeServer({ p_u_64 }, false)[1] == true then
+							v_u_68.EquippedIcon.Visible = false
+							v_u_9.playSound("Click")
+						end
+					else
+						local v94 = v_u_20:InvokeServer({ p_u_64 }, true)
+						if v94 and v94[1] == true then
+							v_u_68.EquippedIcon.Visible = true
+							v_u_9.playSound("Click")
+						elseif v94 and v94[1] == false then
+							v_u_11.showError("You already have the max amount of Pets equipped!")
+						end
+					end
+					v_u_67.LayoutOrder = v_u_46(p_u_64)
+					return
+				end
+			end
+		end)
+		v_u_67.LayoutOrder = 1000000000
+		v_u_67.Visible = string.find(p_u_65.PetName, string.lower(v_u_13.Buttons.Holder.Search.TextBox.Text)) ~= nil
+		v_u_67.Parent = v_u_14
+	end
+end
+local function v_u_112()
+	-- upvalues: (ref) v_u_26, (copy) v_u_14, (ref) v_u_25, (copy) v_u_6, (copy) v_u_7, (ref) v_u_30, (copy) v_u_15, (copy) v_u_3
+	for _, v96 in v_u_26 do
+		local v97 = v_u_14:FindFirstChild(v96)
+		if v97 then
+			local v98 = v97.Holder.Holder
+			local v99 = v_u_25[v96]
+			v98.LevelHolder.LevelDisplay.Text = v_u_6.getLevel(v_u_6.getIDData(v99.PetId).rarity, v99.PetExp)
+			local v100 = v_u_6.getClickMultiplier(v99)
+			if v100 >= 0 then
+				v98.ClickDisplay.Text = "x" .. v_u_7.abbreviate(v100)
+			end
+		end
+	end
+	if v_u_30 then
+		local v101 = v_u_30.Name
+		if table.find(v_u_26, v101) then
+			local _, v102, v103, v104 = v_u_6.getLevel(v_u_6.getIDData(v_u_25[v101].PetId).rarity, v_u_25[v101].PetExp)
+			local v105 = v_u_15.Holder
+			local v106 = v_u_3
+			local v107 = v105.ExperienceHolder.Holder.Bar
+			local v108 = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			local v109 = {}
+			local v110 = UDim2.fromScale
+			local v111 = v102 / 100
+			v109.Size = v110(math.min(v111, 1), 1)
+			v106:Create(v107, v108, v109):Play()
+			v105.ExperienceHolder.ExperienceDisplay.Text = v_u_7.abbreviate(v103) .. "/" .. v_u_7.abbreviate(v104)
+		end
+	else
+		return
+	end
+end
+local function v_u_118(p113, p114)
+	-- upvalues: (copy) v_u_6
+	if p114 < 5 then
+		local v115 = Color3.fromRGB(50, 110, 163)
+		p113.Color = ColorSequence.new(v115, v115)
+	else
+		local v116 = v_u_6.getRarityUIData(p114).color
+		local v117 = Color3.fromRGB((v116.R + (1 - v116.R) * 0.75) * 255, (v116.G + (1 - v116.G) * 0.75) * 255, (v116.B + (1 - v116.B) * 0.75) * 255)
+		p113.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, v116),
+			ColorSequenceKeypoint.new(0.2, v116),
+			ColorSequenceKeypoint.new(0.5, v117),
+			ColorSequenceKeypoint.new(0.8, v116),
+			ColorSequenceKeypoint.new(1, v116)
+		})
+	end
+end
+local function v_u_120()
+	-- upvalues: (copy) v_u_12, (copy) v_u_4, (copy) v_u_14
+	for _, v119 in v_u_12.Parent:GetGuiObjectsAtPosition(v_u_4.X, v_u_4.Y) do
+		if v119.Parent == v_u_14 and v119.Name ~= "Invisible" then
+			return v119
+		end
+	end
+end
+local function v_u_167(p_u_121)
+	-- upvalues: (copy) v_u_15, (copy) v_u_4, (copy) v_u_12, (ref) v_u_30, (ref) v_u_25, (copy) v_u_6, (copy) v_u_7, (copy) v_u_3, (ref) v_u_27, (copy) v_u_118, (copy) v_u_14
+	v_u_15.Position = UDim2.fromScale(v_u_4.X / v_u_12.AbsoluteSize.X + 0.002, v_u_4.Y / v_u_12.AbsoluteSize.Y + 0.033)
+	if p_u_121 == v_u_30 then
+		v_u_15.Visible = true
+		return
+	else
+		local v122 = v_u_25[p_u_121.Name]
+		if v122 then
+			local v123 = v_u_6.getIDData(v122.PetId)
+			local v_u_124 = v_u_15.Holder
+			v_u_124.NameHolder.DefaultName.Text = v123.name
+			v_u_124.PetName.Text = "\"" .. v122.PetName .. "\""
+			local v125 = v_u_6.getClickMultiplier(v122)
+			if v125 >= 0 then
+				v_u_124.ClickDisplay.Text = "x" .. v_u_7.abbreviate(v125)
+			else
+				local v126 = v_u_6.getIDData(v122.PetId)
+				v_u_124.ClickDisplay.Text = v126 and (v126.scaledMulti and "x" .. v126.scaledMulti .. "%") or "???"
+			end
+			local v127 = v_u_124.GemDisplay
+			local v128 = v_u_124.GemIcon
+			local v129 = v123.gemMulti
+			local v130 = v123.scaledMulti
+			if v129 then
+				v127.Text = "x" .. v_u_7.abbreviate((v129 - 1) * (v122.PetType + 1) + 1)
+				v127.Visible = true
+				v128.Visible = true
+			elseif v130 then
+				v127.Text = "x" .. v130 .. "%"
+				v127.Visible = true
+				v128.Visible = true
+			else
+				v127.Visible = false
+				v128.Visible = false
+			end
+			local v131 = v_u_124.RebirthDisplay
+			local v132 = v_u_124.RebirthIcon
+			local v133 = v123.rebirthMulti
+			local v134 = v123.scaledMulti
+			if v133 then
+				v131.Text = "x" .. v_u_7.abbreviate((v133 - 1) * (v122.PetType + 1) + 1)
+				v131.Visible = true
+				v132.Visible = true
+			elseif v134 then
+				v131.Text = "x" .. v134 .. "%"
+				v131.Visible = true
+				v132.Visible = true
+			else
+				v131.Visible = false
+				v132.Visible = false
+			end
+			local v135 = v_u_6.getRarityUIData(v123.rarity)
+			local v136 = v_u_6.getTypeData(v122.PetType)
+			v_u_124.RarityHolder.RarityDisplay.Text = v135.name
+			v_u_124.RarityHolder.RarityDisplay.TextColor3 = v135.color
+			v_u_124.TypeHolder.TypeDisplay.Text = v136.name
+			v_u_124.TypeHolder.TypeDisplay.TextColor3 = v136.color
+			local _, v137, v138, v139 = v_u_6.getLevel(v123.rarity, v122.PetExp)
+			local v140 = v_u_124.ExperienceHolder.Holder.Bar
+			v140.Size = UDim2.fromScale(0, 1)
+			local v141 = v_u_3
+			local v142 = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			local v143 = {}
+			local v144 = UDim2.fromScale
+			local v145 = v137 / 100
+			v143.Size = v144(math.min(v145, 1), 1)
+			v141:Create(v140, v142, v143):Play()
+			v_u_124.ExperienceHolder.ExperienceDisplay.Text = v_u_7.abbreviate(v138) .. "/" .. v_u_7.abbreviate(v139)
+			local v146 = v122.PetId .. "_" .. v122.PetType
+			v_u_124.TotalExist.Text = v_u_27[v146] and "\226\154\150 " .. v_u_7.abbreviate(v_u_27[v146]) .. " Exist" or "\226\154\150 0 Exist"
+			v_u_118(v_u_15.UIGradient, v123.rarity)
+			v_u_30 = p_u_121
+			local v147 = v_u_14:FindFirstChild(p_u_121.Name)
+			if v147 then
+				local v148 = v147.Holder.Holder.PetImage
+				local v149 = v_u_15.Holder.PetImage
+				v149.Image = v148.Image
+				v149.ImageColor3 = v148.ImageColor3
+			end
+			if v122.PetType == 2 then
+				local function v_u_150()
+					-- upvalues: (copy) p_u_121, (ref) v_u_30
+					return p_u_121 == v_u_30
+				end
+				local function v_u_155()
+					-- upvalues: (copy) v_u_124
+					local v151 = tick()
+					local v152 = tick() / 10
+					local v153 = (v151 - math.floor(v152) * 10) / 10
+					local v154 = Color3.fromHSV(v153, 1, 1)
+					v_u_124.TypeHolder.BackgroundColor3 = v154
+					v_u_124.TypeHolder.TypeDisplay.TextColor3 = Color3.fromHSV((v153 + 0.5) % 1, 1, 1)
+					v_u_124.PetImage.ImageColor3 = v154
+				end
+				coroutine.wrap(function()
+					-- upvalues: (copy) v_u_150, (copy) v_u_155
+					while v_u_150() do
+						v_u_155()
+						task.wait()
+					end
+				end)()
+			elseif v122.PetType == 3 then
+				local function v_u_156()
+					-- upvalues: (copy) p_u_121, (ref) v_u_30
+					return p_u_121 == v_u_30
+				end
+				local function v_u_160()
+					-- upvalues: (copy) v_u_124
+					local v157 = tick()
+					local v158 = (math.sin(v157) + 1) * 102.5 + 50
+					local v159 = Color3.fromRGB(v158, v158, v158)
+					v_u_124.TypeHolder.BackgroundColor3 = v159
+					v_u_124.PetImage.ImageColor3 = v159
+				end
+				coroutine.wrap(function()
+					-- upvalues: (copy) v_u_156, (copy) v_u_160
+					while v_u_156() do
+						v_u_160()
+						task.wait()
+					end
+				end)()
+			elseif v122.PetType == 4 then
+				local function v_u_161()
+					-- upvalues: (copy) p_u_121, (ref) v_u_30
+					return p_u_121 == v_u_30
+				end
+				local function v_u_166()
+					-- upvalues: (copy) v_u_124
+					local v162 = v_u_124.TypeHolder
+					local v163 = Color3.fromHSV
+					local v164 = tick() * 0.66
+					local v165 = math.sin(v164)
+					v162.BackgroundColor3 = v163(math.abs(v165) / 6 + 0.5, 1, 1)
+				end
+				coroutine.wrap(function()
+					-- upvalues: (copy) v_u_161, (copy) v_u_166
+					while v_u_161() do
+						v_u_166()
+						task.wait()
+					end
+				end)()
+			end
+			v_u_15.Visible = true
+		end
+	end
+end
+v_u_3:Create(v_u_15.UIGradient, TweenInfo.new(4, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1), {
+	["Rotation"] = 360
+}):Play()
+v_u_4.Move:Connect(function()
+	-- upvalues: (copy) v_u_12, (copy) v_u_120, (copy) v_u_167, (copy) v_u_15
+	if v_u_12.Enabled then
+		local v168 = v_u_120()
+		if v168 then
+			v_u_167(v168)
+		else
+			v_u_15.Visible = false
+		end
+	else
+		return
+	end
+end)
+v_u_12.Changed:Connect(function(p169)
+	-- upvalues: (copy) v_u_12, (copy) v_u_15
+	if p169 == "Enabled" and not v_u_12.Enabled then
+		v_u_15.Visible = false
+	end
+end)
+v5.ReplicaOfClassCreated("PlayerData", function(p_u_170)
+	-- upvalues: (ref) v_u_25, (ref) v_u_26, (ref) v_u_33, (copy) v_u_10, (ref) v_u_32, (copy) v_u_13, (copy) v_u_6, (copy) v_u_14, (copy) v_u_95, (copy) v_u_63, (copy) v_u_46, (copy) v_u_112
+	v_u_25 = p_u_170.Data.Pets
+	v_u_26 = p_u_170.Data.EquippedPets
+	v_u_33 = v_u_10.getPetStorage(p_u_170.Data)
+	v_u_32 = v_u_10.getPetEquip(p_u_170.Data)
+	local v171 = v_u_13.StorageDisplay
+	local v172 = 0
+	for _ in v_u_25 do
+		v172 = v172 + 1
+	end
+	v171.Text = v172 .. "/" .. v_u_33
+	v_u_13.EquippedDisplay.Text = #v_u_26 .. "/" .. v_u_32
+	p_u_170:ListenToArrayInsert({ "Passes" }, function()
+		-- upvalues: (ref) v_u_33, (ref) v_u_10, (copy) p_u_170, (ref) v_u_32, (ref) v_u_13, (ref) v_u_25, (ref) v_u_26
+		v_u_33 = v_u_10.getPetStorage(p_u_170.Data)
+		v_u_32 = v_u_10.getPetEquip(p_u_170.Data)
+		local v173 = v_u_13.StorageDisplay
+		local v174 = 0
+		for _ in v_u_25 do
+			v174 = v174 + 1
+		end
+		v173.Text = v174 .. "/" .. v_u_33
+		v_u_13.EquippedDisplay.Text = #v_u_26 .. "/" .. v_u_32
+	end)
+	p_u_170:ListenToNewKey({ "Pets" }, function(p175, p_u_176)
+		-- upvalues: (ref) v_u_6, (copy) p_u_170, (ref) v_u_14, (ref) v_u_33, (ref) v_u_10, (ref) v_u_32, (ref) v_u_95, (ref) v_u_13, (ref) v_u_25, (ref) v_u_63
+		local v177 = v_u_6.getIDData(p175.PetId).rarity
+		if v177 == 7 or v177 == 8 then
+			p_u_170:ListenToNewKey({ "Pets", p_u_176 }, function(p178, p179)
+				-- upvalues: (copy) p_u_176, (ref) v_u_14, (ref) v_u_6
+				if p179 == "SerialNumber" then
+					local v180 = p_u_176
+					if p178 > 10000 then
+						return
+					end
+					local v181 = v_u_14:FindFirstChild(v180)
+					if not v181 then
+						return
+					end
+					local v182 = v181.Holder.Holder.SerialHolder
+					v182.Visible = true
+					v182.SerialDisplay.Text = "#" .. p178
+					v182.SerialDisplay.TextColor3 = v_u_6.getSerialColor(p178)
+				end
+			end)
+		end
+		v_u_33 = v_u_10.getPetStorage(p_u_170.Data)
+		v_u_32 = v_u_10.getPetEquip(p_u_170.Data)
+		v_u_95(p_u_176, p175)
+		local v183 = v_u_13.StorageDisplay
+		local v184 = 0
+		for _ in v_u_25 do
+			v184 = v184 + 1
+		end
+		v183.Text = v184 .. "/" .. v_u_33
+		v_u_63()
+	end)
+	p_u_170:ListenToChange({ "EquippedPets" }, function(p185)
+		-- upvalues: (ref) v_u_26, (ref) v_u_13, (ref) v_u_32, (ref) v_u_14, (ref) v_u_46, (ref) v_u_63
+		v_u_26 = p185
+		v_u_13.EquippedDisplay.Text = #p185 .. "/" .. v_u_32
+		for _, v186 in v_u_14:GetChildren() do
+			if v186:IsA("Frame") and v186.Name ~= "Invisible" then
+				v186.LayoutOrder = v_u_46(v186.Name)
+			end
+		end
+		v_u_63()
+	end)
+	p_u_170:ListenToChange({ "Clicks" }, function(p187, p188)
+		-- upvalues: (ref) v_u_112
+		if p188 <= p187 then
+			v_u_112()
+	
+
+Shop 
+local v1 = game:GetService("Players")
+local v_u_2 = game:GetService("ReplicatedStorage")
+local v_u_3 = game:GetService("MarketplaceService")
+local v_u_4 = game:GetService("TweenService")
+local v_u_5 = game:GetService("MarketplaceService")
+local v_u_6 = v1.LocalPlayer
+local v_u_7 = v_u_6:GetMouse()
+local v8 = require(v_u_2.Modules.Libraries.ReplicaController)
+local v_u_9 = require(v_u_2.Modules.Abbreviations)
+local v_u_10 = require(v_u_2.Modules.GUI)
+local v_u_11 = require(v_u_2.Modules.Eggs)
+local v_u_12 = require(v_u_2.Modules.Passes)
+local v_u_13 = require(v_u_2.Modules.Notification)
+local v_u_14 = require(v_u_2.Modules.Sounds)
+local v_u_15 = require(script.Parent.Parent.Reward.Manager)
+local v_u_16 = v_u_2.Events.UsePotion
+local v_u_17 = v_u_2.Events.TokenPurchase
+local v_u_18 = v_u_2.Functions.RedeemCode
+local v19 = v_u_2:WaitForChild("Functions"):WaitForChild("ForeverPackFunction")
+local v_u_20 = v_u_2:WaitForChild("Events"):WaitForChild("ForeverPack")
+local v_u_21 = script.Parent
+local v_u_22 = v_u_21.HoverFrame
+local v_u_23 = v_u_21.HoverDisplay
+local v24 = v_u_21.Holder
+local v25 = v24.Holder
+local v_u_26 = v25.TokenLabel
+local v_u_27 = v25.ScrollingFrame
+local v_u_28 = v_u_27.Exclusive
+local v_u_29 = v_u_27.Gamepass
+local v_u_30 = v_u_27.Potions
+local v31 = v_u_27.Tokens
+local v_u_32 = v_u_27:WaitForChild("ForeverPack")
+local v_u_33 = v_u_32:FindFirstChild("ItemHolder", true):WaitForChild("Items")
+local v_u_34 = v_u_32:FindFirstChild("TimeLeft", true)
+local v_u_35 = game.CollectionService:GetTagged("IsGamepass")
+local v_u_36 = {
+	["Pets"] = 0,
+	["Featured"] = 0.14,
+	["Gamepasses"] = 0.3,
+	["Potion"] = 0.66,
+	["Tokens"] = 0.82
+}
+local v_u_37 = {
+	["GalaxyCoins"] = "GalaxyCoins"
+}
+local v_u_38 = {
+	["GalaxyCoinsPotion-1"] = 3425484799,
+	["GalaxyCoinsPotion-10"] = 3425484982
+}
+local v_u_39 = {
+	["TierI"] = "rbxassetid://75328388341121",
+	["TierII"] = "rbxassetid://77458860778224",
+	["TierIII"] = "rbxassetid://139055345939348"
+}
+local v_u_40 = nil
+local v_u_41 = {}
+local v_u_42 = false
+local v_u_43 = "Robux"
+local function v_u_45(p44)
+	if p44 >= 1000000 then
+		return string.format("%.1fM", p44 / 1000000):gsub("%.0", "")
+	elseif p44 >= 1000 then
+		return string.format("%.1fk", p44 / 1000):gsub("%.0", "")
+	else
+		return tostring(p44)
+	end
+end
+local v_u_56 = {
+	["Gems"] = {
+		["image"] = "rbxassetid://83483306811020",
+		["getText"] = function(p46)
+			-- upvalues: (copy) v_u_45
+			return v_u_45(p46.GemCount)
+		end
+	},
+	["RandomPotion"] = {
+		["image"] = "rbxassetid://88192262658920",
+		["getText"] = function(p47)
+			return p47.PotionCount .. "X"
+		end
+	},
+	["Tokens"] = {
+		["image"] = "rbxassetid://137781863131060",
+		["getText"] = function(p48)
+			-- upvalues: (copy) v_u_45
+			return v_u_45(p48.TokenCount)
+		end
+	},
+	["Egg_Castle"] = {
+		["image"] = "rbxassetid://94482533905816",
+		["getText"] = function(p49)
+			return p49.DisplayAmount
+		end
+	},
+	["Egg_Angelic"] = {
+		["image"] = "rbxassetid://121036037700791",
+		["getText"] = function(p50)
+			return p50.DisplayAmount
+		end
+	},
+	["Pet_Unique"] = {
+		["image"] = "rbxassetid://84643236314891",
+		["getText"] = function(p51)
+			return p51.PetRarity
+		end
+	},
+	["Pet_OP"] = {
+		["image"] = "rbxassetid://80946254143705",
+		["getText"] = function(p52)
+			return p52.PetRarity
+		end
+	},
+	["Pet_Basic"] = {
+		["image"] = "rbxassetid://81945221709816",
+		["getText"] = function(p53)
+			return p53.PetRarity
+		end
+	},
+	["Pet_Brainrot"] = {
+		["image"] = "rbxassetid://101984767693689",
+		["getText"] = function(p54)
+			return p54.PetRarity
+		end
+	},
+	["Pet_Rare"] = {
+		["image"] = "rbxassetid://120615163909670",
+		["getText"] = function(p55)
+			return p55.PetRarity
+		end
+	}
+}
+local function v_u_59(p57)
+	-- upvalues: (copy) v_u_27, (copy) v_u_4
+	local v58 = v_u_27.AbsoluteCanvasSize.Y - v_u_27.AbsoluteWindowSize.Y
+	v_u_4:Create(v_u_27, TweenInfo.new(0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+		["CanvasPosition"] = Vector2.new(0, v58 * p57)
+	}):Play()
+end
+local function v_u_61()
+	-- upvalues: (copy) v_u_10, (copy) v_u_21
+	local v_u_60 = UDim2.fromScale(0.5, 0.5)
+	v_u_10.ShowAnimation(v_u_21, v_u_60, 50, "Confetti", 1.2)
+	task.delay(0.08, function()
+		-- upvalues: (ref) v_u_10, (ref) v_u_21, (copy) v_u_60
+		v_u_10.ShowAnimation(v_u_21, v_u_60, 8, "Shine", 0.7)
+	end)
+end
+local v_u_62 = v25.ScrollingFrame.Codes.Holder.Redeem
+local v_u_63 = v25.ScrollingFrame.Codes.Holder.InputHolder.Holder.TextBox
+local v_u_64 = v_u_10.AddHoverAnimations(v_u_62)
+v_u_62.Click.MouseButton1Down:Connect(function()
+	-- upvalues: (copy) v_u_10, (copy) v_u_62, (copy) v_u_64
+	v_u_10.ScaleSize(v_u_62, v_u_64, 0.9)
+end)
+v_u_62.Click.MouseButton1Up:Connect(function()
+	-- upvalues: (copy) v_u_10, (copy) v_u_62, (copy) v_u_64, (copy) v_u_14, (copy) v_u_18, (copy) v_u_63, (copy) v_u_13
+	v_u_10.ResetSize(v_u_62, v_u_64)
+	v_u_14.playSound("Click")
+	local v65 = v_u_18:InvokeServer(string.lower(v_u_63.Text))
+	if v65.rewardType == "Expired" or (v65.rewardType == "Redeemed" or (v65.RewardType == "Error" or v65.RewardType == "Invalid")) then
+		v_u_14.playSound("Error")
+		v_u_13.showError(v65.codeString)
+	else
+		v_u_13.showSuccess(v65.codeString)
+	end
+end)
+local v_u_66 = v24.Holder:FindFirstChild("Currencys")
+local function v_u_72()
+	-- upvalues: (copy) v_u_29, (ref) v_u_43
+	for _, v67 in v_u_29:GetChildren() do
+		if (v67:IsA("ImageButton") or v67:IsA("TextButton")) and v67.Name ~= "Ignore" then
+			local v68 = v67:FindFirstChild("Price")
+			if v68 and v68.Text ~= "Owned" then
+				local v69 = v68:FindFirstChild("GamepassIcon")
+				local v70 = v67:GetAttribute("BasePrice")
+				if v70 then
+					if v_u_43 == "Tokens" then
+						local v71 = v70 * 2
+						v68.Text = tostring(v71)
+						if v69 then
+							v69.Image = "rbxassetid://84581624458758"
+							v69.ImageColor3 = Color3.fromRGB(255, 255, 255)
+						end
+					else
+						v68.Text = tostring(v70)
+						if v69 then
+							v69.Image = "rbxassetid://139069163862778"
+							v69.ImageColor3 = Color3.fromRGB(33, 52, 28)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+if v_u_66 then
+	local v_u_73 = v_u_66:FindFirstChild("Robux")
+	local v_u_74 = v_u_66:FindFirstChild("Tokens")
+	if v_u_73 then
+		local v_u_75 = v_u_10.AddHoverAnimations(v_u_73)
+		v_u_73.MouseButton1Down:Connect(function()
+			-- upvalues: (copy) v_u_10, (copy) v_u_73, (copy) v_u_75
+			v_u_10.ScaleSize(v_u_73, v_u_75, 0.9)
+		end)
+		v_u_73.MouseButton1Up:Connect(function()
+			-- upvalues: (copy) v_u_10, (copy) v_u_73, (copy) v_u_75, (copy) v_u_14, (ref) v_u_43, (copy) v_u_72, (copy) v_u_13
+			v_u_10.ResetSize(v_u_73, v_u_75)
+			v_u_14.playSound("Click")
+			v_u_43 = "Robux"
+			v_u_72()
+			v_u_13.showSuccess("Currency changed to Robux!")
+		end)
+	end
+	if v_u_74 then
+		local v_u_76 = v_u_10.AddHoverAnimations(v_u_74)
+		v_u_74.MouseButton1Down:Connect(function()
+			-- upvalues: (copy) v_u_10, (copy) v_u_74, (copy) v_u_76
+			v_u_10.ScaleSize(v_u_74, v_u_76, 0.9)
+		end)
+		v_u_74.MouseButton1Up:Connect(function()
+			-- upvalues: (copy) v_u_10, (copy) v_u_74, (copy) v_u_76, (copy) v_u_14, (ref) v_u_43, (copy) v_u_72, (copy) v_u_13
+			v_u_10.ResetSize(v_u_74, v_u_76)
+			v_u_14.playSound("Click")
+			v_u_43 = "Tokens"
+			v_u_72()
+			v_u_13.showSuccess("Currency changed to Keys!")
+		end)
+	end
+end
+local function v_u_81()
+	-- upvalues: (copy) v_u_30, (ref) v_u_40, (copy) v_u_37
+	for _, v77 in v_u_30:GetChildren() do
+		if (v77:IsA("ImageLabel") or v77:IsA("Frame")) and (v77.Name ~= "Ignore" and v_u_40) then
+			if v77.Name ~= "4XLuck" then
+				local v78 = (v_u_37[v77.Name] or v77.Name) .. "PotionUses"
+				local v79 = v77:FindFirstChild("AmountDisplay")
+				if v79 then
+					local v80 = v_u_40.Data[v78] or 0
+					v79.Text = tostring(v80)
+				end
+			end
+		end
+	end
+end
+v8.ReplicaOfClassCreated("PlayerData", function(p82)
+	-- upvalues: (ref) v_u_40, (copy) v_u_26, (copy) v_u_9, (copy) v_u_30, (copy) v_u_29, (copy) v_u_13, (copy) v_u_61, (ref) v_u_42, (copy) v_u_27, (copy) v_u_81
+	v_u_40 = p82
+	if v_u_26:FindFirstChild("TokenDisplay") then
+		v_u_26.TokenDisplay.Text = v_u_9.abbreviate(p82.Data.Tokens or 0)
+	end
+	p82:ListenToChange({ "Tokens" }, function(p83)
+		-- upvalues: (ref) v_u_26, (ref) v_u_9
+		if v_u_26:FindFirstChild("TokenDisplay") then
+			v_u_26.TokenDisplay.Text = v_u_9.abbreviate(p83 or 0)
+		end
+	end)
+	for _, v84 in v_u_30:GetChildren() do
+		if v84:IsA("ImageLabel") and v84.Name ~= "Ignore" then
+			local v_u_85 = v84:FindFirstChild("AmountDisplay")
+			if v_u_85 then
+				local v86 = v84.Name .. "PotionUses"
+				v_u_85.Text = "x" .. (p82.Data[v86] or 0)
+				p82:ListenToChange({ v86 }, function(p87)
+					-- upvalues: (copy) v_u_85
+					if v_u_85 and v_u_85.Parent then
+						v_u_85.Text = "x" .. (p87 or 0)
+					end
+				end)
+			end
+		end
+	end
+	local function v89(p88)
+		if p88 then
+			p88 = p88:FindFirstChild("Price")
+		end
+		if p88 then
+			p88.Text = "Owned"
+			p88.TextColor3 = Color3.fromRGB(255, 255, 255)
+			if p88:FindFirstChild("UIStroke") then
+				p88.UIStroke.Color = Color3.fromRGB(0, 0, 0)
+			end
+		end
+	end
+	for _, v90 in p82.Data.Passes or {} do
+		v89(v_u_29:FindFirstChild(v90))
+	end
+	p82:ListenToArrayInsert({ "Passes" }, function(_, p91)
+		-- upvalues: (ref) v_u_29, (ref) v_u_13, (ref) v_u_61
+		local v92 = v_u_29:FindFirstChild(p91)
+		if v92 then
+			local v93 = v92:FindFirstChild("Price")
+			if v93 then
+				v93.Text = "Owned"
+				v93.TextColor3 = Color3.fromRGB(255, 255, 255)
+				if v93:FindFirstChild("UIStroke") then
+					v93.UIStroke.Color = Color3.fromRGB(0, 0, 0)
+				end
+				local v94 = v93:FindFirstChild("GamepassIcon")
+				if v94 then
+					v94.Visible = false
+				end
+			end
+			v_u_13.showSuccess("Thanks for your purchase! <3")
+			v_u_61()
+		end
+	end)
+	local function v_u_96()
+		-- upvalues: (ref) v_u_42, (ref) v_u_27
+		v_u_42 = true
+		local v95 = v_u_27:FindFirstChild("Bundle") and (v_u_27.Bundle:FindFirstChild("Holder") and v_u_27.Bundle.Holder:FindFirstChild("Items") and (v_u_27.Bundle.Holder.Items:FindFirstChild("Purchase") and v_u_27.Bundle.Holder.Items.Purchase:FindFirstChild("Holder")))
+		if v95 then
+			v95 = v_u_27.Bundle.Holder.Items.Purchase.Holder:FindFirstChild("Price")
+		end
+		if v95 then
+			v95.Text = "Owned"
+		end
+	end
+	if p82.Data.Purchases then
+		for _, v97 in p82.Data.Purchases do
+			if v97 == "V1Bundle" then
+				v_u_96()
+				break
+			end
+		end
+	end
+	p82:ListenToArrayInsert({ "Purchases" }, function(_, p98)
+		-- upvalues: (copy) v_u_96
+		if p98 == "V1Bundle" then
+			v_u_96()
+		end
+	end)
+	task.wait()
+	v_u_81()
+end)
+v8.ReplicaOfClassCreated("NotifyAll", function(p99)
+	-- upvalues: (ref) v_u_41
+	v_u_41 = p99.Data.ExistAmounts or {}
+	p99:ListenToChange({ "ExistAmounts" }, function(p100)
+		-- upvalues: (ref) v_u_41
+		v_u_41 = p100 or {}
+	end)
+end)
+local v101 = v_u_28:FindFirstChild("Exclusive")
+if v101 then
+	v101 = v_u_28.Exclusive:FindFirstChild("Buttons")
+end
+local v_u_102
+if v101 then
+	v_u_102 = v_u_43
+	for _, v_u_103 in v101:GetChildren() do
+		if v_u_103:IsA("Frame") or (v_u_103:IsA("TextButton") or v_u_103:IsA("ImageButton")) then
+			local v_u_104 = v_u_10.AddHoverAnimations(v_u_103)
+			local v105 = v_u_103:FindFirstChild("Click") or v_u_103
+			v105.MouseButton1Down:Connect(function()
+				-- upvalues: (copy) v_u_10, (copy) v_u_103, (copy) v_u_104
+				v_u_10.ScaleSize(v_u_103, v_u_104, 0.9)
+			end)
+			v105.MouseButton1Up:Connect(function()
+				-- upvalues: (copy) v_u_10, (copy) v_u_103, (copy) v_u_104, (copy) v_u_14, (copy) v_u_12, (copy) v_u_3, (copy) v_u_6, (copy) v_u_13
+				v_u_10.ResetSize(v_u_103, v_u_104)
+				v_u_14.playSound("Click")
+				local v106 = v_u_12.getProdId("Angelic Egg-" .. v_u_103.Name)
+				if v106 then
+					v_u_3:PromptProductPurchase(v_u_6, v106)
+				else
+					v_u_13.showError("Product not available!")
+				end
+			end)
+		end
+	end
+else
+	v_u_102 = v_u_43
+end
+for v107, v_u_108 in pairs({
+	["2011"] = 3448991518,
+	["2009"] = 3448987823,
+	["2010"] = 3448988713,
+	["1001"] = 3462273653
+}) do
+	local v_u_109 = v_u_28:FindFirstChild(v107)
+	if v_u_109 then
+		v_u_109 = v_u_109:FindFirstChild("Buy")
+	end
+	if v_u_109 then
+		local v110 = v_u_109:FindFirstChild("Click") or v_u_109
+		local v_u_111 = v_u_10.AddHoverAnimations(v_u_109)
+		v110.MouseButton1Down:Connect(function()
+			-- upvalues: (copy) v_u_10, (copy) v_u_109, (copy) v_u_111
+			v_u_10.ScaleSize(v_u_109, v_u_111, 0.9)
+		end)
+		v110.MouseButton1Up:Connect(function()
+			-- upvalues: (copy) v_u_10, (copy) v_u_109, (copy) v_u_111, (copy) v_u_14, (copy) v_u_3, (copy) v_u_6, (copy) v_u_108
+			v_u_10.ResetSize(v_u_109, v_u_111)
+			v_u_14.playSound("Click")
+			v_u_3:PromptProductPurchase(v_u_6, v_u_108)
+		end)
+	end
+end
+for _, v_u_112 in v_u_29:GetChildren() do
+	if (v_u_112:IsA("ImageButton") or v_u_112:IsA("TextButton")) and v_u_112.Name ~= "Ignore" then
+		local v_u_113 = v_u_112:FindFirstChild("Price")
+		if v_u_113 and v_u_113.Text ~= "Owned" then
+			local v114 = string.gsub(v_u_113.Text or "0", "%$", "")
+			v_u_112:SetAttribute("BasePrice", tonumber(v114) or 0)
+			local v115 = v_u_113:FindFirstChild("GamepassIcon")
+			if v115 then
+				v115.Image = "rbxassetid://139069163862778"
+				v115.ImageColor3 = Color3.fromRGB(33, 52, 28)
+			end
+		end
+		local v_u_116 = v_u_10.AddHoverAnimations(v_u_112, 1.03)
+		v_u_112.MouseButton1Down:Connect(function()
+			-- upvalues: (copy) v_u_10, (copy) v_u_112, (copy) v_u_116
+			v_u_10.ScaleSize(v_u_112, v_u_116, 0.95)
+		end)
+		v_u_112.MouseButton1Up:Connect(function()
+			-- upvalues: (copy) v_u_10, (copy) v_u_112, (copy) v_u_116, (copy) v_u_113, (copy) v_u_14, (copy) v_u_13, (copy) v_u_12, (ref) v_u_102, (copy) v_u_17, (copy) v_u_3, (copy) v_u_6
+			v_u_10.ResetSize(v_u_112, v_u_116)
+			if v_u_113 and v_u_113.Text == "Owned" then
+				v_u_14.playSound("Error")
+				v_u_13.showError("You already own this pass!")
+				return
+			else
+				v_u_14.playSound("Click")
+				local v117 = v_u_12.getPassId(v_u_112.Name)
+				if v117 then
+					if v_u_102 == "Tokens" then
+						v_u_17:FireServer(v117, true, (v_u_112:GetAttribute("BasePrice") or 0) * 2)
+					else
+						v_u_3:PromptGamePassPurchase(v_u_6, v117)
+					end
+				else
+					v_u_13.showError("Pass not available!")
+					return
+				end
+			end
+		end)
+	end
+end
+task.defer(v_u_72)
+for _, v_u_118 in v_u_30:GetChildren() do
+	if (v_u_118:IsA("ImageLabel") or v_u_118:IsA("Frame")) and v_u_118.Name ~= "Ignore" then
+		local v_u_119 = v_u_37[v_u_118.Name] or v_u_118.Name
+		local function v_u_130(p120)
+			-- upvalues: (ref) v_u_40, (copy) v_u_14, (copy) v_u_13, (copy) v_u_119, (copy) v_u_16, (copy) v_u_118, (copy) v_u_37, (copy) v_u_12, (copy) v_u_38, (copy) v_u_3, (copy) v_u_6
+			if p120 == "Use" or p120 == "Use- uses 1" then
+				if not v_u_40 then
+					v_u_14.playSound("Error")
+					v_u_13.showError("Data not loaded!")
+					return
+				end
+				local v121 = v_u_119 .. "PotionUses"
+				if (v_u_40.Data[v121] or 0) <= 0 then
+					v_u_14.playSound("Error")
+					v_u_13.showError("You don\'t have any " .. v_u_118.Name .. " potions!")
+					return
+				end
+				v_u_14.playSound("Click")
+				v_u_16:FireServer(v_u_119)
+				task.wait(0.1)
+				local v122 = v_u_118
+				if v_u_40 then
+					if v122.Name == "4XLuck" then
+						return
+					end
+					local v123 = (v_u_37[v122.Name] or v122.Name) .. "PotionUses"
+					local v124 = v122:FindFirstChild("AmountDisplay")
+					if v124 then
+						local v125 = v_u_40.Data[v123] or 0
+						v124.Text = tostring(v125)
+						return
+					end
+				end
+			else
+				if p120 == "Buy" or p120 == "Buy - Buys 1" then
+					local v126 = v_u_119 .. "Potion-" .. 1
+					local v127 = v_u_12.getProdId(v126) or v_u_38[v126]
+					if v127 then
+						v_u_3:PromptProductPurchase(v_u_6, v127)
+					else
+						warn("No product ID for " .. v126)
+						v_u_13.showError("Potion not available!")
+					end
+				end
+				if p120 == "BuyX10" or p120 == "BuyX10 - Buys 10" then
+					local v128 = v_u_119 .. "Potion-" .. 10
+					local v129 = v_u_12.getProdId(v128) or v_u_38[v128]
+					if v129 then
+						v_u_3:PromptProductPurchase(v_u_6, v129)
+						return
+					end
+					warn("No product ID for " .. v128)
+					v_u_13.showError("Potion not available!")
+				end
+			end
+		end
+		if v_u_118.Name == "X3Luck" then
+			v_u_2.Luck.Enabled.Changed:Connect(function()
+				-- upvalues: (copy) v_u_118, (copy) v_u_2
+				if not v_u_118.Buy.Price then
+					repeat
+						task.wait()
+					until v_u_118.Buy.Price
+				end
+				local v131 = v_u_2.Luck.Enabled.Value
+				v_u_118.Title.Text = v131 and "X4 Server Luck" or "X3 Server Luck"
+				v_u_118.X3.Text = v131 and "X4" or "X3"
+				v_u_118.Buy.Price.Text = v131 and "59$" or "49$"
+			end)
+			local v_u_132 = v_u_10.AddHoverAnimations(v_u_118.Buy)
+			v_u_118.Buy.MouseButton1Down:Connect(function()
+				-- upvalues: (copy) v_u_10, (copy) v_u_118, (copy) v_u_132
+				v_u_10.ScaleSize(v_u_118.Buy, v_u_132, 0.9)
+			end)
+			v_u_118.Buy.MouseButton1Up:Connect(function()
+				-- upvalues: (copy) v_u_10, (copy) v_u_118, (copy) v_u_132, (copy) v_u_3, (copy) v_u_6, (copy) v_u_2
+				v_u_10.ResetSize(v_u_118.Buy, v_u_132)
+				v_u_3:PromptProductPurchase(v_u_6, v_u_2.Luck.Enabled.Value and 3550990436 or 3550990176)
+			end)
+			local v133 = v_u_2.Luck.Enabled.Value
+			v_u_118.Title.Text = v133 and "X4 Server Luck" or "X3 Server Luck"
+			v_u_118.X3.Text = v133 and "X4" or "X3"
+			v_u_118.Buy.Price.Text = v133 and "59$" or "49$"
+		else
+			for _, v_u_134 in v_u_118:GetChildren() do
+				if v_u_134:IsA("ImageButton") then
+					local v_u_135 = v_u_10.AddHoverAnimations(v_u_134)
+					v_u_134.MouseButton1Down:Connect(function()
+						-- upvalues: (copy) v_u_10, (copy) v_u_134, (copy) v_u_135
+						v_u_10.ScaleSize(v_u_134, v_u_135, 0.9)
+					end)
+					v_u_134.MouseButton1Up:Connect(function()
+						-- upvalues: (copy) v_u_10, (copy) v_u_134, (copy) v_u_135, (copy) v_u_130
+						v_u_10.ResetSize(v_u_134, v_u_135)
+						v_u_130(v_u_134.Name)
+					end)
+				end
+			end
+			if v_u_40 then
+				if v_u_118.Name ~= "4XLuck" then
+					local v136 = (v_u_37[v_u_118.Name] or v_u_118.Name) .. "PotionUses"
+					local v137 = v_u_118:FindFirstChild("AmountDisplay")
+					if v137 then
+						local v138 = v_u_40.Data[v136] or 0
+						v137.Text = tostring(v138)
+					end
+				end
+			end
+		end
+	end
+end
+for _, v_u_139 in v31:GetChildren() do
+	if v_u_139:IsA("ImageButton") and (v_u_139.Name ~= "Ignore" and v_u_139.Name ~= "Ignroe") then
+		local v_u_140 = v_u_10.AddHoverAnimations(v_u_139, 1.02)
+		v_u_139.MouseButton1Down:Connect(function()
+			-- upvalues: (copy) v_u_10, (copy) v_u_139, (copy) v_u_140
+			v_u_10.ScaleSize(v_u_139, v_u_140, 0.96)
+		end)
+		v_u_139.MouseButton1Up:Connect(function()
+			-- upvalues: (copy) v_u_10, (copy) v_u_139, (copy) v_u_140, (copy) v_u_14, (copy) v_u_12, (copy) v_u_3, (copy) v_u_6, (copy) v_u_13
+			v_u_10.ResetSize(v_u_139, v_u_140)
+			v_u_14.playSound("Click")
+			local v141 = v_u_12.getProdId("Tokenpack" .. v_u_139.Name)
+			if v141 then
+				v_u_3:PromptProductPurchase(v_u_6, v141)
+			else
+				v_u_13.showError("Token pack not available!")
+			end
+		end)
+	end
+end
+local v142 = v_u_27:FindFirstChild("Gems")
+if v142 then
+	for _, v_u_143 in v142:GetChildren() do
+		if v_u_143:IsA("ImageButton") and v_u_143.Name ~= "Ignore" then
+			local v_u_144 = v_u_10.AddHoverAnimations(v_u_143, 1.02)
+			v_u_143.MouseButton1Down:Connect(function()
+				-- upvalues: (copy) v_u_10, (copy) v_u_143, (copy) v_u_144
+				v_u_10.ScaleSize(v_u_143, v_u_144, 0.96)
+			end)
+			v_u_143.MouseButton1Up:Connect(function()
+				-- upvalues: (copy) v_u_10, (copy) v_u_143, (copy) v_u_144, (copy) v_u_14, (copy) v_u_12, (copy) v_u_3, (copy) v_u_6, (copy) v_u_13
+				v_u_10.ResetSize(v_u_143, v_u_144)
+				v_u_14.playSound("Click")
+				local v145 = v_u_12.getProdId("Gempack" .. v_u_143.Name)
+				if v145 then
+					v_u_3:PromptProductPurchase(v_u_6, v145)
+				else
+					v_u_13.showError("Gem pack not available!")
+				end
+			end)
+		end
+	end
+end
+local v146 = v_u_27:FindFirstChild("Bundle")
+if v146 then
+	local v_u_147 = v146:FindFirstChild("Holder")
+	if v_u_147 then
+		v_u_147 = v_u_147:FindFirstChild("Items")
+	end
+	if v_u_147 then
+		v_u_147 = v_u_147:FindFirstChild("Purchase")
+	end
+	if v_u_147 then
+		local v148 = v_u_147:FindFirstChild("Click") or v_u_147
+		l
+
+Stats 
+local v_u_1 = game:GetService("Players")
+local v2 = game:GetService("ReplicatedStorage")
+local v3 = require(v2.Modules.Libraries.ReplicaController)
+local v_u_4 = require(v2.Modules.GUI)
+local v_u_5 = require(v2.Modules.Abbreviations)
+local v_u_6 = require(v2.Modules.Sounds)
+local v_u_7 = v_u_1.LocalPlayer
+local v_u_8 = v2.Functions.GetMulti
+local v_u_9 = script.Parent
+local v_u_10 = v_u_9.Holder.Holder
+local v11 = v_u_10.Profile
+v3.ReplicaOfClassCreated("PlayerData", function(p12)
+	-- upvalues: (copy) v_u_10, (copy) v_u_5, (copy) v_u_8
+	v_u_10.Currency.RobuxSpent.AmountDisplay.Text = v_u_5.abbreviate(p12.Data.RobuxSpent)
+	p12:ListenToChange({ "RobuxSpent" }, function(p13)
+		-- upvalues: (ref) v_u_10, (ref) v_u_5
+		v_u_10.Currency.RobuxSpent.AmountDisplay.Text = v_u_5.abbreviate(p13)
+	end)
+	for _, v_u_14 in v_u_10.Stats:GetChildren() do
+		if v_u_14:IsA("Frame") then
+			if v_u_14.Name == "TimePlayed" then
+				local v15 = v_u_14.AmountDisplay
+				local v16 = p12.Data.TimePlayed
+				local v17 = ""
+				local v18 = v16 / 60
+				local v19 = math.floor(v18)
+				local v20 = v19 / 60
+				local v21 = math.floor(v20)
+				local v22 = v21 / 24
+				local v23 = math.floor(v22)
+				local v24 = v21 % 24
+				local v25 = v19 % 60
+				local v26 = v16 % 60
+				if v23 > 0 then
+					v17 = v17 .. v23 .. "d "
+				end
+				if v24 > 0 then
+					v17 = v17 .. v24 .. "h "
+				end
+				if v25 > 0 then
+					v17 = v17 .. v25 .. "min"
+				end
+				if v17 == "" then
+					v17 = v26 .. "s"
+				end
+				v15.Text = v17
+				p12:ListenToChange({ "TimePlayed" }, function(p27)
+					-- upvalues: (copy) v_u_14
+					local v28 = v_u_14.AmountDisplay
+					local v29 = ""
+					local v30 = p27 / 60
+					local v31 = math.floor(v30)
+					local v32 = v31 / 60
+					local v33 = math.floor(v32)
+					local v34 = v33 / 24
+					local v35 = math.floor(v34)
+					local v36 = v33 % 24
+					local v37 = v31 % 60
+					local v38 = p27 % 60
+					if v35 > 0 then
+						v29 = v29 .. v35 .. "d "
+					end
+					if v36 > 0 then
+						v29 = v29 .. v36 .. "h "
+					end
+					if v37 > 0 then
+						v29 = v29 .. v37 .. "min"
+					end
+					if v29 == "" then
+						v29 = v38 .. "s"
+					end
+					v28.Text = v29
+				end)
+			else
+				v_u_14.AmountDisplay.Text = v_u_5.abbreviate(p12.Data[v_u_14.Name])
+				p12:ListenToChange({ v_u_14.Name }, function(p39)
+					-- upvalues: (copy) v_u_14, (ref) v_u_5
+					v_u_14.AmountDisplay.Text = v_u_5.abbreviate(p39)
+				end)
+			end
+		end
+	end
+	for _, v_u_40 in v_u_10.Stats2:GetChildren() do
+		if v_u_40:IsA("Frame") then
+			v_u_40.AmountDisplay.Text = v_u_5.abbreviate(p12.Data[v_u_40.Name])
+			p12:ListenToChange({ v_u_40.Name }, function(p41)
+				-- upvalues: (copy) v_u_40, (ref) v_u_5
+				v_u_40.AmountDisplay.Text = v_u_5.abbreviate(p41)
+			end)
+		end
+	end
+	for _, v_u_42 in v_u_10.Stats3:GetChildren() do
+		if v_u_42:IsA("Frame") then
+			v_u_42.AmountDisplay.Text = v_u_5.abbreviate(p12.Data[v_u_42.Name])
+			p12:ListenToChange({ v_u_42.Name }, function(p43)
+				-- upvalues: (copy) v_u_42, (ref) v_u_5
+				v_u_42.AmountDisplay.Text = v_u_5.abbreviate(p43)
+			end)
+		end
+	end
+	local v44 = v_u_8:InvokeServer()
+	for _, v45 in v_u_10.Multiplier:GetChildren() do
+		if v45:IsA("Frame") then
+			v45.AmountDisplay.Text = "x" .. v_u_5.abbreviate(v44[v45.Name] or 0)
+		end
+	end
+end)
+local v46, v47 = pcall(function()
+	-- upvalues: (copy) v_u_1, (copy) v_u_7
+	return v_u_1:GetUserThumbnailAsync(v_u_7.UserId, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailSize.Size420x420)
+end)
+if v46 then
+	v11.Thumbnail.Image = v47
+end
+v11.NameDisplay.Text = v_u_7.Name
+local v48, v49 = pcall(function()
+	-- upvalues: (copy) v_u_7
+	return v_u_7:GetRoleInGroup(926448673)
+end)
+v11.GroupRank.GroupRank.Text = "Guest"
+if v48 then
+	v11.GroupRank.GroupRank.Text = v49
+end
+local v_u_50 = v_u_10.SwitchPage
+local v_u_51 = v_u_4.AddHoverAnimations(v_u_50)
+v_u_50.MouseButton1Down:Connect(function()
+	-- upvalues: (copy) v_u_4, (copy) v_u_50, (copy) v_u_51
+	v_u_4.ScaleSize(v_u_50, v_u_51, 0.8)
+end)
+v_u_50.MouseButton1Up:Connect(function()
+	-- upvalues: (copy) v_u_6, (copy) v_u_4, (copy) v_u_50, (copy) v_u_51, (copy) v_u_10
+	v_u_6.playSound("Click")
+	v_u_4.ResetSize(v_u_50, v_u_51)
+	if v_u_10.Stats.Visible then
+		v_u_10.Stats.Visible = false
+		v_u_10.Stats2.Visible = true
+		v_u_10.Stats3.Visible = false
+		return
+	elseif v_u_10.Stats2.Visible then
+		v_u_10.Stats.Visible = false
+		v_u_10.Stats2.Visible = false
+		v_u_10.Stats3.Visible = true
+		return
+	elseif v_u_10.Stats3.Visible then
+		v_u_10.Stats.Visible = false
+		v_u_10.Stats2.Visible = false
+		v_u_10.Stats3.Visible = false
+	else
+		v_u_10.Stats.Visible = true
+		v_u_10.Stats2.Visible = false
+		v_u_10.Stats3.Visible = false
+	end
+end)
+v_u_4.AddCloseImageButton(v_u_10.CloseButton, v_u_9)
+v_u_9.Changed:Connect(function(p52)
+	-- upvalues: (copy) v_u_9, (copy) v_u_8, (copy) v_u_10, (copy) v_u_5
+	if p52 == "Enabled" and v_u_9.Enabled then
+		local v53 = v_u_8:InvokeServer()
+		for _, v54 in v_u_10.Multiplier:GetChildren() do
+			if v54:IsA("Frame") then
+				v54.AmountDisplay.Text = "x" .. v_u_5.abbreviate(v53[v54.Name] or 0)
+			end
+		end
+	end
+end)
+local v_u_55 = v_u_4.AddHoverAnimations(v_u_10.TitleFrame)
+v_u_10.TitleFrame.Click.MouseButton1Down:Connect(function()
+	-- upvalues: (copy) v_u_4, (copy) v_u_10, (copy) v_u_55
+	v_u_4.ScaleSize(v_u_10.TitleFrame, v_u_55, 0.9)
+end)
+v_u_10.TitleFrame.Click.MouseButton1Up:Connect(function()
+	-- upvalues: (copy) v_u_4, (copy) v_u_10, (copy) v_u_55, (copy) v_u_6, (copy) v_u_9
+	v_u_4.ResetSize(v_u_10.TitleFrame, v_u_55)
+	v_u_6.playSound("Click")
+	v_u_4.ShowUI(v_u_9.Parent.Title)
+end)
+return {}
