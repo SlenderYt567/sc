@@ -1,0 +1,318 @@
+--!strict
+--[[
+    SlenderHub | Royal Hatchers (V11 UI Edition)
+    UI Library: SlenderWind Internal (V11 Premium Default)
+    Architect: SlenderHub Lead / Roblox Lua Expert Agent
+]]
+
+--// 1. Singleton Pattern & Configuration
+if getgenv().SlenderHubGameLoaded then 
+    warn("[SlenderHub] Instance already active.") 
+    return 
+end
+getgenv().SlenderHubGameLoaded = true
+
+--// 2. Load SlenderWind V11
+-- Load via URL just like the original V10 script, assuming V5 raw file is standard
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
+
+--// 3. Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local Functions = Remotes:WaitForChild("Functions")
+
+--// 4. Game Data
+local EggsList = {
+    "Common Egg", "Spotted Egg", "Rocky Egg", "Mushroom Egg", "Leaf Egg",
+    "Arctic Egg", "Icy Egg",
+    "Boosted Steampunk Egg", "Desert Egg", "Fiery Egg", "Magma Egg",
+    "Crystal Egg", "Floral Egg", "Mystical Egg", "Coral Egg", "Steampunk Egg", 
+    "Season 1 Egg", "Light Egg", "Bounty Pets", "Exclusive Pets"
+}
+
+local UpgradesList = {
+    "Coins1", "EggHatch1", "Gems1", "HatchSpeed1", "Coins2", "Luck1",
+    "Shiny1", "HatchSpeed2", "Coins3", "Gems2", "Luck2", "Shiny2",
+    "Hatcher1", "Shiny3", "Coins4", "Luck3", "EggHatch2",
+    "Shiny4", "Coins5", "Luck4", "EggHatch3",
+    "HiddenLuck", "HiddenShinyLuck", "HiddenHatchSpeed"
+}
+
+--// 5. Control Flags
+local Flags = {
+    AutoClick = false,
+    AutoCollect = false,
+    AutoEgg = false,
+    SelectedEgg = "Common Egg",
+    EggAmount = 100,
+    AutoMerchant = false,
+    Auto1MMerchant = false,
+    AutoUpgrade = false,
+    SelectedUpgrade = "Coins1",
+    
+    -- Character Mods
+    SpeedHack = false,
+    Noclip = false,
+    InfJump = false,
+    WalkSpeedVal = 16,
+    JumpPowerVal = 50,
+    
+    -- Teleport / Premium OP Modes
+    AutoClaimRewards = false 
+}
+
+--// 6. UI Construction (V11)
+local Window = SlenderWind.Window({
+    Name = "SlenderHub | Royal Hatchers [PREMIUM]",
+    KeySystem = false,
+    Theme = { 
+        Accent = Color3.fromRGB(0, 255, 128),
+        Background = Color3.fromRGB(15, 15, 20),
+        Text = Color3.fromRGB(240, 240, 240)
+    } 
+})
+
+--================= TABS =================--
+local TabFarming = Window:Tab("Farming")
+local TabEggs = Window:Tab("Eggs")
+local TabShop = Window:Tab("Shop & Upgrades")
+local TabPlayer = Window:Tab("Player OP")
+local TabMisc = Window:Tab("Misc")
+
+--================= FARMING TAB =================--
+TabFarming:Label("--- Primary Farm ---")
+
+TabFarming:Toggle("Auto Click", false, "AutoClick", "Automatically clicks for you", function(Value)
+    Flags.AutoClick = Value
+    task.spawn(function()
+        while Flags.AutoClick do
+            -- Ensure LocalPlayer.Character exists
+            if LocalPlayer.Character then
+                pcall(function() Functions.Click:InvokeServer() end)
+            end
+            task.wait(0)
+        end
+    end)
+end)
+
+TabFarming:Toggle("Auto Collect Drops", false, "AutoCollect", "Picks up gems and coins", function(Value)
+    Flags.AutoCollect = Value
+    local collectRemoteFunction = Functions.CollectCollectible
+    
+    task.spawn(function()
+        while Flags.AutoCollect do
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                pcall(function()
+                    local colFolder = Workspace:FindFirstChild("_") and Workspace._:FindFirstChild("CollectiblesClient")
+                    local hrp = LocalPlayer.Character.HumanoidRootPart
+
+                    if colFolder then
+                        for _, item in pairs(colFolder:GetChildren()) do
+                            if item:IsA("BasePart") then
+                                local collectibleID = item:GetAttribute("ID")
+                                if not collectibleID then
+                                    local idValue = item:FindFirstChild("ID")
+                                    if idValue and idValue:IsA("StringValue") then
+                                        collectibleID = idValue.Value
+                                    end
+                                end
+
+                                if collectibleID then
+                                    collectRemoteFunction:InvokeServer(collectibleID)
+                                    item:PivotTo(hrp.CFrame)
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+            task.wait(0.5)
+        end
+    end)
+end)
+
+--================= EGGS TAB =================--
+TabEggs:Label("--- Hatching Options ---")
+
+TabEggs:Dropdown("Select Egg", EggsList, "Common Egg", "SelectedEgg", "Egg to hatch", function(val)
+    Flags.SelectedEgg = val
+end)
+
+TabEggs:Slider("Amount to Open", 1, 100, 100, "EggAmount", "Amount of eggs per hatch cycle", function(Value)
+    Flags.EggAmount = Value
+end)
+
+TabEggs:Toggle("Auto Hatch", false, "AutoEgg", "Spam buys selected egg", function(Value)
+    Flags.AutoEgg = Value
+    task.spawn(function()
+        while Flags.AutoEgg do
+            if LocalPlayer.Character then
+                pcall(function()
+                    local eggFolder = Workspace:FindFirstChild("_") and Workspace._:FindFirstChild("Eggs")
+                    if eggFolder and eggFolder:FindFirstChild(Flags.SelectedEgg) then
+                        local eggInstance = eggFolder[Flags.SelectedEgg]
+                        Functions.BuyEgg:InvokeServer(eggInstance, Flags.EggAmount)
+                    end
+                end)
+            end
+            task.wait(0) -- Increased slightly to prevent remote spam detection
+        end
+    end)
+end)
+
+TabEggs:Label("--- Free OP Features ---")
+TabEggs:Toggle("Auto Claim Rewards (Online)", false, "AutoClaim", "Attempts to claim random online rewards", function(Value)
+    Flags.AutoClaimRewards = Value
+    -- Using the remote structure seen in Dex e Remotes as a speculative claim loop
+    task.spawn(function()
+        while Flags.AutoClaimRewards do
+            pcall(function()
+                -- Assuming typical naming conventions if missing from decompiled script
+                if ReplicatedStorage.Remotes.Functions:FindFirstChild("ClaimOnlineReward") then
+                    ReplicatedStorage.Remotes.Functions.ClaimOnlineReward:InvokeServer()
+                end
+            end)
+            task.wait(5)
+        end
+    end)
+end)
+
+--================= SHOP TAB =================--
+TabShop:Label("--- Merchant Options ---")
+
+TabShop:Toggle("Auto Buy Merchant (Normal)", false, "AutoMerchant", "Buys all normal merchant slots", function(Value)
+    Flags.AutoMerchant = Value
+    task.spawn(function()
+        while Flags.AutoMerchant do
+            pcall(function()
+                for i = 1, 15 do
+                    Functions.BuyMerchant:InvokeServer("Merchant", i)
+                end
+            end)
+            task.wait(2)
+        end
+    end)
+end)
+
+TabShop:Toggle("Auto Buy Merchant (1M Event)", false, "Auto1MMerchant", "Buys all 1M event merchant slots", function(Value)
+    Flags.Auto1MMerchant = Value
+    task.spawn(function()
+        while Flags.Auto1MMerchant do
+            pcall(function()
+                for i = 1, 15 do
+                    Functions.BuyMerchant:InvokeServer("1MMerchant", i)
+                end
+            end)
+            task.wait(2)
+        end
+    end)
+end)
+
+TabShop:Label("--- Player Upgrades ---")
+
+TabShop:Dropdown("Select Upgrade", UpgradesList, "Coins1", "SelectedUpgrade", "Upgrade to spam", function(val)
+    Flags.SelectedUpgrade = val
+end)
+
+TabShop:Toggle("Auto Buy Upgrade", false, "AutoUpgrade", "Continuously buys selected upgrade", function(Value)
+    Flags.AutoUpgrade = Value
+    task.spawn(function()
+        while Flags.AutoUpgrade do
+            pcall(function() Functions.BuyUpgrade:InvokeServer(Flags.SelectedUpgrade) end)
+            task.wait(1)
+        end
+    end)
+end)
+
+--================= PLAYER OP TAB =================--
+TabPlayer:Label("--- Character Exploits ---")
+
+TabPlayer:Toggle("Speed Hack", false, "SpeedHack", "Bypasses anti-cheat speed checks", function(Value)
+    Flags.SpeedHack = Value
+    task.spawn(function()
+        while Flags.SpeedHack and task.wait() do
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                    LocalPlayer.Character.Humanoid.WalkSpeed = Flags.WalkSpeedVal
+                end
+            end)
+        end
+        -- Reset on disable
+        pcall(function() LocalPlayer.Character.Humanoid.WalkSpeed = 16 end)
+    end)
+end)
+
+TabPlayer:Slider("Speed Value", 16, 500, 16, "WalkSpeedVal", "Movement speed", function(Value)
+    Flags.WalkSpeedVal = Value
+end)
+
+TabPlayer:Slider("Jump Power", 50, 300, 50, "JumpPowerVal", "Jump height", function(Value)
+    Flags.JumpPowerVal = Value
+    pcall(function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.JumpPower = Flags.JumpPowerVal
+            LocalPlayer.Character.Humanoid.UseJumpPower = true
+        end
+    end)
+end)
+
+TabPlayer:Toggle("Noclip", false, "Noclip", "Walk through walls", function(Value)
+    Flags.Noclip = Value
+    if Flags.Noclip then
+        RunService:BindToRenderStep("SlenderNoclip", 1000, function()
+            if LocalPlayer.Character then
+                for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
+                end
+            end
+        end)
+    else
+        RunService:UnbindFromRenderStep("SlenderNoclip")
+    end
+end)
+
+TabPlayer:Toggle("Infinite Jump", false, "InfJump", "Jump endlessly", function(Value)
+    Flags.InfJump = Value
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if Flags.InfJump and LocalPlayer.Character then
+        LocalPlayer.Character:FindFirstChildOfClass('Humanoid'):ChangeState("Jumping")
+    end
+end)
+
+--================= MISC TAB =================--
+TabMisc:Label("--- Performance & AFK ---")
+
+TabMisc:Button("CPU Optimizer (Low Render)", "Disables 3D rendering to lower CPU usage", function()
+    RunService:Set3dRenderingEnabled(false)
+    -- Replaces traditional jump AFK with efficient click bypass
+    LocalPlayer.Idled:Connect(function()
+        VirtualUser:Button2Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        VirtualUser:Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
+    end)
+end)
+
+TabMisc:Button("Restore Rendering", "Re-enables 3D rendering", function()
+    RunService:Set3dRenderingEnabled(true)
+end)
+
+-- Initialize Humanoid state on respawn
+LocalPlayer.CharacterAdded:Connect(function(char)
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        hum.UseJumpPower = true
+        if not Flags.SpeedHack then hum.WalkSpeed = Flags.WalkSpeedVal end
+        hum.JumpPower = Flags.JumpPowerVal
+    end
+end)
+
+print("[SlenderHub] Royal Hatchers Loaded Using SlenderWind V11.")

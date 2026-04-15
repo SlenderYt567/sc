@@ -1,0 +1,317 @@
+--[[
+    BloxMinds AI - Horse Race Simulator Optimized
+    Architecture: Knit Framework + TaskManager + Rayfield Interface
+    Updated: Added Teleport (TP) Worlds & Gates
+]]
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- // SAFETY CHECK //
+if getgenv().HorseRaceLoaded then 
+    Rayfield:Notify({Title = "System", Content = "Script already loaded!", Duration = 3})
+    return 
+end
+getgenv().HorseRaceLoaded = true
+
+-- // SERVICES //
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+-- // TASK MANAGER (Loop Handling) //
+local TaskManager = {}
+local Connections = {}
+
+local function StopTask(name)
+    if TaskManager[name] then task.cancel(TaskManager[name]) TaskManager[name] = nil end
+    if Connections[name] then Connections[name]:Disconnect() Connections[name] = nil end
+end
+
+local function StartTask(name, func)
+    StopTask(name)
+    TaskManager[name] = task.spawn(func)
+end
+
+-- // KNIT FRAMEWORK WRAPPER //
+local KnitServices = nil
+local function GetKnitService(ServiceName)
+    if not KnitServices then
+        local KnitPkg = ReplicatedStorage:FindFirstChild("Packages") 
+        if KnitPkg and KnitPkg:FindFirstChild("_Index") then
+            for _, child in ipairs(KnitPkg._Index:GetChildren()) do
+                if string.find(child.Name:lower(), "knit") and child:FindFirstChild("knit") then
+                    KnitServices = child.knit.Services
+                    break
+                end
+            end
+        end
+    end
+
+    if KnitServices and KnitServices:FindFirstChild(ServiceName) then
+        return KnitServices[ServiceName]
+    end
+    return nil
+end
+
+local function NetworkCall(ServiceName, RemoteName, Args, IsInvoke)
+    local Service = GetKnitService(ServiceName)
+    if Service then
+        local Folder = Service:FindFirstChild(IsInvoke and "RF" or "RE")
+        local Remote = Folder and Folder:FindFirstChild(RemoteName)
+        if Remote then
+            if IsInvoke then return Remote:InvokeServer(unpack(Args)) end
+            Remote:FireServer(unpack(Args))
+            return true
+        end
+    end
+    return false
+end
+
+-- // HELPER FUNCTIONS //
+local function TeleportTo(CFramePos)
+    local Char = LocalPlayer.Character
+    if Char and Char:FindFirstChild("HumanoidRootPart") then
+        Char.HumanoidRootPart.CFrame = CFramePos
+    end
+end
+
+-- // CONFIGURATION //
+local Config = {
+    World = "1",
+    Machine = "1",
+    SelectedEgg = "Egg_1_1",
+    WinPosition = Vector3.new(1811.09, 782.79, -689544.81) -- Gate 16 Position
+}
+
+-- // UI CONSTRUCTION //
+local Window = Rayfield:CreateWindow({
+   Name = "Horse Race | BloxMinds Optimized",
+   LoadingTitle = "Loading Script...",
+   LoadingSubtitle = "By BloxMinds AI",
+   ConfigurationSaving = { Enabled = true, FileName = "HorseRace_Config" },
+   KeySystem = false
+})
+
+-- ============================================================================
+-- == TAB: FARM ==
+-- ============================================================================
+local TabFarm = Window:CreateTab("Farm", "swords")
+
+TabFarm:CreateSection("Auto Win")
+
+TabFarm:CreateToggle({
+   Name = "Auto Win (Gate 16)",
+   CurrentValue = false,
+   Flag = "AutoWin",
+   Callback = function(Value)
+        if Value then
+            StartTask("AutoWin", function()
+                while task.wait(0.1) do
+                    NetworkCall("FightService", "GetWinsEvent", {"WinGate_16", Config.WinPosition}, false)
+                end
+            end)
+        else
+            StopTask("AutoWin")
+        end
+   end,
+})
+
+TabFarm:CreateSection("Training")
+
+TabFarm:CreateDropdown({
+    Name = "Select World",
+    Options = {"1","2","3","4","5"},
+    CurrentOption = {"1"},
+    Callback = function(Option) Config.World = Option[1] end
+})
+
+TabFarm:CreateDropdown({
+    Name = "Select Machine",
+    Options = {"1","2","3","4","5","6","7","8","9","10"},
+    CurrentOption = {"1"},
+    Callback = function(Option) Config.Machine = Option[1] end
+})
+
+TabFarm:CreateToggle({
+   Name = "Auto Train",
+   CurrentValue = false,
+   Flag = "AutoTrain",
+   Callback = function(Value)
+        if Value then
+            StartTask("AutoTrain", function()
+                while task.wait() do
+                    local Arg = "Treadmill_" .. Config.World .. "_" .. Config.Machine
+                    NetworkCall("TrainService", "RunTrain", {Arg}, false)
+                end
+            end)
+        else
+            StopTask("AutoTrain")
+        end
+   end,
+})
+
+-- ============================================================================
+-- == TAB: TELEPORT (NEW) ==
+-- ============================================================================
+local TabTP = Window:CreateTab("Teleport", "map")
+
+TabTP:CreateSection("World Teleports")
+
+-- Note: These coordinates are approximations based on standard map layouts.
+-- If the map updates, these might need slight adjustment.
+local WorldLocations = {
+    ["World 1"] = CFrame.new(125, 5, 250),
+    ["World 2"] = CFrame.new(3200, 5, 250), 
+    ["World 3"] = CFrame.new(6400, 5, 250),
+    ["World 4"] = CFrame.new(9600, 5, 250),
+    ["World 5"] = CFrame.new(12800, 5, 250)
+}
+
+TabTP:CreateDropdown({
+    Name = "Teleport to World",
+    Options = {"World 1", "World 2", "World 3", "World 4", "World 5"},
+    CurrentOption = {"World 1"},
+    Callback = function(Option)
+        local dest = WorldLocations[Option[1]]
+        if dest then
+            TeleportTo(dest)
+            Rayfield:Notify({Title="Teleport", Content="Teleported to " .. Option[1], Duration=2})
+        end
+    end
+})
+
+TabTP:CreateSection("Gate Teleports")
+
+TabTP:CreateDropdown({
+    Name = "Teleport to Gate",
+    Options = {"Gate 1", "Gate 5", "Gate 10", "Gate 15", "Gate 20"},
+    CurrentOption = {"Gate 1"},
+    Callback = function(Option)
+        -- Dynamic search for Gates in Workspace if they exist physically
+        local gateNum = Option[1]:gsub("Gate ", "")
+        local found = false
+        
+        -- Attempt to find Gate object in Workspace
+        for _, v in pairs(Workspace:GetDescendants()) do
+            if v.Name == "Gate_" .. gateNum or v.Name == "Gate" .. gateNum then
+                if v:IsA("BasePart") then
+                    TeleportTo(v.CFrame * CFrame.new(0, 5, 0))
+                    found = true
+                    break
+                elseif v:IsA("Model") and v.PrimaryPart then
+                    TeleportTo(v.PrimaryPart.CFrame * CFrame.new(0, 5, 0))
+                    found = true
+                    break
+                end
+            end
+        end
+        
+        if not found then
+            Rayfield:Notify({Title="Error", Content="Could not find " .. Option[1] .. " in Workspace.", Duration=2})
+        end
+    end
+})
+
+-- ============================================================================
+-- == TAB: PETS ==
+-- ============================================================================
+local TabPets = Window:CreateTab("Pets", "egg")
+
+local EggIDs = { "Egg_1_1", "Egg_1_2", "Egg_1_3", "Egg_1_4", "Egg_2_1", "Egg_2_2", "Egg_2_3", "Egg_2_4", "Egg_3_1", "Egg_3_2", "Egg_3_3", "Egg_3_4", "Egg_4_1", "Egg_4_2", "Egg_4_3", "Egg_Tower_1", "Egg_Christmas" }
+
+TabPets:CreateDropdown({
+    Name = "Select Egg",
+    Options = EggIDs,
+    CurrentOption = {"Egg_1_1"},
+    Callback = function(Option) Config.SelectedEgg = Option[1] end
+})
+
+TabPets:CreateToggle({
+   Name = "Auto Hatch",
+   CurrentValue = false,
+   Flag = "AutoHatch",
+   Callback = function(Value)
+        if Value then
+            StartTask("AutoHatch", function()
+                while task.wait(0.1) do
+                    NetworkCall("EggHatchService", "Hatch", {Config.SelectedEgg, 1}, false)
+                end
+            end)
+        else
+            StopTask("AutoHatch")
+        end
+   end,
+})
+
+TabPets:CreateButton({
+    Name = "Fuse All Pets",
+    Callback = function()
+        Rayfield:Notify({Title="Fuse", Content="Starting Fuse Process...", Duration=2})
+        
+        local success, PlayerData = pcall(function()
+            return require(game:GetService("StarterPlayer").StarterPlayerScripts.Controllers.PlayerDataController):GetData()
+        end)
+
+        if not success or not PlayerData or not PlayerData.Pets then
+            Rayfield:Notify({Title="Error", Content="Could not read Pet Data.", Duration=3})
+            return
+        end
+
+        local Groups = {}
+        for uuid, pet in pairs(PlayerData.Pets) do
+            if not pet.Locked and not pet.Equipped then
+                if not Groups[pet.PetID] then Groups[pet.PetID] = {} end
+                table.insert(Groups[pet.PetID], uuid)
+            end
+        end
+
+        local fusedCount = 0
+        for id, list in pairs(Groups) do
+            while #list >= 5 do
+                local batch = {}
+                for i=1, 5 do table.insert(batch, table.remove(list)) end
+                NetworkCall("FuseService", "FusePets", {batch}, true)
+                fusedCount = fusedCount + 1
+                task.wait(0.05)
+            end
+        end
+        Rayfield:Notify({Title="Fuse", Content="Fused " .. tostring(fusedCount) .. " batches!", Duration=3})
+    end,
+})
+
+-- ============================================================================
+-- == TAB: MISC ==
+-- ============================================================================
+local TabMisc = Window:CreateTab("Misc", "settings")
+
+TabMisc:CreateToggle({
+    Name = "Anti-AFK",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            Connections["AntiAFK"] = LocalPlayer.Idled:Connect(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+            Rayfield:Notify({Title="Anti-AFK", Content="Enabled", Duration=2})
+        else
+            if Connections["AntiAFK"] then Connections["AntiAFK"]:Disconnect() end
+            Rayfield:Notify({Title="Anti-AFK", Content="Disabled", Duration=2})
+        end
+    end
+})
+
+TabMisc:CreateButton({
+    Name = "Destroy UI",
+    Callback = function()
+        for _, task in pairs(TaskManager) do task:cancel() end
+        for _, conn in pairs(Connections) do conn:Disconnect() end
+        getgenv().HorseRaceLoaded = false
+        Rayfield:Destroy()
+    end
+})
+
+Rayfield:LoadConfiguration()

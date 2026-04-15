@@ -1,0 +1,334 @@
+--[[
+    SlenderHub - Brookhaven RP
+    Version: FREE
+    Company: SlenderHub
+    Access: Free Tier Only
+]]
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- Access Control
+local AccessLevel = "FREE" -- Only FREE access for Brookhaven
+
+-- Variables
+local Flying = false
+local FlySpeed = 50
+local SpeedEnabled = false
+local SpeedValue = 16
+
+-- Gamepass IDs
+local GamepassIDs = {
+    VIP = 850049439,
+    PREMIUM = 9066980,
+    ESTATES_UNLOCKED = 82773869,
+    VEHICLE_PACK = 15927395,
+    LAND_UNLOCKED = 13405328,
+    VEHICLE_CUSTOMIZATION = 1459820822,
+    DISASTER_PASS = 48857519,
+    VEHICLE_UPGRADE = 9066924,
+    MUSIC_UNLOCKED = 9066988,
+    PENTHOUSE = 19660651,
+    THEME_PASS = 25341106,
+    VEHICLE_SPEED_UNLOCKED = 9066970,
+    BOAT_PACK = 667983868,
+    FACES_UNLOCKED = 13489552,
+    HORSE_UNLOCKED = 10991687,
+    ON_DEMAND_FIRE = 10991517
+}
+
+-- UI
+local Window = Rayfield:CreateWindow({
+   Name = "SlenderHub | Brookhaven RP",
+   LoadingTitle = "SlenderHub",
+   LoadingSubtitle = "FREE Version - Brookhaven RP",
+   ConfigurationSaving = {Enabled = false},
+   KeySystem = false,
+})
+
+-- Info Tab
+local TabInfo = Window:CreateTab("Info", nil)
+
+TabInfo:CreateSection("SlenderHub - Brookhaven RP")
+
+TabInfo:CreateParagraph({
+    Title = "Access Level",
+    Content = "You are using FREE version. Premium features are not available for this game."
+})
+
+TabInfo:CreateParagraph({
+    Title = "Available Features",
+    Content = "• Basic Movement (Fly, Speed)\n• Player Modifications\n• Anti-AFK\n• Basic Utilities"
+})
+
+TabInfo:CreateLabel("Version: FREE | Game: Brookhaven RP")
+
+-- Tab: FREE Features
+local TabFree = Window:CreateTab("FREE Features", nil)
+
+TabFree:CreateSection("Gamepass Unlock (FREE)")
+
+TabFree:CreateButton({
+    Name = "Unlock All Gamepasses",
+    Callback = function()
+        local success, err = pcall(function()
+            local GamepassController = require(ReplicatedStorage.Modules.Client.UI.Gamepass.GamepassController)
+            
+            GamepassController.IsOwned = function() return true end
+            GamepassController.IsPermanentlyOwned = function() return true end
+            GamepassController.IsPlayerOwned = function() return true end
+            
+            local UnlockableController = require(ReplicatedStorage.Modules.Client.PlayerData.UnlockableController)
+            if UnlockableController.IsFeatureUnlocked then
+                UnlockableController.IsFeatureUnlocked = function() return true end
+            end
+        end)
+        
+        if success then
+            Rayfield:Notify({
+                Title = "Success",
+                Content = "All gamepasses unlocked!",
+                Duration = 3,
+            })
+        else
+            Rayfield:Notify({
+                Title = "Error",
+                Content = tostring(err),
+                Duration = 3,
+            })
+        end
+    end,
+})
+
+TabFree:CreateLabel("All 16 gamepasses available in FREE version")
+
+-- Tab: Movement
+local TabMove = Window:CreateTab("Movement", nil)
+
+local BV, BG
+local Ctrl = {F = 0, B = 0, L = 0, R = 0, Q = 0, E = 0}
+
+TabMove:CreateToggle({
+    Name = "Enable Fly",
+    CurrentValue = false,
+    Callback = function(Value)
+        Flying = Value
+        
+        if Flying then
+            local Character = LocalPlayer.Character
+            if not Character then return end
+            
+            local RootPart = Character:FindFirstChild("HumanoidRootPart")
+            if not RootPart then return end
+            
+            BV = Instance.new("BodyVelocity")
+            BV.Velocity = Vector3.new(0, 0, 0)
+            BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+            BV.Parent = RootPart
+            
+            BG = Instance.new("BodyGyro")
+            BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+            BG.CFrame = RootPart.CFrame
+            BG.Parent = RootPart
+            
+            spawn(function()
+                while Flying do
+                    local Character = LocalPlayer.Character
+                    if not Character then break end
+                    
+                    local RootPart = Character:FindFirstChild("HumanoidRootPart")
+                    if not RootPart then break end
+                    
+                    local Cam = workspace.CurrentCamera
+                    local Speed = FlySpeed
+                    
+                    local MoveVector = ((Cam.CFrame.LookVector * (Ctrl.F + Ctrl.B)) + 
+                                       (Cam.CFrame.RightVector * (Ctrl.R + Ctrl.L)) + 
+                                       (Vector3.new(0, Ctrl.Q + Ctrl.E, 0)))
+                    
+                    if BV then
+                        BV.Velocity = MoveVector * Speed
+                    end
+                    
+                    if BG then
+                        BG.CFrame = Cam.CFrame
+                    end
+                    
+                    RunService.Heartbeat:Wait()
+                end
+            end)
+        else
+            if BV then BV:Destroy() end
+            if BG then BG:Destroy() end
+        end
+    end,
+})
+
+UserInputService.InputBegan:Connect(function(Input, GPE)
+    if GPE then return end
+    
+    if Input.KeyCode == Enum.KeyCode.W then Ctrl.F = 1
+    elseif Input.KeyCode == Enum.KeyCode.S then Ctrl.B = -1
+    elseif Input.KeyCode == Enum.KeyCode.A then Ctrl.L = -1
+    elseif Input.KeyCode == Enum.KeyCode.D then Ctrl.R = 1
+    elseif Input.KeyCode == Enum.KeyCode.E then Ctrl.Q = 1
+    elseif Input.KeyCode == Enum.KeyCode.Q then Ctrl.E = -1
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(Input, GPE)
+    if GPE then return end
+    
+    if Input.KeyCode == Enum.KeyCode.W then Ctrl.F = 0
+    elseif Input.KeyCode == Enum.KeyCode.S then Ctrl.B = 0
+    elseif Input.KeyCode == Enum.KeyCode.A then Ctrl.L = 0
+    elseif Input.KeyCode == Enum.KeyCode.D then Ctrl.R = 0
+    elseif Input.KeyCode == Enum.KeyCode.E then Ctrl.Q = 0
+    elseif Input.KeyCode == Enum.KeyCode.Q then Ctrl.E = 0
+    end
+end)
+
+TabMove:CreateSlider({
+    Name = "Fly Speed",
+    Range = {10, 200},
+    Increment = 5,
+    CurrentValue = 50,
+    Callback = function(Value)
+        FlySpeed = Value
+    end,
+})
+
+TabMove:CreateToggle({
+    Name = "Enable Speed",
+    CurrentValue = false,
+    Callback = function(Value)
+        SpeedEnabled = Value
+        
+        local Character = LocalPlayer.Character
+        if Character then
+            local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+            if Humanoid then
+                Humanoid.WalkSpeed = Value and SpeedValue or 16
+            end
+        end
+    end,
+})
+
+TabMove:CreateSlider({
+    Name = "Walk Speed",
+    Range = {16, 200},
+    Increment = 2,
+    CurrentValue = 16,
+    Callback = function(Value)
+        SpeedValue = Value
+        if SpeedEnabled then
+            local Character = LocalPlayer.Character
+            if Character then
+                local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+                if Humanoid then
+                    Humanoid.WalkSpeed = Value
+                end
+            end
+        end
+    end,
+})
+
+-- Tab: Player
+local TabPlayer = Window:CreateTab("Player", nil)
+
+TabPlayer:CreateSlider({
+    Name = "Jump Power",
+    Range = {50, 300},
+    Increment = 10,
+    CurrentValue = 50,
+    Callback = function(Value)
+        local Character = LocalPlayer.Character
+        if Character then
+            local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+            if Humanoid then
+                Humanoid.JumpPower = Value
+            end
+        end
+    end,
+})
+
+TabPlayer:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            _G.InfJump = UserInputService.JumpRequest:Connect(function()
+                local Character = LocalPlayer.Character
+                if Character then
+                    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+                    if Humanoid then
+                        Humanoid:ChangeState("Jumping")
+                    end
+                end
+            end)
+        else
+            if _G.InfJump then
+                _G.InfJump:Disconnect()
+            end
+        end
+    end,
+})
+
+-- Tab: Misc
+local TabMisc = Window:CreateTab("Misc", nil)
+
+TabMisc:CreateToggle({
+    Name = "Anti-AFK",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            _G.AntiAFK = RunService.Stepped:Connect(function()
+                game:GetService("VirtualUser"):CaptureController()
+                game:GetService("VirtualUser"):ClickButton2(Vector2.new())
+            end)
+        else
+            if _G.AntiAFK then
+                _G.AntiAFK:Disconnect()
+            end
+        end
+    end,
+})
+
+TabMisc:CreateButton({
+    Name = "Destroy GUI",
+    Callback = function()
+        Rayfield:Destroy()
+    end,
+})
+
+-- Auto-update on respawn
+LocalPlayer.CharacterAdded:Connect(function(Character)
+    wait(0.5)
+    if SpeedEnabled then
+        local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+        if Humanoid then
+            Humanoid.WalkSpeed = SpeedValue
+        end
+    end
+end)
+
+-- Notification
+Rayfield:Notify({
+    Title = "SlenderHub Loaded!",
+    Content = "FREE Version - Brookhaven RP | Access: " .. AccessLevel,
+    Duration = 5,
+})
+
+wait(1)
+
+Rayfield:Notify({
+    Title = "Access Level: FREE",
+    Content = "You have access to basic features only",
+    Duration = 4,
+})
