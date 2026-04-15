@@ -398,4 +398,14 @@ TabUniversal:Button("Rejoin Server", "Teleports you back into the game", functio
     game:GetService("TeleportService"):Teleport(CurrentPlaceId, LocalPlayer)
 end)
 
+TabUniversal:Label("--- Account ---")
+TabUniversal:Button("Restaurar Key", "Deleta a chave salva localmente (Re-execute após clicar)", function()
+    if isfile(FILE_PATH) then
+        pcall(function() delfile(FILE_PATH) end)
+        Notify("Key Restaurada", "Sua chave foi removida. Por favor, re-execute o script.", "Success", 5)
+    else
+        Notify("Erro", "Nenhuma chave salva encontrada para deletar.", "Error", 5)
+    end
+end)
+
 print("[SlenderHub] Universal V12.0 loaded. PlaceId: " .. tostring(CurrentPlaceId))
