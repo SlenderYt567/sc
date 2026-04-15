@@ -305,6 +305,17 @@ TabMisc:Button("Restore Rendering", "Re-enables 3D rendering", function()
     RunService:Set3dRenderingEnabled(true)
 end)
 
+TabMisc:Label("--- Account ---")
+TabMisc:Button("Restaurar Key", "Remove a licença salva (Re-execute após clicar)", function()
+    local path = "SlenderHub_Universal/KeyData_" .. LocalPlayer.UserId .. ".json"
+    if isfile(path) then
+        pcall(function() delfile(path) end)
+        pcall(function() Window:Notify("Key Restaurada", "Sua licença foi removida. Re-execute o hub.", 5, "Success") end)
+    else
+        pcall(function() Window:Notify("Aviso", "Nenhuma licença salva encontrada.", 5, "Error") end)
+    end
+end)
+
 -- Initialize Humanoid state on respawn
 LocalPlayer.CharacterAdded:Connect(function(char)
     local hum = char:WaitForChild("Humanoid", 5)
