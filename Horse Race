@@ -321,5 +321,16 @@ TabMisc:Button("Restore Rendering", "Fixes graphics", function()
     RunService:Set3dRenderingEnabled(true)
 end)
 
+TabMisc:Label("--- Account ---")
+TabMisc:Button("Restaurar Key", "Remove a licença salva (Re-execute após clicar)", function()
+    local path = "SlenderHub_Universal/KeyData_" .. LocalPlayer.UserId .. ".json"
+    if isfile(path) then
+        pcall(function() delfile(path) end)
+        print("[SlenderHub] Key removida. Re-execute o script.")
+    else
+        warn("[SlenderHub] Nenhuma chave salva encontrada.")
+    end
+end)
+
 --// End
 print("[SlenderHub] V10 Loaded.")
