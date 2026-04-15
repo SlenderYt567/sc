@@ -1,189 +1,401 @@
+--!strict
 --[[
-    SlenderHub | Universal Loader (V11.5 - Optimized)
+    SlenderHub | Universal Loader (V12.0 - Dual Key System)
     Architect: SlenderHub Systems Expert
-    Description: Dynamic game detection, modular/standalone script loading, and multi-path fallback.
+    Key System:
+        [1] Velink    - Free (24h) and Premium (7d/30d) keys via velink.to
+        [2] SlenderKey - Direct API from slenderhub.shop (test/premium)
 ]]
 
---// 1. Loader Configuration
-local LoaderConfig = {
-    Version = "1.1.5",
-    Debug = true,
-    LocalMode = true, -- Tries local folder first, then GitHub
-    ModulesPath = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/",
-    ScriptFolder = "script/"
+--// ==============================[ SERVICES ]============================== //--
+local HttpService    = game:GetService("HttpService")
+local Players        = game:GetService("Players")
+local StarterGui     = game:GetService("StarterGui")
+local RunService     = game:GetService("RunService")
+local CoreGui        = game:GetService("CoreGui")
+local LocalPlayer    = Players.LocalPlayer
+local CurrentPlaceId = game.PlaceId
+
+--// ==============================[ CONFIG ]============================== //--
+local VELINK_IDS = {
+    -- [unlockerId from Velink API] = {Type, Duration in seconds}
+    ["ed6453e6-5259-49b4-8779-05b866831dc2"] = {Type = "Premium", Duration = 604800},   -- 7 Days
+    ["2c69fdcf-f8e1-4c1a-9270-f36d9545ebce"] = {Type = "Premium", Duration = 2592000},  -- 30 Days
 }
 
---// 2. Full Game Mapping (PlaceId -> File Name)
---    Files are searched in: 1. Local "script/" folder, 2. Local root, 3. GitHub root, 4. GitHub "script/" folder
+local LIFETIME_KEYS = {
+    ["LifeTimeF4K9L2P7V8JDHUtY"] = true,
+    ["SlenderDevKey"]             = true,
+}
+
+local Config = {
+    -- Storage
+    FOLDER           = "SlenderHub_Universal",
+    FILE             = "KeyData_" .. LocalPlayer.UserId .. ".json",
+    -- Velink API
+    VELINK_CHECK_URL = "https://velink.to/api/public/check/key",
+    FREE_KEY_LINK    = "https://velink.to/u/678807",
+    -- SlenderHub API  
+    SLENDERKEY_URL   = "https://www.slenderhub.shop/api/keys/verify",
+    SHOP_URL         = "https://www.slenderhub.shop/",
+}
+
+local FILE_PATH          = Config.FOLDER .. "/" .. Config.FILE
+local isAccessAuthorized = false
+local authorizedKeyType  = "Free"
+local authorizedDuration = 86400
+
+--// ==============================[ GAME MAPPING ]============================== //--
 local GameModules = {
-    [120405647949186] = "Royal Hatchers Script",     -- Root (main/premium version)
-    [4924922222]      = "Brookhaven script",          -- script/ folder
-    [93787311916283]  = "Horse Race",                 -- script/ folder
-    [82013336390273]  = "Pickaxe Simulator script",   -- script/ folder
-    [75992362647444]  = "Tap simulator",              -- Root
-    [76558904092080]  = "The Forge Script",           -- Root
-    [109983668079237] = "Steal a Branrot(Premium)",   -- Root
-    [107807115409153] = "Bee Tappers Script",         -- GitHub only
-    [826437311311]    = "pet simulator 99 script",   -- script/ folder
+    [120405647949186] = "Royal Hatchers Script",
+    [4924922222]      = "Brookhaven script",
+    [93787311916283]  = "Horse Race",
+    [82013336390273]  = "Pickaxe Simulator script",
+    [75992362647444]  = "Tap simulator",
+    [76558904092080]  = "The Forge Script",
+    [109983668079237] = "Steal a Branrot(Premium)",
+    [107807115409153] = "Bee Tappers Script",
+    [826437311311]    = "pet simulator 99 script",
 }
 
---// 3. UI Singleton Guard
+--// ==============================[ SINGLETON GUARD ]============================== //--
 if getgenv().SlenderHubLoaded then
     warn("[SlenderHub] Loader already active.")
     return
 end
 getgenv().SlenderHubLoaded = true
 
---// 4. Load SlenderWind UI Library (V11)
-local swSuccess, SlenderWind = pcall(function()
+--// ==============================[ LOAD UI LIBRARY ]============================== //--
+local swOk, SlenderWind = pcall(function()
     return loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
 end)
-
-if not swSuccess or not SlenderWind then
-    error("[SlenderHub] CRITICAL: Failed to load SlenderWind UI Library!")
+if not swOk or not SlenderWind then
+    error("[SlenderHub] CRITICAL: Failed to load SlenderWind!")
     return
 end
 
---// 5. Initialize Window
+--// ==============================[ WINDOW ]============================== //--
 local Window = SlenderWind.Window({
-    Name = "SlenderHub | Universal",
+    Name      = "Slender Hub | Universal",
     KeySystem = false,
-    Theme = {
-        Accent = Color3.fromRGB(0, 255, 128),
-    }
+    Theme     = { Accent = Color3.fromRGB(0, 255, 128) }
 })
 
---// 6. Universal Tab (always visible regardless of game)
+--// ==============================[ HELPERS ]============================== //--
+local function Notify(title: string, text: string, nType: string?, duration: number?)
+    pcall(function()
+        Window:Notify(title, text, duration or 5, nType or "Success")
+    end)
+end
+
+local function formatTime(seconds: number): string
+    if seconds == math.huge then return "Lifetime" end
+    local d = math.floor(seconds / 86400)
+    local h = math.floor((seconds % 86400) / 3600)
+    local m = math.floor((seconds % 3600) / 60)
+    return string.format("%dd %02dh %02dm", d, h, m)
+end
+
+local function getRequestFunc()
+    return (syn and syn.request)
+        or (http and http.request)
+        or (http_request)
+        or (request)
+        or nil
+end
+
+--// ==============================[ KEY STORAGE ]============================== //--
+local function saveKey(keyType: string, key: string, duration: number)
+    if not isfolder(Config.FOLDER) then makefolder(Config.FOLDER) end
+    writefile(FILE_PATH, HttpService:JSONEncode({
+        Type           = keyType,
+        Key            = key,
+        Time           = workspace:GetServerTimeNow(),
+        CustomDuration = duration,
+    }))
+end
+
+local function checkLocalKey(): (boolean, any, number?)
+    if not isfile(FILE_PATH) then return false, nil end
+    local ok, data = pcall(function() return HttpService:JSONDecode(readfile(FILE_PATH)) end)
+    if not ok or not data or not data.Time then
+        pcall(function() delfile(FILE_PATH) end)
+        return false, nil
+    end
+    local dur = data.CustomDuration or 86400
+    if dur == math.huge then return true, data, math.huge end
+    local elapsed = workspace:GetServerTimeNow() - data.Time
+    if elapsed > dur then
+        pcall(function() delfile(FILE_PATH) end)
+        return false, nil
+    end
+    return true, data, (dur - elapsed)
+end
+
+--// ==============================[ VELINK VERIFICATION ]============================== //--
+local function verifyVelinkKey(inputKey: string): (string?, number?)
+    -- Check lifetime keys first (local, no API call needed)
+    if LIFETIME_KEYS[inputKey] then
+        return "Premium", math.huge
+    end
+
+    local reqFunc = getRequestFunc()
+    if not reqFunc then
+        warn("[SlenderHub] No HTTP request function available.")
+        return nil, nil
+    end
+
+    local url = Config.VELINK_CHECK_URL .. "?key=" .. inputKey
+    local ok, response = pcall(function()
+        return reqFunc({ Url = url, Method = "GET" })
+    end)
+
+    if ok and response and response.StatusCode == 200 then
+        local decodeOk, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
+        if decodeOk and data and data.expired == false then
+            print("[SlenderHub] Velink Unlocked - UnlockerId: " .. tostring(data.unlockerId))
+            local tierInfo = VELINK_IDS[tostring(data.unlockerId)]
+            if tierInfo then
+                return tierInfo.Type, tierInfo.Duration
+            else
+                return "Free", 86400  -- Valid Velink key but no premium tier = Free 24h
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+--// ==============================[ SLENDERKEY VERIFICATION ]============================== //--
+local function verifySlenderKey(inputKey: string): (string?, number?, string?)
+    local hwid = tostring(LocalPlayer.UserId)
+    local url  = Config.SLENDERKEY_URL .. "?key=" .. inputKey .. "&hwid=" .. hwid
+
+    local ok, response = pcall(function()
+        return HttpService:GetAsync(url)
+    end)
+
+    if ok and response then
+        local decodeOk, data = pcall(function() return HttpService:JSONDecode(response) end)
+        if decodeOk and data then
+            if data.success then
+                local tier = data.data and data.data.tier or "basic"
+                local keyType = (tier == "premium" or tier == "Premium") and "Premium" or "Free"
+                local expires = data.data and data.data.expires_at
+                local duration = 86400 -- default 24h
+                if expires then
+                    -- Try to parse remaining time from expires_at if available
+                    duration = 2592000 -- Assume 30 days for paid SlenderKeys
+                end
+                print("[SlenderHub] SlenderKey Valid - Tier: " .. tier)
+                return keyType, duration, "SlenderKey"
+            else
+                local msg = data.message or "Authentication failed."
+                warn("[SlenderHub] SlenderKey denied: " .. msg)
+                return nil, nil, msg
+            end
+        end
+    end
+
+    return nil, nil, "Could not connect to SlenderHub servers."
+end
+
+--// ==============================[ GAME SCRIPT LOADER ]============================== //--
+local LoaderConfig = {
+    ModulesPath  = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/",
+    ScriptFolder = "script/"
+}
+
+local function loadGameScript(accessLevel: string)
+    local targetFile = GameModules[CurrentPlaceId]
+    if not targetFile then
+        Notify("SlenderHub", "Game not supported (PlaceId: " .. CurrentPlaceId .. ")", "Error")
+        return
+    end
+
+    -- Set global access level for game scripts to read
+    if getgenv then
+        getgenv().SlenderHubAccessLevel = accessLevel
+    else
+        _G.SlenderHubAccessLevel = accessLevel
+    end
+
+    local moduleContent = nil
+    local loadSource    = ""
+
+    -- Local search first
+    if readfile then
+        for _, path in ipairs({LoaderConfig.ScriptFolder .. targetFile, targetFile}) do
+            local lok, res = pcall(function() return readfile(path) end)
+            if lok and res and #res > 0 then
+                moduleContent = res
+                loadSource    = "Local"
+                break
+            end
+        end
+    end
+
+    -- GitHub fallback (URL-encode spaces)
+    if not moduleContent then
+        local encoded = targetFile:gsub(" ", "%%20")
+        for _, url in ipairs({
+            LoaderConfig.ModulesPath .. encoded,
+            LoaderConfig.ModulesPath .. LoaderConfig.ScriptFolder .. encoded,
+        }) do
+            local gok, res = pcall(function() return game:HttpGet(url) end)
+            if gok and res and #res > 100 and not res:find("404") and not res:find("<html") then
+                moduleContent = res
+                loadSource    = "GitHub"
+                break
+            end
+        end
+    end
+
+    if not moduleContent then
+        Notify("Error", "Failed to find game script!", "Error")
+        return
+    end
+
+    -- Execute
+    local func, err = loadstring(moduleContent)
+    if not func then
+        Notify("Error", "Script compile error: " .. tostring(err), "Error")
+        return
+    end
+
+    local execOk, result = pcall(func)
+    if execOk and type(result) == "table" and type(result.Init) == "function" then
+        pcall(function() result.Init(Window) end)
+    end
+
+    Notify("Loaded", "Game script launched from " .. loadSource, "Success")
+    print("[SlenderHub] Launched: " .. targetFile .. " via " .. loadSource)
+end
+
+--// ==============================[ AUTO-LOGIN CHECK ]============================== //--
+local isSaved, savedData, remainingTime = checkLocalKey()
+
+if isSaved and savedData then
+    isAccessAuthorized = true
+    authorizedKeyType  = savedData.Type or "Free"
+    authorizedDuration = savedData.CustomDuration or 86400
+
+    local timeMsg = (remainingTime == math.huge) and "Lifetime Access" or formatTime(remainingTime)
+    Notify("Auto-Login", "Welcome back! Remaining: " .. timeMsg, "Success", 3)
+    task.wait(0.5)
+    loadGameScript(authorizedKeyType)
+    return
+end
+
+--// ==============================[ AUTHENTICATION TAB ]============================== //--
+local TabAuth = Window:Tab("Authentication")
+
+-- Game Status Info
+local gameName = "Unknown Game"
+pcall(function()
+    gameName = game:GetService("MarketplaceService"):GetProductInfo(CurrentPlaceId).Name
+end)
+local statusText = GameModules[CurrentPlaceId]
+    and ("✅ Supported: " .. gameName)
+    or  ("⚠️ Not Supported (PlaceId: " .. CurrentPlaceId .. ")")
+TabAuth:Paragraph("Game Status", statusText)
+
+TabAuth:Label("── Key Methods ──")
+
+--// ======= [METHOD 1] VELINK KEY =======
+TabAuth:Section("🔗 Velink Key (Free 24h / Premium)")
+TabAuth:Input("Velink Key", "VELINK-XXXX-XXXX", "VelinkInput", "Paste your Velink key", function(text)
+    local key = text:gsub("%s+", "")
+    if #key < 5 then return end
+
+    Notify("Checking...", "Verifying Velink key...", "Success", 2)
+
+    local keyType, duration = verifyVelinkKey(key)
+    if keyType and duration then
+        isAccessAuthorized = true
+        authorizedKeyType  = keyType
+        authorizedDuration = duration
+        saveKey(keyType, key, duration)
+        local durText = (duration == math.huge) and "Lifetime" or formatTime(duration)
+        Notify("✅ Velink Valid!", keyType .. " Key — " .. durText, "Success", 5)
+    else
+        isAccessAuthorized = false
+        Notify("❌ Invalid Key", "Expired or not found in Velink.", "Error", 4)
+    end
+end)
+
+TabAuth:Button("🔑 Get Free Key (Velink - 24h)", "Opens the Velink unlock link", function()
+    setclipboard(Config.FREE_KEY_LINK)
+    Notify("Copied!", "Velink free key link copied to clipboard.", "Success", 3)
+end)
+
+--// ======= [METHOD 2] SLENDERKEY =======
+TabAuth:Section("💎 SlenderKey (slenderhub.shop)")
+TabAuth:Input("SlenderKey", "SLENDER-XXXX-XXXX", "SlenderKeyInput", "Paste your SlenderKey", function(text)
+    local key = text:gsub("%s+", "")
+    if #key < 5 then return end
+
+    Notify("Checking...", "Verifying SlenderKey...", "Success", 2)
+
+    local keyType, duration, extra = verifySlenderKey(key)
+    if keyType and duration then
+        isAccessAuthorized = true
+        authorizedKeyType  = keyType
+        authorizedDuration = duration
+        saveKey(keyType, key, duration)
+        local durText = (duration == math.huge) and "Lifetime" or formatTime(duration)
+        Notify("✅ SlenderKey Valid!", keyType .. " — " .. durText, "Success", 5)
+    else
+        isAccessAuthorized = false
+        Notify("❌ Denied", tostring(extra or "Invalid SlenderKey."), "Error", 4)
+    end
+end)
+
+TabAuth:Button("💎 Buy Premium (SlenderHub.shop)", "Opens the SlenderHub shop link", function()
+    setclipboard(Config.SHOP_URL)
+    Notify("Copied!", "Shop link copied to clipboard.", "Success", 3)
+end)
+
+--// ======= LAUNCH BUTTON =======
+TabAuth:Label("── Launch ──")
+TabAuth:Button("🚀 Launch Hub", "Verify and load the game script", function()
+    if not isAccessAuthorized then
+        Notify("Access Denied", "Enter a valid Velink or SlenderKey first.", "Error", 4)
+        return
+    end
+    if not GameModules[CurrentPlaceId] then
+        Notify("Error", "Game not supported yet.", "Error", 3)
+        return
+    end
+
+    local durText = (authorizedDuration == math.huge) and "Lifetime" or formatTime(authorizedDuration)
+    Notify("Loading...", authorizedKeyType .. " Access — " .. durText, "Success", 2)
+    task.wait(0.5)
+    loadGameScript(authorizedKeyType)
+end)
+
+--// ==============================[ UNIVERSAL TAB ]============================== //--
 local TabUniversal = Window:Tab("Universal")
 
-TabUniversal:Label("--- System Utilities ---")
-
-TabUniversal:Button("CPU Optimizer (Low Render)", "Disables 3D rendering to save resources & remove lag", function()
-    game:GetService("RunService"):Set3dRenderingEnabled(false)
-    print("[SlenderHub] 3D Rendering Disabled.")
+TabUniversal:Label("--- Performance ---")
+TabUniversal:Button("CPU Optimizer (Low Render)", "Disables 3D rendering to reduce lag", function()
+    RunService:Set3dRenderingEnabled(false)
+    Notify("Optimizer", "3D rendering disabled.", "Success", 3)
 end)
-
-TabUniversal:Button("Restore Rendering", "Re-enables 3D rendering if needed", function()
-    game:GetService("RunService"):Set3dRenderingEnabled(true)
-    print("[SlenderHub] 3D Rendering Restored.")
+TabUniversal:Button("Restore Rendering", "Re-enables 3D rendering", function()
+    RunService:Set3dRenderingEnabled(true)
+    Notify("Optimizer", "Rendering restored.", "Success", 3)
 end)
-
-TabUniversal:Button("Anti-AFK (Enable)", "Prevents disconnection due to inactivity", function()
+TabUniversal:Button("Anti-AFK (Enable)", "Prevents disconnection from inactivity", function()
     local VirtualUser = game:GetService("VirtualUser")
-    game.Players.LocalPlayer.Idled:Connect(function()
+    LocalPlayer.Idled:Connect(function()
         VirtualUser:CaptureController()
         VirtualUser:ClickButton2(Vector2.new())
     end)
-    print("[SlenderHub] Anti-AFK Active.")
+    Notify("Anti-AFK", "Active! You won't be kicked.", "Success", 3)
+end)
+TabUniversal:Button("Rejoin Server", "Teleports you back into the game", function()
+    game:GetService("TeleportService"):Teleport(CurrentPlaceId, LocalPlayer)
 end)
 
-TabUniversal:Button("Rejoin Server", "Rejoins the current server instantly", function()
-    local TeleportService = game:GetService("TeleportService")
-    TeleportService:Teleport(game.PlaceId, game.Players.LocalPlayer)
-end)
-
---// 7. Smart Loading Function
-local function LoadModule(moduleName)
-    print("[SlenderHub] Searching for: '" .. moduleName .. "'")
-    local moduleContent = nil
-    local loadSource = ""
-
-    -- Path Priority: local script/ -> local root -> GitHub root -> GitHub script/
-    local localPaths = {
-        LoaderConfig.ScriptFolder .. moduleName,
-        moduleName,
-    }
-
-    -- 1. Try local files first (executor workspace folder)
-    if LoaderConfig.LocalMode and readfile then
-        for _, path in ipairs(localPaths) do
-            local ok, res = pcall(function() return readfile(path) end)
-            if ok and res and #res > 0 then
-                moduleContent = res
-                loadSource = "Local (" .. path .. ")"
-                break
-            end
-        end
-    end
-
-    -- 2. Fallback to GitHub (with URL encoding for spaces)
-    if not moduleContent then
-        local encodedName = moduleName:gsub(" ", "%%20")
-        local remotePathsEncoded = {
-            LoaderConfig.ModulesPath .. encodedName,
-            LoaderConfig.ModulesPath .. LoaderConfig.ScriptFolder .. encodedName,
-        }
-        for _, url in ipairs(remotePathsEncoded) do
-            local ok, res = pcall(function() return game:HttpGet(url) end)
-            if ok and res and #res > 100
-                and not res:find("404")
-                and not res:find("Not Found")
-                and not res:find("<html")
-            then
-                moduleContent = res
-                loadSource = "GitHub: " .. url
-                break
-            end
-        end
-    end
-
-    if not moduleContent then
-        return false, "File not found in local folders or GitHub."
-    end
-
-    -- Compile the content
-    local contentFunc, compileErr = loadstring(moduleContent)
-    if not contentFunc then
-        return false, "Luau syntax error: " .. tostring(compileErr)
-    end
-
-    -- Execute and detect: Module (table with .Init) or Standalone
-    local execOk, execResult = pcall(contentFunc)
-    if not execOk then
-        -- If execution returned error but it's a standalone that ran partially, log it
-        warn("[SlenderHub] Script returned error: " .. tostring(execResult))
-        return false, "Runtime error: " .. tostring(execResult)
-    end
-
-    -- Module pattern: returned a table with an Init function
-    if type(execResult) == "table" and type(execResult.Init) == "function" then
-        print("[SlenderHub] Module detected. Calling Init()...")
-        pcall(function() execResult.Init(Window) end)
-        return true, loadSource .. " [Module]"
-    end
-
-    -- Standalone pattern: script executed itself
-    return true, loadSource .. " [Standalone]"
-end
-
---// 8. Game Detection and Loading
-local currentPlaceId = game.PlaceId
-local targetModule = GameModules[currentPlaceId]
-
-if targetModule then
-    local TabStatus = Window:Tab("Status")
-    TabStatus:Label("🎮 Game Detected!")
-    TabStatus:Paragraph("Module", targetModule)
-    TabStatus:Label("⏳ Loading resources...")
-
-    task.spawn(function()
-        task.wait(0.5) -- Small delay for UI to appear
-        local ok, source = LoadModule(targetModule)
-        if ok then
-            TabStatus:Paragraph("✅ Loaded", source)
-            print("[SlenderHub] Successfully loaded: " .. source)
-        else
-            TabStatus:Paragraph("❌ Load Failed", tostring(source))
-            TabStatus:Label("Check executor folder or GitHub repository.")
-            warn("[SlenderHub] Failed: " .. tostring(source))
-        end
-    end)
-else
-    -- Unsupported game tab
-    local TabNone = Window:Tab("Unsupported")
-    TabNone:Label("⚠️ This game is not currently supported.")
-    TabNone:Paragraph("Your PlaceId", tostring(currentPlaceId))
-    TabNone:Label("Contact SlenderHub to request support.")
-end
-
-print("[SlenderHub] Universal Loader V11.5 initialized. PlaceId: " .. tostring(currentPlaceId))
+print("[SlenderHub] Universal V12.0 loaded. PlaceId: " .. tostring(CurrentPlaceId))
