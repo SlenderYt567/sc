@@ -93,10 +93,6 @@ local function LoadModule(moduleName)
         LoaderConfig.ScriptFolder .. moduleName,
         moduleName,
     }
-    local remotePaths = {
-        LoaderConfig.ModulesPath .. moduleName,
-        LoaderConfig.ModulesPath .. LoaderConfig.ScriptFolder .. moduleName,
-    }
 
     -- 1. Try local files first (executor workspace folder)
     if LoaderConfig.LocalMode and readfile then
@@ -110,11 +106,20 @@ local function LoadModule(moduleName)
         end
     end
 
-    -- 2. Fallback to GitHub
+    -- 2. Fallback to GitHub (with URL encoding for spaces)
     if not moduleContent then
-        for _, url in ipairs(remotePaths) do
+        local encodedName = moduleName:gsub(" ", "%%20")
+        local remotePathsEncoded = {
+            LoaderConfig.ModulesPath .. encodedName,
+            LoaderConfig.ModulesPath .. LoaderConfig.ScriptFolder .. encodedName,
+        }
+        for _, url in ipairs(remotePathsEncoded) do
             local ok, res = pcall(function() return game:HttpGet(url) end)
-            if ok and res and #res > 100 and not res:find("404:") and not res:find("Not Found") then
+            if ok and res and #res > 100
+                and not res:find("404")
+                and not res:find("Not Found")
+                and not res:find("<html")
+            then
                 moduleContent = res
                 loadSource = "GitHub: " .. url
                 break
