@@ -36,8 +36,8 @@ local Config = {
     VELINK_CHECK_URL = "https://velink.to/api/public/check/key",
     FREE_KEY_LINK    = "https://velink.to/u/678807",
     -- SlenderHub API  
-    SLENDERKEY_URL   = "https://www.slenderhub.shop/api/keys/verify",
-    SHOP_URL         = "https://www.slenderhub.shop/",
+    SLENDERKEY_URL   = "https://slenderhub.vercel.app/api/keys/verify",
+    SHOP_URL         = "https://slenderhub.vercel.app/",
 }
 
 local FILE_PATH          = Config.FOLDER .. "/" .. Config.FILE
