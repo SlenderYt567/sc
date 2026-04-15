@@ -212,6 +212,11 @@ local function verifySlenderKey(inputKey: string): (string?, number?, string?)
         elseif statusCode == 403 then
             return nil, nil, "Access Denied by Server (403). Check HWID."
         else
+            -- Try to see if there's a JSON error message first
+            local decodeOk, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
+            if decodeOk and data and data.message then
+                return nil, nil, "Server Error: " .. tostring(data.message)
+            end
             return nil, nil, "Server returned error status: " .. tostring(statusCode)
         end
     end
