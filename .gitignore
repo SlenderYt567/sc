@@ -36,8 +36,8 @@ local Config = {
     VELINK_CHECK_URL = "https://velink.to/api/public/check/key",
     FREE_KEY_LINK    = "https://velink.to/u/678807",
     -- SlenderHub API  
-    SLENDERKEY_URL   = "https://www.slenderhub.shop/api/keys/verify",
-    SHOP_URL         = "https://www.slenderhub.shop/",
+    SLENDERKEY_URL   = "https://slenderhub.vercel.app/api/keys/verify",
+    SHOP_URL         = "https://slenderhub.vercel.app/",
 }
 
 local FILE_PATH          = Config.FOLDER .. "/" .. Config.FILE
@@ -168,36 +168,55 @@ end
 
 --// ==============================[ SLENDERKEY VERIFICATION ]============================== //--
 local function verifySlenderKey(inputKey: string): (string?, number?, string?)
+    local requestFunc = getRequestFunc()
+    if not requestFunc then
+        return nil, nil, "Executor does not support 'request' function."
+    end
+
     local hwid = tostring(LocalPlayer.UserId)
     local url  = Config.SLENDERKEY_URL .. "?key=" .. inputKey .. "&hwid=" .. hwid
 
     local ok, response = pcall(function()
-        return HttpService:GetAsync(url)
+        print("[SlenderHub] Debug: Calling API -> " .. url)
+        return requestFunc({
+            Url = url,
+            Method = "GET",
+            Headers = { ["Cache-Control"] = "no-cache" }
+        })
     end)
 
     if ok and response then
-        local decodeOk, data = pcall(function() return HttpService:JSONDecode(response) end)
-        if decodeOk and data then
-            if data.success then
-                local tier = data.data and data.data.tier or "basic"
-                local keyType = (tier == "premium" or tier == "Premium") and "Premium" or "Free"
-                local expires = data.data and data.data.expires_at
-                local duration = 86400 -- default 24h
-                if expires then
-                    -- Try to parse remaining time from expires_at if available
-                    duration = 2592000 -- Assume 30 days for paid SlenderKeys
+        local statusCode = response.StatusCode or 0
+        if statusCode == 200 then
+            local decodeOk, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
+            if decodeOk and data then
+                if data.success then
+                    local tier = data.data and data.data.tier or "basic"
+                    local keyType = (tier == "premium" or tier == "Premium") and "Premium" or "Free"
+                    local duration = 86400 -- default 24h
+                    
+                    -- Assume 30 days for SlenderKeys if valid
+                    duration = 2592000 
+                    
+                    print("[SlenderHub] SlenderKey Valid - Tier: " .. tier)
+                    return keyType, duration, "SlenderKey"
+                else
+                    local msg = data.message or "Key is invalid or HWID mismatch."
+                    return nil, nil, msg
                 end
-                print("[SlenderHub] SlenderKey Valid - Tier: " .. tier)
-                return keyType, duration, "SlenderKey"
             else
-                local msg = data.message or "Authentication failed."
-                warn("[SlenderHub] SlenderKey denied: " .. msg)
-                return nil, nil, msg
+                return nil, nil, "Invalid API response format (JSON Error)."
             end
+        elseif statusCode == 404 then
+            return nil, nil, "Verification API point not found (404)."
+        elseif statusCode == 403 then
+            return nil, nil, "Access Denied by Server (403). Check HWID."
+        else
+            return nil, nil, "Server returned error status: " .. tostring(statusCode)
         end
     end
 
-    return nil, nil, "Could not connect to SlenderHub servers."
+    return nil, nil, "Connection failed. Check your internet or domain status."
 end
 
 --// ==============================[ GAME SCRIPT LOADER ]============================== //--
