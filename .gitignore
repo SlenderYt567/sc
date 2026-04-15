@@ -1,435 +1,1665 @@
---!strict
---[[
-    SlenderHub | Universal Loader (V12.0 - Dual Key System)
-    Architect: SlenderHub Systems Expert
-    Key System:
-        [1] Velink    - Free (24h) and Premium (7d/30d) keys via velink.to
-        [2] SlenderKey - Direct API from slenderhub.shop (test/premium)
-]]
+Remotes
+Damage 
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("DamageIncreaseOnClickEvent"):FireServer()
 
---// ==============================[ SERVICES ]============================== //--
-local HttpService    = game:GetService("HttpService")
-local Players        = game:GetService("Players")
-local StarterGui     = game:GetService("StarterGui")
-local RunService     = game:GetService("RunService")
-local CoreGui        = game:GetService("CoreGui")
-local LocalPlayer    = Players.LocalPlayer
-local CurrentPlaceId = game.PlaceId
-
---// ==============================[ CONFIG ]============================== //--
-local VELINK_IDS = {
-    -- [unlockerId from Velink API] = {Type, Duration in seconds}
-    ["ed6453e6-5259-49b4-8779-05b866831dc2"] = {Type = "Premium", Duration = 604800},   -- 7 Days
-    ["2c69fdcf-f8e1-4c1a-9270-f36d9545ebce"] = {Type = "Premium", Duration = 2592000},  -- 30 Days
+Auto eggs
+local args = {
+	"1"
 }
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerPressedKeyOnEgg"):FireServer(unpack(args))
 
-local LIFETIME_KEYS = {
-    ["LifeTimeF4K9L2P7V8JDHUtY"] = true,
-    ["SlenderDevKey"]             = true,
+Spin 
+local args = {
+	"Spin"
 }
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("SpinWheelEvent"):FireServer(unpack(args))
 
-local Config = {
-    -- Storage
-    FOLDER           = "SlenderHub_Universal",
-    FILE             = "KeyData_" .. LocalPlayer.UserId .. ".json",
-    -- Velink API
-    VELINK_CHECK_URL = "https://velink.to/api/public/check/key",
-    FREE_KEY_LINK    = "https://velink.to/u/678807",
-    -- SlenderHub API  
-    SLENDERKEY_URL   = "https://slenderhub.vercel.app/api/keys/verify",
-    SHOP_URL         = "https://slenderhub.vercel.app/",
+Clain UGC 
+local args = {
+	"NextBossEvent"
 }
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("NewUGCEvents"):WaitForChild("ClickedEventClaimButton"):FireServer(unpack(args))
 
-local FILE_PATH          = Config.FOLDER .. "/" .. Config.FILE
-local isAccessAuthorized = false
-local authorizedKeyType  = "Free"
-local authorizedDuration = 86400
 
---// ==============================[ GAME MAPPING ]============================== //--
-local GameModules = {
-    [120405647949186] = "Royal Hatchers Script",
-    [4924922222]      = "Brookhaven script",
-    [93787311916283]  = "Horse Race",
-    [82013336390273]  = "Pickaxe Simulator script",
-    [75992362647444]  = "Tap simulator",
-    [76558904092080]  = "The Forge Script",
-    [109983668079237] = "Steal a Branrot(Premium)",
-    [107807115409153] = "Bee Tappers Script",
-    [826437311311]    = "pet simulator 99 script",
+Buy craft itens 
+local args = {
+	"ShortSwords"
 }
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("CraftingEvent"):FireServer(unpack(args))
 
---// ==============================[ SINGLETON GUARD ]============================== //--
-if getgenv().SlenderHubLoaded then
-    warn("[SlenderHub] Loader already active.")
-    return
+
+Auto Merge itens 
+local args = {
+	{
+		"3590",
+		"3607",
+		"3598"
+	}
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerMergeEquipment"):FireServer(unpack(args))
+
+Teleport 
+local args = {
+	"Teleport",
+	4
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("TeleportEvent"):InvokeServer(unpack(args))
+
+Auto Powercore 
+local args = {
+	"PurchaseNext"
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PowerCore"):InvokeServer(unpack(args))
+
+Auto Wishing Well
+local args = {
+	"Mega"
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("WishingWell"):FireServer(unpack(args))
+
+Auto buy equipment shop 
+local args = {
+	"Purchase",
+	2
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("EquipmentStoreEvent"):InvokeServer(unpack(args))
+Auto Hacker 
+local args = {
+	"Begin"
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("HackEvent"):InvokeServer(unpack(args))
+
+
+Auto claim Miner 
+local args = {
+	"Claim",
+	workspace:WaitForChild("TouchHexagons"):WaitForChild("MinerHexagon"):WaitForChild("MinerUI"):WaitForChild("HitboxPart")
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("MinerCurrency"):InvokeServer(unpack(args))
+
+Auto temple 
+local args = {
+	2
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("ClickedTemple"):FireServer(unpack(args))
+
+Auto Altar Sacrifice 
+local args = {
+	"gems"
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("ClickedAltarPay"):FireServer(unpack(args))
+
+Auto Powercore V2
+local args = {
+	"PurchaseNext"
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PowerCoreV2"):InvokeServer(unpack(args))
+
+End game 
+local args = {
+	"EndGame",
+	1,
+	true,
+	4
+}
+game:GetService("ReplicatedStorage"):WaitForChild("NanoleafMinigame"):WaitForChild("MinigameRemoteFunction"):InvokeServer(unpack(args))
+
+[14/04, 22:26] Pedro Belfort: Players 
+AchievementHandler
+local v1 = game:GetService("ReplicatedStorage")
+local v_u_2 = game:GetService("SoundService")
+local v_u_3 = game:GetService("UserInputService")
+local v4 = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+local v_u_5 = v4:WaitForChild("MainUi")
+local v_u_6 = v4:WaitForChild("Milestones")
+local v_u_7 = v1.Events:WaitForChild("ClaimAchievement")
+require(v1:WaitForChild("Modules"):WaitForChild("AchievementData"))
+local v_u_8 = v1:WaitForChild("EquipmentImages")
+v1.Events:WaitForChild("SendAchievementStats")
+local v_u_9 = nil
+local v_u_10 = {}
+local function v23()
+	-- upvalues: (ref) v_u_9, (copy) v_u_7, (copy) v_u_6, (copy) v_u_10, (copy) v_u_2, (copy) v_u_3, (copy) v_u_8, (copy) v_u_5
+	v_u_9 = nil
+	local v11 = v_u_7:InvokeServer("Info")
+	for _, v12 in pairs(v_u_6.Frame.ScrollingFrame:GetChildren()) do
+		if v12:IsA("GuiObject") then
+			v12:Destroy()
+		end
+	end
+	for _, v13 in pairs(v_u_10) do
+		v13:disconnect()
+	end
+	local v14 = 0
+	for v_u_15, v16 in pairs(v11) do
+		local v17
+		if v16.progress >= 1 then
+			v17 = v_u_6.ClaimTemplate:Clone()
+			if v16.progress ~= 2 then
+				v14 = v14 + 1
+			end
+			local function v18()
+				-- upvalues: (ref) v_u_7, (copy) v_u_15, (ref) v_u_2
+				if v_u_7:InvokeServer("Claim", v_u_15) then
+					_G.updateAchievementUI()
+					v_u_2.Achievement:Play()
+				end
+			end
+			if not v_u_9 then
+				v_u_9 = v18
+				v17.Claimbutton.XboxClaim.Visible = v_u_3.GamepadEnabled
+			end
+			local v19 = v_u_10
+			local v20 = v17.Claimbutton.Activated
+			table.insert(v19, v20:Connect(v18))
+		else
+			v17 = v_u_6.ProgressTemplate:Clone()
+			v17.Bar.Fillbar.Size = UDim2.new(v16.progress, 0, 1, 0)
+			v17.Bar.Fillbar.Visible = true
+			local v21 = v17.Bar.TextLabel
+			local v22 = v16.progress * 100
+			v21.Text = math.floor(v22) .. "%"
+		end
+		v17.Parent = v_u_6.Frame.ScrollingFrame
+		v17.DisplayName.Text = v16.achievementName
+		v17.DisplayName.TextLabel.Text = v16.achievementName
+		v17.Visible = true
+		v17.Description.Text = v16.description
+		v17.LayoutOrder = 100 - v16.progress * 100
+		if v16.reward == "coins" then
+			v17.RewardImage.ImageLabel.Image = "rbxassetid://9787732661"
+			v17.RewardImage.RewardAmount.Text = "+" .. v16.rewardAmount
+		elseif v16.reward == "gems" then
+			v17.RewardImage.ImageLabel.Image = "rbxassetid://9777440400"
+			v17.RewardImage.RewardAmount.Text = "+" .. v16.rewardAmount
+		elseif v16.reward == "screws" then
+			v17.RewardImage.ImageLabel.Image = "rbxassetid://12951349292"
+			v17.RewardImage.RewardAmount.Text = "+" .. v16.rewardAmount
+		elseif v16.reward == "bolts" then
+			v17.RewardImage.ImageLabel.Image = "rbxassetid://12951361900"
+			v17.RewardImage.RewardAmount.Text = "+" .. v16.rewardAmount
+		elseif v16.reward == "copper" then
+			v17.RewardImage.ImageLabel.Image = "rbxassetid://12951423335"
+			v17.RewardImage.RewardAmount.Text = "+" .. v16.rewardAmount
+		elseif v16.reward == "equipment" then
+			v17.RewardImage.ImageLabel.Image = v_u_8:FindFirstChild(v16.equipmentName).Image
+			v17.RewardImage.Image = v_u_8.Frames:FindFirstChild(v16.equipmentRarity).Image
+			v17.RewardImage.RewardAmount.Text = v16.equipmentName
+		elseif v16.reward == "Max" then
+			v17.RewardImage:Destroy()
+			v17.Claimbutton:Destroy()
+			v17.LayoutOrder = 9999
+		end
+		v17.DisplayImage.Image = v16.displayImage or v17.RewardImage.ImageLabel.Image
+		v17.Parent = v_u_6.Frame.ScrollingFrame
+	end
+	if v14 > 0 then
+		v_u_5.Right.MilestonesButton.Alert.Visible = true
+		v_u_5.Right.MilestonesButton.Alert.TextLabel.Text = v14
+	else
+		v_u_5.Right.MilestonesButton.Alert.Visible = false
+	end
 end
-getgenv().SlenderHubLoaded = true
-
---// ==============================[ LOAD UI LIBRARY ]============================== //--
-local swOk, SlenderWind = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
+_G.updateAchievementUI = v23
+v_u_3.InputBegan:connect(function(p24)
+	-- upvalues: (copy) v_u_6, (ref) v_u_9
+	if v_u_6.Enabled and (p24.KeyCode == Enum.KeyCode.ButtonA and v_u_9) then
+		v_u_9()
+	end
 end)
-if not swOk or not SlenderWind then
-    error("[SlenderHub] CRITICAL: Failed to load SlenderWind!")
-    return
+while true do
+	wait(120)
+	_G.updateAchievementUI()
 end
 
---// ==============================[ WINDOW ]============================== //--
-local Window = SlenderWind.Window({
-    Name      = "Slender Hub | Universal",
-    KeySystem = false,
-    Theme     = { Accent = Color3.fromRGB(0, 255, 128) }
+AltarHandler
+local v1 = game:GetService("Players")
+local v2 = game:GetService("ReplicatedStorage")
+local v_u_3 = game:GetService("SoundService")
+local v_u_4 = v1.LocalPlayer:WaitForChild("PlayerGui"):WaitForChild("AltarUI")
+v2.Events:WaitForChild("ShowTextOnScreen")
+local v_u_5 = v2:WaitForChild("Events"):WaitForChild("ClickedAltarPay")
+local v6 = v2:WaitForChild("Events"):WaitForChild("GetAltarInfo")
+local v7 = require(v2:WaitForChild("FormatNumber"))
+local v8 = v7.Notation.compactWithSuffixThousands({
+	"K",
+	"M",
+	"B",
+	"T",
+	"Qa",
+	"Qi",
+	"Sx",
+	"Sp",
+	"Oc",
+	"No",
+	"Dc",
+	"Ud",
+	"Dd",
+	"Td",
+	"Qad",
+	"Qid",
+	"Sxd",
+	"Spd",
+	"Ocd",
+	"Nod",
+	"Vg",
+	"Uvg",
+	"Dvg",
+	"Tvg",
+	"Qavg",
+	"Qivg",
+	"Sxvg",
+	"Spvg",
+	"Ocvg"
 })
-
---// ==============================[ HELPERS ]============================== //--
-local function Notify(title: string, text: string, nType: string?, duration: number?)
-    pcall(function()
-        Window:Notify(title, text, duration or 5, nType or "Success")
-    end)
+local v_u_9 = v7.NumberFormatter.with():Notation(v8):Precision(v7.Precision.integer():WithMinDigits(3))
+v6.OnClientEvent:Connect(function(p10)
+	-- upvalues: (copy) v_u_4, (copy) v_u_9
+	v_u_4.Frame.Options.gems.MinusAmount.Text = "-" .. v_u_9:Format(p10.gems)
+	v_u_4.Frame.Options.materials.MinusAmount.Text = "-" .. v_u_9:Format(p10.materials)
+	v_u_4.Frame.Options.coins.MinusAmount.Text = "-" .. v_u_9:Format(p10.coins)
+	local v11 = v_u_4.Frame.top.DamageNumber
+	local v12 = (p10.damageMultiplier - 1) * 100
+	v11.Text = "DAMAGE: +" .. math.round(v12) .. "%"
+	local v13 = (p10.damageMultiplier - 1) / 0.05
+	local v14 = math.round(v13)
+	v_u_4.Frame.top.SacrificeNumber.Text = "SACRIFICES: " .. v14
+end)
+for _, v_u_15 in pairs(v_u_4.Frame.Options:GetChildren()) do
+	v_u_15.PayButton.Activated:Connect(function()
+		-- upvalues: (copy) v_u_3, (copy) v_u_5, (copy) v_u_15
+		v_u_3.UIClick:Play()
+		v_u_5:FireServer(v_u_15.Name)
+	end)
 end
 
-local function formatTime(seconds: number): string
-    if seconds == math.huge then return "Lifetime" end
-    local d = math.floor(seconds / 86400)
-    local h = math.floor((seconds % 86400) / 3600)
-    local m = math.floor((seconds % 3600) / 60)
-    return string.format("%dd %02dh %02dm", d, h, m)
+AscensionHandler 
+local v1 = game:GetService("ReplicatedStorage")
+local v2 = game:GetService("Players")
+game:GetService("TweenService")
+local v3 = v1:WaitForChild("Events")
+local v4 = v1:WaitForChild("Modules")
+local v5 = v1:WaitForChild("UpdatePlayerCurrency")
+local v_u_6 = v3:WaitForChild("AscendEvent")
+local v_u_7 = require(v4:WaitForChild("AscendData"))
+require(v4:WaitForChild("BundleData"))
+local v_u_8 = v2.LocalPlayer
+local v_u_9 = v_u_8:WaitForChild("PlayerGui")
+local v_u_10 = v_u_9:WaitForChild("AscendUI")
+local v_u_11 = nil
+local v_u_12 = nil
+local v_u_13 = 0
+local v_u_14 = (1 / 0)
+local v15 = require(v1:WaitForChild("FormatNumber"))
+local v16 = v15.Notation.compactWithSuffixThousands({
+	"K",
+	"M",
+	"B",
+	"T",
+	"Qa",
+	"Qi",
+	"Sx",
+	"Sp",
+	"Oc",
+	"No",
+	"Dc",
+	"Ud",
+	"Dd",
+	"Td",
+	"Qad",
+	"Qid",
+	"Sxd",
+	"Spd",
+	"Ocd",
+	"Nod",
+	"Vg",
+	"Uvg",
+	"Dvg",
+	"Tvg",
+	"Qavg",
+	"Qivg",
+	"Sxvg",
+	"Spvg",
+	"Ocvg"
+})
+local v_u_17 = v15.NumberFormatter.with():Notation(v16):Precision(v15.Precision.integer():WithMinDigits(3))
+local function v_u_26(p18)
+	-- upvalues: (copy) v_u_7, (ref) v_u_14, (copy) v_u_10, (copy) v_u_17, (ref) v_u_11, (ref) v_u_13, (copy) v_u_6, (ref) v_u_12, (copy) v_u_8
+	local v_u_19 = v_u_7[p18]
+	local v_u_20 = v_u_7[p18 - 1]
+	local v21 = v_u_20.Multiplier
+	v_u_14 = v_u_19 and (v_u_19.DamageRequired or 0) or 0
+	local v22 = v_u_19 and (v_u_19.Multiplier or "MAX") or "MAX"
+	v_u_10.Frame.CurrentNumber.Text = string.format("<stroke color=\"#000000\" joins=\"miter\" thickness=\"5\" transparency=\"0\">%s <font color=\"#22DC40\">%s</font></stroke>", "Current:", "X" .. v21)
+	if type(v22) == "string" then
+		v_u_10.Frame.RequiredDamage.Text = "You have achieved the maximum level of ascension!"
+		v_u_10.Frame.ImageLabel.Visible = false
+		v_u_10.Frame.CraftButton.Visible = false
+		v_u_10.Frame.SkipButton.Visible = false
+		v_u_10.Frame.SaveCoins.Visible = false
+		v_u_10.Frame.NextNumber.Text = string.format("<stroke color=\"#000000\" joins=\"miter\" thickness=\"5\" transparency=\"0\">%s <font color=\"#22DC40\">%s</font></stroke>", "", "MAX")
+	else
+		v_u_10.Frame.NextNumber.Text = string.format("<stroke color=\"#000000\" joins=\"miter\" thickness=\"5\" transparency=\"0\">%s <font color=\"#22DC40\">%s</font></stroke>", "Next:", "X" .. v22)
+		v_u_10.Frame.RequiredDamage.Text = string.format("<stroke color=\"#000000\" joins=\"miter\" thickness=\"5\" transparency=\"0\">Required Damage:<font color=\"#DB16FF\">%s</font></stroke>", v_u_17:Format(v_u_19.DamageRequired))
+	end
+	v_u_11 = v_u_10.Frame.CraftButton.Activated:connect(function()
+		-- upvalues: (ref) v_u_13, (copy) v_u_19, (ref) v_u_11, (ref) v_u_6
+		if v_u_13 >= v_u_19.DamageRequired then
+			v_u_11:disconnect()
+			v_u_6:FireServer(true)
+		end
+	end)
+	if v_u_20 and v_u_20.SkipID then
+		v_u_12 = v_u_10.Frame.SkipButton.Activated:connect(function()
+			-- upvalues: (ref) v_u_8, (copy) v_u_20
+			game:GetService("MarketplaceService"):PromptProductPurchase(v_u_8, v_u_20.SkipID)
+		end)
+	end
+	local v23 = v_u_10.Frame.AscendBar.FillBar
+	local v24 = UDim2.new
+	local v25 = v_u_13 / v_u_14
+	v23.Size = v24(math.min(1, v25), 0, 1, 0)
 end
+v_u_6.OnClientEvent:connect(function(p27)
+	-- upvalues: (ref) v_u_11, (ref) v_u_12, (copy) v_u_26
+	if v_u_11 then
+		v_u_11:disconnect()
+	end
+	if v_u_12 then
+		v_u_12:disconnect()
+	end
+	v_u_26(p27)
+end)
+local v_u_28 = Color3.new(1, 1, 0)
+local v_u_29 = Color3.new(0.0588235, 0.596078, 0.886275)
+local v_u_30 = 0
+v5.OnClientEvent:connect(function(p31, p32)
+	-- upvalues: (ref) v_u_13, (copy) v_u_10, (ref) v_u_14, (copy) v_u_28, (copy) v_u_29, (copy) v_u_9, (ref) v_u_30
+	if p31 == "Damage" then
+		v_u_13 = p32
+		local v33 = v_u_10.Frame.AscendBar.FillBar
+		local v34 = UDim2.new
+		local v35 = v_u_13 / v_u_14
+		v33.Size = v34(math.min(1, v35), 0, 1, 0)
+		local v36 = v_u_13 / v_u_14
+		local v37 = math.min(0.99, v36)
+		local v38 = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, v_u_28),
+			ColorSequenceKeypoint.new(v37, v_u_28),
+			ColorSequenceKeypoint.new(v37 + 0.01, v_u_29),
+			ColorSequenceKeypoint.new(1, v_u_29)
+		})
+		v_u_9:WaitForChild("MainUi").Right.AscendButton.UIStroke.UIGradient.Color = v38
+		if v_u_14 < v_u_13 and (tick() - v_u_30 > 30 and v_u_14 ~= 0) then
+			v_u_30 = tick()
+			_G.showText("Ascension Ready!", 0.1, 3)
+		end
+	end
+end)
 
-local function getRequestFunc()
-    return (syn and syn.request)
-        or (http and http.request)
-        or (http_request)
-        or (request)
-        or nil
+AttackHoverHandler 
+game:GetService("UserInputService")
+local v_u_1 = game.Players.LocalPlayer
+local v_u_2 = v_u_1:GetMouse()
+game:GetService("ReplicatedStorage")
+game:GetService("UserInputService")
+local v_u_3 = v_u_1:WaitForChild("PlayerGui"):WaitForChild("AttackHover")
+local v_u_4 = Instance.new("Highlight")
+v_u_4.Enabled = false
+v_u_4.FillTransparency = 0.8
+v_u_4.OutlineTransparency = 0.5
+v_u_4.DepthMode = Enum.HighlightDepthMode.Occluded
+local function v_u_6(p5)
+	-- upvalues: (copy) v_u_6
+	if string.match(p5.Name, "NPC") then
+		return p5
+	else
+		return v_u_6(p5.Parent)
+	end
 end
-
---// ==============================[ KEY STORAGE ]============================== //--
-local function saveKey(keyType: string, key: string, duration: number)
-    if not isfolder(Config.FOLDER) then makefolder(Config.FOLDER) end
-    writefile(FILE_PATH, HttpService:JSONEncode({
-        Type           = keyType,
-        Key            = key,
-        Time           = workspace:GetServerTimeNow(),
-        CustomDuration = duration,
-    }))
+local function v_u_8(p7)
+	-- upvalues: (copy) v_u_8
+	if string.match(p7.Name, "NPC") then
+		return p7.PrimaryPart
+	else
+		return v_u_8(p7.Parent)
+	end
 end
-
-local function checkLocalKey(): (boolean, any, number?)
-    if not isfile(FILE_PATH) then return false, nil end
-    local ok, data = pcall(function() return HttpService:JSONDecode(readfile(FILE_PATH)) end)
-    if not ok or not data or not data.Time then
-        pcall(function() delfile(FILE_PATH) end)
-        return false, nil
-    end
-    local dur = data.CustomDuration or 86400
-    if dur == math.huge then return true, data, math.huge end
-    local elapsed = workspace:GetServerTimeNow() - data.Time
-    if elapsed > dur then
-        pcall(function() delfile(FILE_PATH) end)
-        return false, nil
-    end
-    return true, data, (dur - elapsed)
+function _G.getTankBodyFromPart(p9)
+	if p9 == nil then
+		return
+	elseif string.match(p9.Name, "NPC") then
+		return p9.PrimaryPart
+	else
+		return _G.getTankBodyFromPart(p9.Parent)
+	end
 end
-
---// ==============================[ VELINK VERIFICATION ]============================== //--
-local function verifyVelinkKey(inputKey: string): (string?, number?)
-    -- Check lifetime keys first (local, no API call needed)
-    if LIFETIME_KEYS[inputKey] then
-        return "Premium", math.huge
-    end
-
-    local reqFunc = getRequestFunc()
-    if not reqFunc then
-        warn("[SlenderHub] No HTTP request function available.")
-        return nil, nil
-    end
-
-    local url = Config.VELINK_CHECK_URL .. "?key=" .. inputKey
-    local ok, response = pcall(function()
-        return reqFunc({ Url = url, Method = "GET" })
-    end)
-
-    if ok and response and response.StatusCode == 200 then
-        local decodeOk, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
-        if decodeOk and data and data.expired == false then
-            print("[SlenderHub] Velink Unlocked - UnlockerId: " .. tostring(data.unlockerId))
-            local tierInfo = VELINK_IDS[tostring(data.unlockerId)]
-            if tierInfo then
-                return tierInfo.Type, tierInfo.Duration
-            else
-                return "Free", 86400  -- Valid Velink key but no premium tier = Free 24h
-            end
-        end
-    end
-
-    return nil, nil
+function _G.getCoinTopModelFromPart(p10)
+	if p10:GetAttribute("topPart") then
+		return p10
+	else
+		return _G.getCoinTopModelFromPart(p10.Parent)
+	end
 end
-
---// ==============================[ SLENDERKEY VERIFICATION ]============================== //--
-local function verifySlenderKey(inputKey: string): (string?, number?, string?)
-    local requestFunc = getRequestFunc()
-    if not requestFunc then
-        return nil, nil, "Executor does not support 'request' function."
-    end
-
-    local hwid = tostring(LocalPlayer.UserId)
-    local url  = Config.SLENDERKEY_URL .. "?key=" .. inputKey .. "&hwid=" .. hwid
-
-    local ok, response = pcall(function()
-        print("[SlenderHub] Debug: Calling API -> " .. url)
-        return requestFunc({
-            Url = url,
-            Method = "GET",
-            Headers = { ["Cache-Control"] = "no-cache" }
-        })
-    end)
-
-    if ok and response then
-        local statusCode = response.StatusCode or 0
-        if statusCode == 200 then
-            local decodeOk, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
-            if decodeOk and data then
-                if data.success then
-                    local tier = data.data and data.data.tier or "basic"
-                    local keyType = (tier == "premium" or tier == "Premium") and "Premium" or "Free"
-                    local duration = 86400 -- default 24h
-                    
-                    -- Assume 30 days for SlenderKeys if valid
-                    duration = 2592000 
-                    
-                    print("[SlenderHub] SlenderKey Valid - Tier: " .. tier)
-                    return keyType, duration, "SlenderKey"
-                else
-                    local msg = data.message or "Key is invalid or HWID mismatch."
-                    return nil, nil, msg
-                end
-            else
-                return nil, nil, "Invalid API response format (JSON Error)."
-            end
-        elseif statusCode == 404 then
-            return nil, nil, "Verification API point not found (404)."
-        elseif statusCode == 403 then
-            return nil, nil, "Access Denied by Server (403). Check HWID."
-        else
-            -- Try to see if there's a JSON error message first
-            local decodeOk, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
-            if decodeOk and data and data.message then
-                return nil, nil, "Server Error: " .. tostring(data.message)
-            end
-            return nil, nil, "Server returned error status: " .. tostring(statusCode)
-        end
-    end
-
-    return nil, nil, "Connection failed. Check your internet or domain status."
+function _G.getCoinPrimaryPartFromPart(p11)
+	if p11 == nil then
+		return
+	elseif p11:GetAttribute("topPart") then
+		return p11.PrimaryPart
+	else
+		return _G.getCoinPrimaryPartFromPart(p11.Parent)
+	end
 end
+_G.currentEnemyTarget = nil
+_G.lastEnemyClickedOn = nil
+function _G.resetAllTargets()
+	_G.currentEnemyTarget = nil
+	_G.lastEnemyClickedOn = nil
+end
+function RayCastHitVisibleOnly(p12, p13, p14)
+	-- upvalues: (copy) v_u_1
+	local v15 = RaycastParams.new()
+	v15.FilterType = Enum.RaycastFilterType.Blacklist
+	v15.FilterDescendantsInstances = p14
+	local v16 = workspace:Raycast(p12, p13, v15)
+	if v16 and v16.Instance then
+		if v16.Instance.Transparency == 1 then
+			local v17 = { unpack(p14) }
+			local v18 = v16.Instance
+			table.insert(v17, v18)
+			return RayCastHitVisibleOnly(p12, p13, v17)
+		end
+		if v16.Instance:FindFirstAncestor("ActivePets") ~= nil then
+			local v19 = { unpack(p14) }
+			local v20 = v16.Instance
+			table.insert(v19, v20)
+			return RayCastHitVisibleOnly(p12, p13, v19)
+		end
+		if v16.Instance:IsDescendantOf(v_u_1.Character) then
+			local v21 = { unpack(p14) }
+			local v22 = v16.Instance
+			table.insert(v21, v22)
+			return RayCastHitVisibleOnly(p12, p13, v21)
+		end
+	end
+	return v16
+end
+function _G.sendRayFromCam()
+	-- upvalues: (copy) v_u_2
+	local v23 = workspace.CurrentCamera
+	local v24 = v23:ScreenPointToRay(v_u_2.X, v_u_2.Y)
+	local v25 = RayCastHitVisibleOnly(v24.Origin, v24.Direction * 1000, {})
+	local v26 = nil
+	local v27 = nil
+	if v25 ~= nil then
+		return v25.Instance, v25.Position
+	end
+	local v28 = v23:ScreenPointToRay(v_u_2.X, v_u_2.Y)
+	local v29 = RayCastHitVisibleOnly(v28.Origin, v28.Direction * 1000, {})
+	if v29 ~= nil then
+		v26 = v29.Instance
+		v27 = v29.Position
+	end
+	return v26, v27
+end
+local v_u_30 = nil
+local function v33(p31)
+	-- upvalues: (copy) v_u_4, (copy) v_u_3, (ref) v_u_30
+	if p31 then
+		local v32 = p31.PrimaryPart
+		v_u_4.Parent = v32
+		v_u_3.Adornee = v32
+		v_u_3.Frame.Visible = true
+		if v_u_30 then
+			v_u_30.Enabled = false
+		end
+		if v32.Parent:FindFirstChild("CircleHighlight") then
+			v_u_30 = v32.Parent:FindFirstChild("CircleHighlight"):FindFirstChild("SurfaceGui")
+			v_u_30.Enabled = true
+			return
+		end
+	else
+		if v_u_30 then
+			v_u_30.Enabled = false
+		end
+		v_u_3.Frame.Visible = false
+		v_u_4.Enabled = false
+	end
+end
+_G.HighlightTarget = v33
 
---// ==============================[ GAME SCRIPT LOADER ]============================== //--
-local LoaderConfig = {
-    ModulesPath  = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/",
-    ScriptFolder = "script/"
+AutoFightHandler 
+local v_u_1 = game:GetService("ReplicatedStorage")
+local v_u_2 = game:GetService("MarketplaceService")
+local v_u_3 = game:GetService("SoundService")
+local v_u_4 = game:GetService("Players").LocalPlayer
+local v5 = v_u_4:WaitForChild("PlayerGui")
+local v_u_6 = v5:WaitForChild("AutoFight")
+v5:WaitForChild("MainUi")
+local v7 = v5:WaitForChild("FightingMainUi")
+local v_u_8 = v5:WaitForChild("OnScreenButtons")
+local v_u_9 = require(v_u_1.Modules:WaitForChild("GamepassData"))
+local v10 = require(v_u_1.ModuleLoader)
+local v_u_11 = v10("RemoteHandler").GetRemoteEvent("AutoFight")
+local v_u_12 = v10("EnemyData")
+_G.ownsOPAutoTrainGamepass = false
+_G.AutoFight = nil
+_G.AutoFightReady = true
+_G.autoClicking = false
+local v_u_13 = nil
+local function v_u_15()
+	while _G.GetNearestNPC == nil do
+		wait()
+	end
+	local v14 = _G.GetNearestNPC().Parent.Name
+	return tonumber(v14:sub(6))
+end
+local function v17(p16)
+	-- upvalues: (ref) v_u_13, (copy) v_u_4
+	print("Starting auto fight", p16)
+	v_u_13 = v_u_4.Character.HumanoidRootPart.CFrame
+	_G.AutoFight = p16
+end
+_G.startAutoFight = v17
+difficultyNames = {
+	{
+		["text"] = "easy",
+		["color"] = Color3.fromRGB(34, 255, 0)
+	},
+	{
+		["text"] = "medium",
+		["color"] = Color3.fromRGB(255, 140, 0)
+	},
+	{
+		["text"] = "hard",
+		["color"] = Color3.fromRGB(255, 44, 48)
+	},
+	{
+		["text"] = "expert",
+		["color"] = Color3.fromRGB(170, 0, 255)
+	}
 }
-
-local function loadGameScript(accessLevel: string)
-    local targetFile = GameModules[CurrentPlaceId]
-    if not targetFile then
-        Notify("SlenderHub", "Game not supported (PlaceId: " .. CurrentPlaceId .. ")", "Error")
-        return
-    end
-
-    -- Set global access level for game scripts to read
-    if getgenv then
-        getgenv().SlenderHubAccessLevel = accessLevel
-    else
-        _G.SlenderHubAccessLevel = accessLevel
-    end
-
-    local moduleContent = nil
-    local loadSource    = ""
-
-    -- Local search first
-    if readfile then
-        for _, path in ipairs({LoaderConfig.ScriptFolder .. targetFile, targetFile}) do
-            local lok, res = pcall(function() return readfile(path) end)
-            if lok and res and #res > 0 then
-                moduleContent = res
-                loadSource    = "Local"
-                break
-            end
-        end
-    end
-
-    -- GitHub fallback (URL-encode spaces)
-    if not moduleContent then
-        local encoded = targetFile:gsub(" ", "%%20")
-        for _, url in ipairs({
-            LoaderConfig.ModulesPath .. encoded,
-            LoaderConfig.ModulesPath .. LoaderConfig.ScriptFolder .. encoded,
-        }) do
-            local gok, res = pcall(function() return game:HttpGet(url) end)
-            if gok and res and #res > 100 and not res:find("404") and not res:find("<html") then
-                moduleContent = res
-                loadSource    = "GitHub"
-                break
-            end
-        end
-    end
-
-    if not moduleContent then
-        Notify("Error", "Failed to find game script!", "Error")
-        return
-    end
-
-    -- Execute
-    local func, err = loadstring(moduleContent)
-    if not func then
-        Notify("Error", "Script compile error: " .. tostring(err), "Error")
-        return
-    end
-
-    local execOk, result = pcall(func)
-    if execOk and type(result) == "table" and type(result.Init) == "function" then
-        pcall(function() result.Init(Window) end)
-    end
-
-    Notify("Loaded", "Game script launched from " .. loadSource, "Success")
-    print("[SlenderHub] Launched: " .. targetFile .. " via " .. loadSource)
+function _G.getTopStartButton()
+	-- upvalues: (copy) v_u_6
+	return v_u_6.Frame.Frame["1"].FightButton
 end
-
---// ==============================[ AUTO-LOGIN CHECK ]============================== //--
-local isSaved, savedData, remainingTime = checkLocalKey()
-
-if isSaved and savedData then
-    isAccessAuthorized = true
-    authorizedKeyType  = savedData.Type or "Free"
-    authorizedDuration = savedData.CustomDuration or 86400
-
-    local timeMsg = (remainingTime == math.huge) and "Lifetime Access" or formatTime(remainingTime)
-    Notify("Auto-Login", "Welcome back! Remaining: " .. timeMsg, "Success", 3)
-    task.wait(0.5)
-    loadGameScript(authorizedKeyType)
-    return
+local function v23()
+	-- upvalues: (copy) v_u_15, (copy) v_u_6, (copy) v_u_12, (copy) v_u_1, (ref) v_u_13, (copy) v_u_4, (copy) v_u_3
+	print("Updating auto fight UI")
+	local v_u_18 = v_u_15()
+	for _, v19 in pairs(v_u_6.Frame.Frame:GetChildren()) do
+		if v19:IsA("Frame") then
+			v19:Destroy()
+		end
+	end
+	for v_u_20, v21 in pairs(v_u_12[v_u_18]) do
+		local v22 = v_u_6.Template:Clone()
+		v22.Name = v_u_20
+		v22.FightName.Text = v21.DisplayName
+		v22.levelimage.Image = v_u_1.Images.EnemyImages[v21.DisplayName:gsub(" ", "")].Image
+		v22.FightButton.Activated:Connect(function()
+			-- upvalues: (copy) v_u_18, (copy) v_u_20, (ref) v_u_13, (ref) v_u_4, (ref) v_u_3, (ref) v_u_6
+			if v_u_18 <= _G.currentStage then
+				_G.startAutoFight(v_u_20)
+				v_u_13 = v_u_4.Character.HumanoidRootPart.CFrame
+				v_u_3.UIClick:Play()
+				_G.closeUI(v_u_6, v_u_6.Frame)
+			else
+				_G.showText("You are not at the same stage as this enemy!", 0.1, 3)
+			end
+		end)
+		v22.Difficulty.Text = difficultyNames[v_u_20].text
+		v22.Difficulty.TextColor3 = difficultyNames[v_u_20].color
+		v22.Visible = true
+		v22.Parent = v_u_6.Frame.Frame
+	end
 end
-
---// ==============================[ AUTHENTICATION TAB ]============================== //--
-local TabAuth = Window:Tab("Authentication")
-
--- Game Status Info
-local gameName = "Unknown Game"
-pcall(function()
-    gameName = game:GetService("MarketplaceService"):GetProductInfo(CurrentPlaceId).Name
+_G.updateAutoFightUI = v23
+local v_u_24 = false
+local function v25()
+	-- upvalues: (ref) v_u_24, (copy) v_u_3, (copy) v_u_11, (copy) v_u_4, (ref) v_u_13
+	if v_u_24 ~= true then
+		v_u_24 = true
+		while tick() - _G.lastEnteredFight < 1 do
+			print("Waiting")
+			wait()
+		end
+		v_u_3.UIClick:Play()
+		_G.AutoFight = nil
+		_G.InOneVOne = false
+		v_u_24 = false
+		v_u_11:FireServer("StopFight")
+		repeat
+			wait()
+		until _G.AutoFightReady
+		v_u_4.Character.HumanoidRootPart.CFrame = v_u_13
+	end
+end
+_G.stopAutoFight = v25
+v7.StopAutoFightButton.Activated:Connect(_G.stopAutoFight)
+v_u_8.AutoFight.Activated:Connect(function()
+	-- upvalues: (copy) v_u_3, (copy) v_u_6
+	v_u_3.UIClick:Play()
+	if v_u_6.Enabled then
+		_G.closeUI(v_u_6, v_u_6.Frame)
+	else
+		_G.openUI(v_u_6, v_u_6.Frame)
+		_G.updateAutoFightUI()
+	end
 end)
-local statusText = GameModules[CurrentPlaceId]
-    and ("✅ Supported: " .. gameName)
-    or  ("⚠️ Not Supported (PlaceId: " .. CurrentPlaceId .. ")")
-TabAuth:Paragraph("Game Status", statusText)
-
-TabAuth:Label("── Key Methods ──")
-
---// ======= [METHOD 1] VELINK KEY =======
-TabAuth:Section("🔗 Velink Key (Free 24h / Premium)")
-TabAuth:Input("Velink Key", "VELINK-XXXX-XXXX", "VelinkInput", "Paste your Velink key", function(text)
-    local key = text:gsub("%s+", "")
-    if #key < 5 then return end
-
-    Notify("Checking...", "Verifying Velink key...", "Success", 2)
-
-    local keyType, duration = verifyVelinkKey(key)
-    if keyType and duration then
-        isAccessAuthorized = true
-        authorizedKeyType  = keyType
-        authorizedDuration = duration
-        saveKey(keyType, key, duration)
-        local durText = (duration == math.huge) and "Lifetime" or formatTime(duration)
-        Notify("✅ Velink Valid!", keyType .. " Key — " .. durText, "Success", 5)
-    else
-        isAccessAuthorized = false
-        Notify("❌ Invalid Key", "Expired or not found in Velink.", "Error", 4)
-    end
+function _G.setAutoTrain(p26)
+	-- upvalues: (copy) v_u_8
+	print("Setting auto train to", p26)
+	_G.autoClicking = p26
+	v_u_8.AutoTrain.ImageColor3 = p26 and Color3.fromRGB(22, 239, 57) or Color3.fromRGB(255, 78, 81)
+	v_u_8.AutoTrain.UIStroke.Color = p26 and Color3.fromRGB(16, 182, 41) or Color3.fromRGB(143, 44, 49)
+	v_u_8.AutoTrain.Top.UIStroke.Color = p26 and Color3.fromRGB(16, 182, 41) or Color3.fromRGB(143, 44, 49)
+	v_u_8.AutoTrain.Bottom.UIStroke.Color = p26 and Color3.fromRGB(16, 182, 41) or Color3.fromRGB(143, 44, 49)
+	v_u_8.AutoTrain.Bottom.Text = p26 and "ON" or "OFF"
+	v_u_8.OPAutoTrainGamepass.Visible = p26
+	if p26 then
+		v_u_8.AutoTrain.popular.Visible = not _G.ownsOPAutoTrainGamepass
+		v_u_8.AutoTrain.TIP.Visible = false
+	else
+		v_u_8.AutoTrain.popular.Visible = false
+	end
+end
+local function v27()
+	-- upvalues: (copy) v_u_2, (copy) v_u_4, (copy) v_u_9
+	if _G.ownsOPAutoTrainGamepass == false then
+		v_u_2:PromptGamePassPurchase(v_u_4, v_u_9.OPAutoTrain.Id)
+		game.SoundService.UIClick:Play()
+	end
+end
+v_u_8.OPAutoTrainGamepass.Activated:Connect(v27)
+v_u_8.OPAutoTrainGamepass.AutoClick.Activated:Connect(v27)
+v_u_1.Events:WaitForChild("OwnsOPAutoTrainGamepass").OnClientEvent:Connect(function()
+	-- upvalues: (copy) v_u_8
+	_G.ownsOPAutoTrainGamepass = true
+	v_u_8.OPAutoTrainGamepass.BackgroundColor3 = Color3.fromRGB(78, 255, 81)
+	v_u_8.OPAutoTrainGamepass.popular.BackgroundColor3 = Color3.fromRGB(78, 255, 81)
+	v_u_8.OPAutoTrainGamepass.AutoClick.ImageColor3 = Color3.fromRGB(78, 255, 81)
+	v_u_8.OPAutoTrainGamepass.UIStroke.Color = Color3.fromRGB(55, 180, 6)
+	v_u_8.OPAutoTrainGamepass.popular.UIStroke.Color = Color3.fromRGB(55, 180, 6)
+	v_u_8.OPAutoTrainGamepass.AutoClick.UIStroke.Color = Color3.fromRGB(55, 180, 6)
+	v_u_8.OPAutoTrainGamepass.autoclicktext1.UIStroke.Color = Color3.fromRGB(55, 180, 6)
+	v_u_8.OPAutoTrainGamepass.autoclicktext2.UIStroke.Color = Color3.fromRGB(55, 180, 6)
+	print("Got owns auto clicker gamepass")
 end)
-
-TabAuth:Button("🔑 Get Free Key (Velink - 24h)", "Opens the Velink unlock link", function()
-    setclipboard(Config.FREE_KEY_LINK)
-    Notify("Copied!", "Velink free key link copied to clipboard.", "Success", 3)
+v_u_8.AutoTrain.Activated:Connect(function()
+	-- upvalues: (copy) v_u_3
+	v_u_3.UIClick:Play()
+	_G.setAutoTrain(not _G.autoClicking)
 end)
-
---// ======= [METHOD 2] SLENDERKEY =======
-TabAuth:Section("💎 SlenderKey (slenderhub.shop)")
-TabAuth:Input("SlenderKey", "SLENDER-XXXX-XXXX", "SlenderKeyInput", "Paste your SlenderKey", function(text)
-    local key = text:gsub("%s+", "")
-    if #key < 5 then return end
-
-    Notify("Checking...", "Verifying SlenderKey...", "Success", 2)
-
-    local keyType, duration, extra = verifySlenderKey(key)
-    if keyType and duration then
-        isAccessAuthorized = true
-        authorizedKeyType  = keyType
-        authorizedDuration = duration
-        saveKey(keyType, key, duration)
-        local durText = (duration == math.huge) and "Lifetime" or formatTime(duration)
-        Notify("✅ SlenderKey Valid!", keyType .. " — " .. durText, "Success", 5)
-    else
-        isAccessAuthorized = false
-        Notify("❌ Denied", tostring(extra or "Invalid SlenderKey."), "Error", 4)
-    end
+v_u_6.Frame.CloseButton.Activated:Connect(function()
+	-- upvalues: (copy) v_u_8, (copy) v_u_6
+	v_u_8.Enabled = true
+	_G.closeUI(v_u_6, v_u_6.Frame)
 end)
+while true do
+	wait()
+	if _G.AutoFight and (not _G.InOneVOne and _G.AutoFightReady) then
+		_G.AutoFightReady = false
+		wait()
+		v_u_11:FireServer("Fight", v_u_15(), _G.AutoFight)
+	end
+	v7.StopAutoFightButton.Visible = _G.AutoFight ~= nil
+end
+[14/04, 22:28] Pedro Belfort: HackHandler 
+local v1 = game:GetService("ReplicatedStorage")
+local v2 = game:GetService("Players")
+local v_u_3 = game:GetService("TweenService")
+game:GetService("MarketplaceService")
+local v4 = v1:WaitForChild("Events")
+local v5 = v1:WaitForChild("Modules")
+local v_u_6 = v4:WaitForChild("HackEvent")
+require(v5:WaitForChild("HackData"))
+require(v5:WaitForChild("BundleData"))
+local v_u_7 = v2.LocalPlayer:WaitForChild("PlayerGui"):WaitForChild("Hacker").Frame
+local v_u_8 = v_u_7.HackingCompleted
+local v_u_9 = v_u_7.HackingProgress
+local v_u_10 = v_u_7.HackingReward
+local v_u_11 = v_u_6:InvokeServer("Price")
+local v_u_12 = nil
+local v_u_13 = {}
+local function v_u_16()
+	-- upvalues: (copy) v_u_6, (copy) v_u_7, (copy) v_u_9, (copy) v_u_3, (copy) v_u_8, (ref) v_u_12
+	local v14 = v_u_
 
-TabAuth:Button("💎 Buy Premium (SlenderHub.shop)", "Opens the SlenderHub shop link", function()
-    setclipboard(Config.SHOP_URL)
-    Notify("Copied!", "Shop link copied to clipboard.", "Success", 3)
-end)
 
---// ======= LAUNCH BUTTON =======
-TabAuth:Label("── Launch ──")
-TabAuth:Button("🚀 Launch Hub", "Verify and load the game script", function()
-    if not isAccessAuthorized then
-        Notify("Access Denied", "Enter a valid Velink or SlenderKey first.", "Error", 4)
-        return
-    end
-    if not GameModules[CurrentPlaceId] then
-        Notify("Error", "Game not supported yet.", "Error", 3)
-        return
-    end
-
-    local durText = (authorizedDuration == math.huge) and "Lifetime" or formatTime(authorizedDuration)
-    Notify("Loading...", authorizedKeyType .. " Access — " .. durText, "Success", 2)
-    task.wait(0.5)
-    loadGameScript(authorizedKeyType)
-end)
-
---// ==============================[ UNIVERSAL TAB ]============================== //--
-local TabUniversal = Window:Tab("Universal")
-
-TabUniversal:Label("--- Performance ---")
-TabUniversal:Button("CPU Optimizer (Low Render)", "Disables 3D rendering to reduce lag", function()
-    RunService:Set3dRenderingEnabled(false)
-    Notify("Optimizer", "3D rendering disabled.", "Success", 3)
-end)
-TabUniversal:Button("Restore Rendering", "Re-enables 3D rendering", function()
-    RunService:Set3dRenderingEnabled(true)
-    Notify("Optimizer", "Rendering restored.", "Success", 3)
-end)
-TabUniversal:Button("Anti-AFK (Enable)", "Prevents disconnection from inactivity", function()
-    local VirtualUser = game:GetService("VirtualUser")
-    LocalPlayer.Idled:Connect(function()
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-    end)
-    Notify("Anti-AFK", "Active! You won't be kicked.", "Success", 3)
-end)
-TabUniversal:Button("Rejoin Server", "Teleports you back into the game", function()
-    game:GetService("TeleportService"):Teleport(CurrentPlaceId, LocalPlayer)
-end)
-
-TabUniversal:Label("--- Account ---")
-TabUniversal:Button("Restaurar Key", "Deleta a chave salva localmente (Re-execute após clicar)", function()
-    if isfile(FILE_PATH) then
-        pcall(function() delfile(FILE_PATH) end)
-        Notify("Key Restaurada", "Sua chave foi removida. Por favor, re-execute o script.", "Success", 5)
-    else
-        Notify("Erro", "Nenhuma chave salva encontrada para deletar.", "Error", 5)
-    end
-end)
-
-print("[SlenderHub] Universal V12.0 loaded. PlaceId: " .. tostring(CurrentPlaceId))
+PetStats 
+local v1 = {
+	["ArcticCat"] = {
+		["name"] = "Arctic Cat",
+		["damageMultiplier"] = 89.9,
+		["rarity"] = "Rare"
+	},
+	["ArcticFox"] = {
+		["name"] = "Arctic Fox",
+		["damageMultiplier"] = 54,
+		["rarity"] = "Common"
+	},
+	["Axolotl"] = {
+		["name"] = "Axolotl",
+		["damageMultiplier"] = 33,
+		["rarity"] = "Legendary"
+	},
+	["Bat"] = {
+		["name"] = "Bat",
+		["damageMultiplier"] = 5.52,
+		["rarity"] = "Common"
+	},
+	["Bear"] = {
+		["name"] = "Bear",
+		["damageMultiplier"] = 250,
+		["rarity"] = "Common"
+	},
+	["HUGEBlackBear"] = {
+		["name"] = "Huge Black Bear",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["BlackWidow"] = {
+		["name"] = "Black Widow",
+		["damageMultiplier"] = 15.4,
+		["rarity"] = "Legendary"
+	},
+	["BobCat"] = {
+		["name"] = "Bob Cat",
+		["damageMultiplier"] = 5.5,
+		["rarity"] = "Mythic"
+	},
+	["Bull"] = {
+		["name"] = "Bull",
+		["damageMultiplier"] = 11.8,
+		["rarity"] = "Mythic"
+	},
+	["Bunny"] = {
+		["name"] = "Bunny",
+		["damageMultiplier"] = 413,
+		["rarity"] = "Rare"
+	},
+	["Camel"] = {
+		["name"] = "Camel",
+		["damageMultiplier"] = 2.57,
+		["rarity"] = "Common"
+	},
+	["Cat"] = {
+		["name"] = "Cat",
+		["damageMultiplier"] = 1.7,
+		["rarity"] = "Uncommon"
+	},
+	["Chick"] = {
+		["name"] = "Chick",
+		["damageMultiplier"] = 2.6,
+		["rarity"] = "Legendary"
+	},
+	["Chicken"] = {
+		["name"] = "Chicken",
+		["damageMultiplier"] = 2.2,
+		["rarity"] = "Mythic"
+	},
+	["DesertCat"] = {
+		["name"] = "Desert Cat",
+		["damageMultiplier"] = 4.25,
+		["rarity"] = "Rare"
+	},
+	["Dog"] = {
+		["name"] = "Dog",
+		["damageMultiplier"] = 1.2,
+		["rarity"] = "Common"
+	},
+	["Duck"] = {
+		["name"] = "Duck",
+		["damageMultiplier"] = 11.8,
+		["rarity"] = "Common"
+	},
+	["Elephant"] = {
+		["name"] = "Elephant",
+		["damageMultiplier"] = 9.11,
+		["rarity"] = "Rare"
+	},
+	["Fish"] = {
+		["name"] = "Fish",
+		["damageMultiplier"] = 13,
+		["rarity"] = "Uncommon"
+	},
+	["Fox"] = {
+		["name"] = "Fox",
+		["damageMultiplier"] = 275,
+		["rarity"] = "Uncommon"
+	},
+	["HUGEFrostDragon"] = {
+		["name"] = "Huge Frost Dragon",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["Jellyfish"] = {
+		["name"] = "Jellyfish",
+		["damageMultiplier"] = 25,
+		["rarity"] = "Mythic"
+	},
+	["Monkey"] = {
+		["name"] = "Monkey",
+		["damageMultiplier"] = 699,
+		["rarity"] = "Legendary"
+	},
+	["Mouse"] = {
+		["name"] = "Mouse",
+		["damageMultiplier"] = 6.07,
+		["rarity"] = "Uncommon"
+	},
+	["HUGEOgre"] = {
+		["name"] = "Huge Ogre",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["HUGEPanther"] = {
+		["name"] = "Huge Panther",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["Penguin"] = {
+		["name"] = "Penguin",
+		["damageMultiplier"] = 151,
+		["rarity"] = "Legendary"
+	},
+	["Pig"] = {
+		["name"] = "Pig",
+		["damageMultiplier"] = 2,
+		["rarity"] = "Rare"
+	},
+	["PolarBear"] = {
+		["name"] = "Polar Bear",
+		["damageMultiplier"] = 116,
+		["rarity"] = "Mythic"
+	},
+	["Seal"] = {
+		["name"] = "Seal",
+		["damageMultiplier"] = 60,
+		["rarity"] = "Uncommon"
+	},
+	["Shark"] = {
+		["name"] = "Shark",
+		["damageMultiplier"] = 19.5,
+		["rarity"] = "Rare"
+	},
+	["HUGESheep"] = {
+		["name"] = "Huge Sheep",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["Slime"] = {
+		["name"] = "Slime",
+		["damageMultiplier"] = 7.2,
+		["rarity"] = "Legendary"
+	},
+	["Spider"] = {
+		["name"] = "Spider",
+		["damageMultiplier"] = 2.8,
+		["rarity"] = "Uncommon"
+	},
+	["Squirrel"] = {
+		["name"] = "Squirrel",
+		["damageMultiplier"] = 537,
+		["rarity"] = "Mythic"
+	},
+	["HUGEUglyDucky"] = {
+		["name"] = "Huge Ugly Ducky",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["CandyBunny"] = {
+		["name"] = "Candy Bunny",
+		["damageMultiplier"] = 25.4,
+		["rarity"] = "Common"
+	},
+	["CandyCow"] = {
+		["name"] = "Candy Cow",
+		["damageMultiplier"] = 28,
+		["rarity"] = "Uncommon"
+	},
+	["GingerbreadWolf"] = {
+		["name"] = "Gingerbread Wolf",
+		["damageMultiplier"] = 42,
+		["rarity"] = "Rare"
+	},
+	["GingerbreadReindeer"] = {
+		["name"] = "Gingerbread Reindeer",
+		["damageMultiplier"] = 54,
+		["rarity"] = "Mythic"
+	},
+	["PeppermintThief"] = {
+		["name"] = "Peppermint Thief",
+		["damageMultiplier"] = 70.8,
+		["rarity"] = "Legendary"
+	},
+	["HUGEPeppermintDragon"] = {
+		["name"] = "Huge Peppermint Dragon",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["ToyDog"] = {
+		["name"] = "Toy Dog",
+		["damageMultiplier"] = 116,
+		["rarity"] = "Common"
+	},
+	["ToyCat"] = {
+		["name"] = "Toy Cat",
+		["damageMultiplier"] = 128,
+		["rarity"] = "Uncommon"
+	},
+	["ToyBunny"] = {
+		["name"] = "Toy Bunny",
+		["damageMultiplier"] = 192,
+		["rarity"] = "Rare"
+	},
+	["Eagle"] = {
+		["name"] = "Eagle",
+		["damageMultiplier"] = 250,
+		["rarity"] = "Mythic"
+	},
+	["ToyHorse"] = {
+		["name"] = "Toy Horse",
+		["damageMultiplier"] = 325,
+		["rarity"] = "Legendary"
+	},
+	["HUGEUnicorn"] = {
+		["name"] = "Huge Unicorn",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["NinjaCat"] = {
+		["name"] = "Ninja Cat",
+		["damageMultiplier"] = 540,
+		["rarity"] = "Common"
+	},
+	["NinjaDog"] = {
+		["name"] = "Ninja Dog",
+		["damageMultiplier"] = 600,
+		["rarity"] = "Uncommon"
+	},
+	["Panda"] = {
+		["name"] = "Panda",
+		["damageMultiplier"] = 890,
+		["rarity"] = "Rare"
+	},
+	["Koala"] = {
+		["name"] = "Koala",
+		["damageMultiplier"] = 1110,
+		["rarity"] = "Mythic"
+	},
+	["SamuraiBull"] = {
+		["name"] = "Samurai Bull",
+		["damageMultiplier"] = 1500,
+		["rarity"] = "Legendary"
+	},
+	["HUGESamuraiDragon"] = {
+		["name"] = "Huge Samurai Dragon",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["RoboDog"] = {
+		["name"] = "RoboDog",
+		["damageMultiplier"] = 1150,
+		["rarity"] = "Common"
+	},
+	["RoboCat"] = {
+		["name"] = "RoboCat",
+		["damageMultiplier"] = 1300,
+		["rarity"] = "Uncommon"
+	},
+	["Robot"] = {
+		["name"] = "Robot",
+		["damageMultiplier"] = 1900,
+		["rarity"] = "Rare"
+	},
+	["SpaceBlob"] = {
+		["name"] = "Space Blob",
+		["damageMultiplier"] = 2500,
+		["rarity"] = "Mythic"
+	},
+	["Alien"] = {
+		["name"] = "Alien",
+		["damageMultiplier"] = 3200,
+		["rarity"] = "Legendary"
+	},
+	["HUGESpaceBird"] = {
+		["name"] = "Huge Space Bird",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["MagicalCat"] = {
+		["name"] = "Magical Cat",
+		["damageMultiplier"] = 2470,
+		["rarity"] = "Common"
+	},
+	["MagicalDog"] = {
+		["name"] = "Magical Dog",
+		["damageMultiplier"] = 2700,
+		["rarity"] = "Uncommon"
+	},
+	["MagicalBunny"] = {
+		["name"] = "Magical Bunny",
+		["damageMultiplier"] = 4000,
+		["rarity"] = "Rare"
+	},
+	["MagicalDeer"] = {
+		["name"] = "Magical Deer",
+		["damageMultiplier"] = 5300,
+		["rarity"] = "Mythic"
+	},
+	["MagicalDragon"] = {
+		["name"] = "Magical Dragon",
+		["damageMultiplier"] = 6900,
+		["rarity"] = "Legendary"
+	},
+	["HUGEMagicalHorse"] = {
+		["name"] = "Huge Magical Horse",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["AngelicCat"] = {
+		["name"] = "Angelic Cat",
+		["damageMultiplier"] = 5400,
+		["rarity"] = "Common"
+	},
+	["AngelicDog"] = {
+		["name"] = "Angelic Dog",
+		["damageMultiplier"] = 5900,
+		["rarity"] = "Uncommon"
+	},
+	["AngelicBabyOrc"] = {
+		["name"] = "Angelic Baby Orc",
+		["damageMultiplier"] = 8700,
+		["rarity"] = "Rare"
+	},
+	["Angel"] = {
+		["name"] = "Angel",
+		["damageMultiplier"] = 11000,
+		["rarity"] = "Mythic"
+	},
+	["AllSeeingEye"] = {
+		["name"] = "All Seeing Eye",
+		["damageMultiplier"] = 15000,
+		["rarity"] = "Legendary"
+	},
+	["HUGEAngel"] = {
+		["name"] = "Huge Angel",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["EvilCat"] = {
+		["name"] = "Evil Cat",
+		["damageMultiplier"] = 11000,
+		["rarity"] = "Common"
+	},
+	["EvilDog"] = {
+		["name"] = "Evil Dog",
+		["damageMultiplier"] = 12500,
+		["rarity"] = "Uncommon"
+	},
+	["EvilBunny"] = {
+		["name"] = "Evil Bunny",
+		["damageMultiplier"] = 19000,
+		["rarity"] = "Rare"
+	},
+	["Orc"] = {
+		["name"] = "Orc",
+		["damageMultiplier"] = 24000,
+		["rarity"] = "Mythic"
+	},
+	["Beast"] = {
+		["name"] = "Beast",
+		["damageMultiplier"] = 32000,
+		["rarity"] = "Legendary"
+	},
+	["HUGEDemon"] = {
+		["name"] = "Huge Demon",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["ScientistCat"] = {
+		["name"] = "Scientist Cat",
+		["damageMultiplier"] = 23000,
+		["rarity"] = "Common"
+	},
+	["ScientistDog"] = {
+		["name"] = "Scientist Dog",
+		["damageMultiplier"] = 27000,
+		["rarity"] = "Uncommon"
+	},
+	["ToasterCat"] = {
+		["name"] = "Toaster Cat",
+		["damageMultiplier"] = 40000,
+		["rarity"] = "Rare"
+	},
+	["MutantRabbit"] = {
+		["name"] = "Mutant Rabbit",
+		["damageMultiplier"] = 52000,
+		["rarity"] = "Mythic"
+	},
+	["LandFish"] = {
+		["name"] = "Land-Fish",
+		["damageMultiplier"] = 68000,
+		["rarity"] = "Legendary"
+	},
+	["HUGEFlyingPig"] = {
+		["name"] = "Huge Flying Pig",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["PirateCat"] = {
+		["name"] = "Pirate Cat",
+		["damageMultiplier"] = 53000,
+		["rarity"] = "Common"
+	},
+	["PirateDog"] = {
+		["name"] = "Pirate Dog",
+		["damageMultiplier"] = 58000,
+		["rarity"] = "Uncommon"
+	},
+	["Parrot"] = {
+		["name"] = "Parrot",
+		["damageMultiplier"] = 86000,
+		["rarity"] = "Rare"
+	},
+	["StarFish"] = {
+		["name"] = "Star-Fish",
+		["damageMultiplier"] = 110000,
+		["rarity"] = "Mythic"
+	},
+	["Mermaid"] = {
+		["name"] = "Mermaid",
+		["damageMultiplier"] = 145000,
+		["rarity"] = "Legendary"
+	},
+	["HUGEAdriftDragon"] = {
+		["name"] = "Huge Adrift Dragon",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["Gazelle"] = {
+		["name"] = "Gazelle",
+		["damageMultiplier"] = 113000,
+		["rarity"] = "Common"
+	},
+	["BrownBull"] = {
+		["name"] = "Brown Bull",
+		["damageMultiplier"] = 124000,
+		["rarity"] = "Uncommon"
+	},
+	["Gorilla"] = {
+		["name"] = "Gorilla",
+		["damageMultiplier"] = 185000,
+		["rarity"] = "Rare"
+	},
+	["Tiger"] = {
+		["name"] = "Tiger",
+		["damageMultiplier"] = 240000,
+		["rarity"] = "Mythic"
+	},
+	["Zebra"] = {
+		["name"] = "Zebra",
+		["damageMultiplier"] = 310000,
+		["rarity"] = "Legendary"
+	},
+	["HUGETuskElephant"] = {
+		["name"] = "Huge Tusk Elephant",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["RomanCat"] = {
+		["name"] = "Roman Cat",
+		["damageMultiplier"] = 241000,
+		["rarity"] = "Common"
+	},
+	["RomanDog"] = {
+		["name"] = "Roman Dog",
+		["damageMultiplier"] = 265000,
+		["rarity"] = "Uncommon"
+	},
+	["Wolf"] = {
+		["name"] = "Wolf",
+		["damageMultiplier"] = 397000,
+		["rarity"] = "Rare"
+	},
+	["Horse"] = {
+		["name"] = "Horse",
+		["damageMultiplier"] = 517000,
+		["rarity"] = "Mythic"
+	},
+	["Peacock"] = {
+		["name"] = "Peacock",
+		["damageMultiplier"] = 670000,
+		["rarity"] = "Legendary"
+	},
+	["HUGERomanDragon"] = {
+		["name"] = "Huge Roman Dragon",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["FrozenDog"] = {
+		["name"] = "Frozen Dog",
+		["damageMultiplier"] = 516000,
+		["rarity"] = "Common"
+	},
+	["FrozenCat"] = {
+		["name"] = "Frozen Cat",
+		["damageMultiplier"] = 569000,
+		["rarity"] = "Uncommon"
+	},
+	["FrozenWolf"] = {
+		["name"] = "Frozen Wolf",
+		["damageMultiplier"] = 850000,
+		["rarity"] = "Rare"
+	},
+	["Moose"] = {
+		["name"] = "Moose",
+		["damageMultiplier"] = 1100000,
+		["rarity"] = "Mythic"
+	},
+	["Snowman"] = {
+		["name"] = "Snowman",
+		["damageMultiplier"] = 1440000,
+		["rarity"] = "Legendary"
+	},
+	["HUGECerberus"] = {
+		["name"] = "Huge Cerberus",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["CyberChicken"] = {
+		["name"] = "Cyber Chicken",
+		["damageMultiplier"] = 1100000,
+		["rarity"] = "Common"
+	},
+	["RobotMonkey"] = {
+		["name"] = "Robot Monkey",
+		["damageMultiplier"] = 1210000,
+		["rarity"] = "Uncommon"
+	},
+	["CyberSpider"] = {
+		["name"] = "Cyber Spider",
+		["damageMultiplier"] = 1820000,
+		["rarity"] = "Rare"
+	},
+	["RobotRhino"] = {
+		["name"] = "Robot Rhino",
+		["damageMultiplier"] = 2380000,
+		["rarity"] = "Mythic"
+	},
+	["RobotTiger"] = {
+		["name"] = "Robot Tiger",
+		["damageMultiplier"] = 3100000,
+		["rarity"] = "Legendary"
+	},
+	["HUGERobotDragon"] = {
+		["name"] = "Huge Robot Dragon",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["LavaCat"] = {
+		["name"] = "Lava Cat",
+		["damageMultiplier"] = 2370000,
+		["rarity"] = "Common"
+	},
+	["LavaDog"] = {
+		["name"] = "Lava Dog",
+		["damageMultiplier"] = 2610000,
+		["rarity"] = "Uncommon"
+	},
+	["LavaLamb"] = {
+		["name"] = "Lava Lamb",
+		["damageMultiplier"] = 3920000,
+		["rarity"] = "Rare"
+	},
+	["LavaSlime"] = {
+		["name"] = "Lava Slime",
+		["damageMultiplier"] = 5100000,
+		["rarity"] = "Mythic"
+	},
+	["EvilBat"] = {
+		["name"] = "Evil Bat",
+		["damageMultiplier"] = 6600000,
+		["rarity"] = "Legendary"
+	},
+	["HUGEDemonDragon"] = {
+		["name"] = "Huge Demon Dragon",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["FairyCat"] = {
+		["name"] = "Fairy Cat",
+		["damageMultiplier"] = 5000000,
+		["rarity"] = "Common"
+	},
+	["FairyDog"] = {
+		["name"] = "Fairy Dog",
+		["damageMultiplier"] = 5600000,
+		["rarity"] = "Uncommon"
+	},
+	["MagicalMoose"] = {
+		["name"] = "Magical Moose",
+		["damageMultiplier"] = 8400000,
+		["rarity"] = "Rare"
+	},
+	["MagicalWolf"] = {
+		["name"] = "Magical Wolf",
+		["damageMultiplier"] = 11000000,
+		["rarity"] = "Mythic"
+	},
+	["MagicalMermaid"] = {
+		["name"] = "Magical Mermaid",
+		["damageMultiplier"] = 14000000,
+		["rarity"] = "Legendary"
+	},
+	["HUGEFairyUnicorn"] = {
+		["name"] = "Huge Fairy Unicorn",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["VampireCat"] = {
+		["name"] = "Vampire Cat",
+		["damageMultiplier"] = 10500000,
+		["rarity"] = "Common"
+	},
+	["VampireDog"] = {
+		["name"] = "Vampire Dog",
+		["damageMultiplier"] = 12000000,
+		["rarity"] = "Uncommon"
+	},
+	["VampirePig"] = {
+		["name"] = "Vampire Pig",
+		["damageMultiplier"] = 18000000,
+		["rarity"] = "Rare"
+	},
+	["ZombieBat"] = {
+		["name"] = "Zombie Bat",
+		["damageMultiplier"] = 23000000,
+		["rarity"] = "Mythic"
+	},
+	["GhostGoat"] = {
+		["name"] = "Ghost Goat",
+		["damageMultiplier"] = 30000000,
+		["rarity"] = "Legendary"
+	},
+	["HUGEVampireMonkey"] = {
+		["name"] = "Huge Vampire Monkey",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["EgyptianCat"] = {
+		["name"] = "Egyptian Cat",
+		["damageMultiplier"] = 23000000,
+		["rarity"] = "Common"
+	},
+	["EgyptianDog"] = {
+		["name"] = "Egyptian Dog",
+		["damageMultiplier"] = 26000000,
+		["rarity"] = "Uncommon"
+	},
+	["Hippo"] = {
+		["name"] = "Hippo",
+		["damageMultiplier"] = 39000000,
+		["rarity"] = "Rare"
+	},
+	["EgyptianBat"] = {
+		["name"] = "Egyptian Bat",
+		["damageMultiplier"] = 50000000,
+		["rarity"] = "Mythic"
+	},
+	["Crocodile"] = {
+		["name"] = "Crocodile",
+		["damageMultiplier"] = 65000000,
+		["rarity"] = "Legendary"
+	},
+	["HUGEEagle"] = {
+		["name"] = "Huge Eagle",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["MechanicalCat"] = {
+		["name"] = "Mechanical Cat",
+		["damageMultiplier"] = 50000000,
+		["rarity"] = "Common"
+	},
+	["MechanicalMonkey"] = {
+		["name"] = "Mechanical Monkey",
+		["damageMultiplier"] = 55000000,
+		["rarity"] = "Uncommon"
+	},
+	["MechanicalGiraffe"] = {
+		["name"] = "Mechanical Giraffe",
+		["damageMultiplier"] = 83000000,
+		["rarity"] = "Rare"
+	},
+	["MechanicalFish"] = {
+		["name"] = "Mechanical Fish",
+		["damageMultiplier"] = 108000000,
+		["rarity"] = "Mythic"
+	},
+	["MechanicalUnicorn"] = {
+		["name"] = "Mechanical Unicorn",
+		["damageMultiplier"] = 141000000,
+		["rarity"] = "Legendary"
+	},
+	["HUGEMechanicalBat"] = {
+		["name"] = "Huge Mechanical Bat",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["NebulaCat"] = {
+		["name"] = "Nebula Cat",
+		["damageMultiplier"] = 108000000,
+		["rarity"] = "Common"
+	},
+	["NebulaBunny"] = {
+		["name"] = "Nebula Bunny",
+		["damageMultiplier"] = 118000000,
+		["rarity"] = "Uncommon"
+	},
+	["NebulaMonkey"] = {
+		["name"] = "Nebula Monkey",
+		["damageMultiplier"] = 178000000,
+		["rarity"] = "Rare"
+	},
+	["NebulaEagle"] = {
+		["name"] = "Nebula Eagle",
+		["damageMultiplier"] = 231000000,
+		["rarity"] = "Mythic"
+	},
+	["NebulaUnicorn"] = {
+		["name"] = "Nebula Unicorn",
+		["damageMultiplier"] = 301000000,
+		["rarity"] = "Legendary"
+	},
+	["HUGENebulaDragon"] = {
+		["name"] = "Huge Nebula Dragon",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["CloudCat"] = {
+		["name"] = "Cloud Cat",
+		["damageMultiplier"] = 231000000,
+		["rarity"] = "Common"
+	},
+	["RainDog"] = {
+		["name"] = "Rain Dog",
+		["damageMultiplier"] = 254000000,
+		["rarity"] = "Uncommon"
+	},
+	["RainBunny"] = {
+		["name"] = "Rain Bunny",
+		["damageMultiplier"] = 382000000,
+		["rarity"] = "Rare"
+	},
+	["SunFish"] = {
+		["name"] = "Sun Fish",
+		["damageMultiplier"] = 496000000,
+		["rarity"] = "Mythic"
+	},
+	["LightningEagle"] = {
+		["name"] = "Lightning Eagle",
+		["damageMultiplier"] = 646000000,
+		["rarity"] = "Legendary"
+	},
+	["HUGECloudDragon"] = {
+		["name"] = "Huge Cloud Dragon",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["CookieCat"] = {
+		["name"] = "Cookie Cat",
+		["damageMultiplier"] = 496000000,
+		["rarity"] = "Common"
+	},
+	["CookieDog"] = {
+		["name"] = "Cookie Dog",
+		["damageMultiplier"] = 546000000,
+		["rarity"] = "Uncommon"
+	},
+	["CookieFish"] = {
+		["name"] = "Cookie Fish",
+		["damageMultiplier"] = 819000000,
+		["rarity"] = "Rare"
+	},
+	["CupcakeBear"] = {
+		["name"] = "Cupcake Bear",
+		["damageMultiplier"] = 1060000000,
+		["rarity"] = "Mythic"
+	},
+	["CupcakeTiger"] = {
+		["name"] = "Cupcake Tiger",
+		["damageMultiplier"] = 1380000000,
+		["rarity"] = "Legendary"
+	},
+	["HUGECookieUnicorn"] = {
+		["name"] = "Huge Cookie Dragon",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Secret"
+	},
+	["CoolDog"] = {
+		["name"] = "Cool Dog",
+		["damageMultiplier"] = 20,
+		["rarity"] = "Common"
+	},
+	["CoolCat"] = {
+		["name"] = "Cool Cat",
+		["damageMultiplier"] = 30,
+		["rarity"] = "Uncommon"
+	},
+	["CoolBunny"] = {
+		["name"] = "Cool Bunny",
+		["damageMultiplier"] = 60,
+		["rarity"] = "Rare"
+	},
+	["CoolBear"] = {
+		["name"] = "Cool Bear",
+		["damageMultiplier"] = 100,
+		["rarity"] = "Mythic"
+	},
+	["HUGECoolFox"] = {
+		["name"] = "HUGE Cool Fox",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Legendary"
+	},
+	["HUGECoolDragon"] = {
+		["name"] = "Huge Cool Dragon",
+		["hugeMultiplier"] = 110,
+		["rarity"] = "Secret"
+	},
+	["ClassyCat"] = {
+		["name"] = "Classy Cat",
+		["damageMultiplier"] = 40,
+		["rarity"] = "Common"
+	},
+	["ClassyDog"] = {
+		["name"] = "Classy Dog",
+		["damageMultiplier"] = 60,
+		["rarity"] = "Uncommon"
+	},
+	["ClassyBunny"] = {
+		["name"] = "Classy Bunny",
+		["damageMultiplier"] = 90,
+		["rarity"] = "Rare"
+	},
+	["ClassyFox"] = {
+		["name"] = "Classy Fox",
+		["damageMultiplier"] = 140,
+		["rarity"] = "Mythic"
+	},
+	["HUGEClassyBear"] = {
+		["name"] = "HUGE Classy Bear",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Legendary"
+	},
+	["HUGEClassyDragon"] = {
+		["name"] = "Huge Classy Dragon",
+		["hugeMultiplier"] = 110,
+		["rarity"] = "Secret"
+	},
+	["DiscoDog"] = {
+		["name"] = "Disco Cat",
+		["damageMultiplier"] = 45,
+		["rarity"] = "Common"
+	},
+	["DiscoBunny"] = {
+		["name"] = "Disco Bunny",
+		["damageMultiplier"] = 72,
+		["rarity"] = "Uncommon"
+	},
+	["DiscoFox"] = {
+		["name"] = "Disco Fox",
+		["damageMultiplier"] = 111,
+		["rarity"] = "Rare"
+	},
+	["DiscoBear"] = {
+		["name"] = "Disco Bear",
+		["damageMultiplier"] = 165,
+		["rarity"] = "Mythic"
+	},
+	["HUGEDiscoDragon"] = {
+		["name"] = "HUGE Disco Dragon",
+		["hugeMultiplier"] = 80,
+		["rarity"] = "Legendary"
+	},
+	["HUGEDiscoCat"] = {
+		["name"] = "Huge Disco Cat",
+		["hugeMultiplier"] = 110,
+		["rarity"] = "Secret"
+	},
+	["HUGESummerUnicorn"] = {
+		["name"] = "Huge Summer Unicorn (Exclusive)",
+		["hugeMultiplier"] = 60,
+		["rarity"] = "Secret"
+	},
+	["HUGESummerDragon"] = {
+		["name"] = "HUGE Summer Dragon (Exclusive)",
+		["hugeMultiplier"] = 110,
+		["rarity"] = "Secret"
+	},
+	["HUGEWitch"] = {
+		["name"] = "Huge Witch (Exclusive)",
+		["hugeMultiplier"] = 150,
+		["rarity"] = "Secret"
+	},
+	["HUGESnowman"] = {
+		["name"] = "Huge Christmas Snowman (Exclusive)",
+		["hugeMultiplier"] = 150,
+		["rarity"] = "Secret"
+	},
+	["PartyCat"] = {
+		["name"] = "Party Cat",
+		["damageMultiplier"] = 10,
+		["rarity"] = "Common"
+	},
+	["PartyDog"] = {
+		["name"] = "Party Dog",
+		["damageMultiplier"] = 12,
+		["rarity"] = "Uncommon"
+	},
+	["PartyBunny"] = {
+		["name"] = "Party Bunny",
+		["damageMultiplier"] = 15,
+	
