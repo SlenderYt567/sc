@@ -31,7 +31,7 @@ local Functions = Remotes:WaitForChild("Functions")
 --// 4. Game Data
 local EggsList = {
     "Common Egg", "Spotted Egg", "Rocky Egg", "Mushroom Egg", "Leaf Egg",
-    "Arctic Egg", "Icy Egg",
+    "Arctic Egg", "Icy Egg", "2M Egg",
     "Boosted Steampunk Egg", "Desert Egg", "Fiery Egg", "Magma Egg",
     "Crystal Egg", "Floral Egg", "Mystical Egg", "Coral Egg", "Steampunk Egg", 
     "Season 1 Egg", "Light Egg", "Bounty Pets", "Exclusive Pets"
