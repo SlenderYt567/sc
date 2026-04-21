@@ -1,2 +1,3 @@
 _G.SlenderKey = "SLENDER-799B-15DA-1D77"
-loadstring(game:HttpGet("https://slenderhub.shop/api/scripts/loader?key=".._G.SlenderKey.."&hwid="..game:GetService("RbxAnalyticsService"):GetClientId()))()
+_G.SlenderScriptId = "cc5d4ff1-f602-4eb5-964b-c02d9982f6b6"
+loadstring(game:HttpGet("https://www.slenderhub.shop/api/scripts/loader?key=" .. _G.SlenderKey .. "&hwid=" .. game:GetService("RbxAnalyticsService"):GetClientId()))()
