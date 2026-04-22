@@ -25,8 +25,12 @@ local Config = {
     KEY_FILE      = "SlenderHubKey.json",
     -- SlenderHub Key API
     VERIFY_URL    = "https://www.slenderhub.shop/api/keys/verify",
-    CLAIM_URL     = "https://www.slenderhub.shop/#/claim?owner=SlenderYt567&duration=1&prefix=SLENDER&note=Free+claim",
     SHOP_URL      = "https://www.slenderhub.shop/",
+    -- Claim URLs
+    CLAIM_FREE        = "https://www.slenderhub.shop/#/claim?owner=47aa6260-3141-40de-ad1f-b204cab6ef73&duration=1&prefix=SLENDER&note=Free+1+Day+Key&label=Free+-+1+Day",
+    CLAIM_PREMIUM_7   = "https://www.slenderhub.shop/#/claim?owner=47aa6260-3141-40de-ad1f-b204cab6ef73&duration=7&prefix=SLENDER&note=Weekly+Premium+Key&label=Premium+-+Weekly",
+    CLAIM_PREMIUM_30  = "https://www.slenderhub.shop/#/claim?owner=47aa6260-3141-40de-ad1f-b204cab6ef73&duration=30&prefix=SLENDER&note=Monthly+Premium+Key&label=Premium+-+Monthly",
+    CLAIM_PREMIUM_LT  = "https://www.slenderhub.shop/#/claim?owner=47aa6260-3141-40de-ad1f-b204cab6ef73&duration=0&prefix=SLENDER&note=Lifetime+Premium+Key&label=Premium+-+Lifetime",
 }
 
 local KEY_FILE_PATH      = Config.FOLDER .. "/" .. Config.KEY_FILE
@@ -305,14 +309,32 @@ TabAuth:Input("License Key", "SLENDER-XXXX-XXXX", "KeyInput", "Paste your Slende
     end
 end)
 
-TabAuth:Button("🎁 Get Free Key (Claim Page)", "Opens the SlenderHub free key claim page", function()
-    setclipboard(Config.CLAIM_URL)
-    Notify("Copied!", "Claim page URL copied to clipboard. Open it in your browser.", "Success", 3)
+--// ======= FREE KEY =======
+TabAuth:Section("🎁 Free Key — 1 Day (Public)")
+TabAuth:Paragraph("Como pegar sua Free Key", "Acesse o link abaixo, complete o gateway e cole a key recebida no campo acima. Keys gratuitas duram 1 dia.")
+TabAuth:Button("🔓 Pegar Free Key (1 Dia)", "Copia o link da claim page gratuita para o clipboard", function()
+    setclipboard(Config.CLAIM_FREE)
+    Notify("Link Copiado!", "Cole no seu navegador para pegar sua Free Key de 1 dia.", "Success", 5)
 end)
 
-TabAuth:Button("💎 Buy Premium (slenderhub.shop)", "Opens the SlenderHub premium shop", function()
+--// ======= PREMIUM KEYS =======
+TabAuth:Section("💎 Premium Keys — Comprar com o Dono")
+TabAuth:Paragraph("Como obter Premium", "Keys premium são vendidas diretamente pelo dono do SlenderHub. Após a compra, você receberá a key manualmente.")
+TabAuth:Button("📅 Premium Semanal (7 Dias)", "Copia o link da key semanal (uso interno do dono)", function()
+    setclipboard(Config.CLAIM_PREMIUM_7)
+    Notify("Link Copiado!", "Premium Semanal — 7 dias.", "Success", 3)
+end)
+TabAuth:Button("📆 Premium Mensal (30 Dias)", "Copia o link da key mensal (uso interno do dono)", function()
+    setclipboard(Config.CLAIM_PREMIUM_30)
+    Notify("Link Copiado!", "Premium Mensal — 30 dias.", "Success", 3)
+end)
+TabAuth:Button("♾️ Premium Lifetime", "Copia o link da key vitalícia (uso interno do dono)", function()
+    setclipboard(Config.CLAIM_PREMIUM_LT)
+    Notify("Link Copiado!", "Premium Lifetime — acesso vitalício.", "Success", 3)
+end)
+TabAuth:Button("🛒 Loja SlenderHub", "Abre a loja para comprar planos premium", function()
     setclipboard(Config.SHOP_URL)
-    Notify("Copied!", "Shop link copied to clipboard.", "Success", 3)
+    Notify("Link Copiado!", "Cole no navegador para acessar a loja.", "Success", 3)
 end)
 
 --// ======= LAUNCH BUTTON =======
