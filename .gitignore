@@ -1,81 +1,51 @@
 --!strict
 --[[
-    SlenderHub | Universal Loader (V14.0)
-    Flow:
-        [1] Verify key via SlenderHub API
-        [2] Save key locally
-        [3] Auto-login on next execution
-        [4] Load protected script via SlenderHub loader
+    SlenderHub | Universal Loader (V13.1 - SlenderHub Full Integration)
+    Architect: SlenderHub Systems Expert
+    Key System:
+        [1] SlenderHub API - Verificação via HWID + Key em slenderhub.shop
+        [2] Script Loader  - Scripts protegidos via /api/scripts/loader
 ]]
 
 --// ==============================[ SERVICES ]============================== //--
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local TeleportService = game:GetService("TeleportService")
-local MarketplaceService = game:GetService("MarketplaceService")
-local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
-
-local LocalPlayer = Players.LocalPlayer
+local HttpService    = game:GetService("HttpService")
+local Players        = game:GetService("Players")
+local StarterGui     = game:GetService("StarterGui")
+local RunService     = game:GetService("RunService")
+local CoreGui        = game:GetService("CoreGui")
+local LocalPlayer    = Players.LocalPlayer
 local CurrentPlaceId = game.PlaceId
 
 --// ==============================[ CONFIG ]============================== //--
 local Config = {
-    FOLDER = "SlenderHub_Universal",
-    FILE = "KeyData_" .. LocalPlayer.UserId .. ".json",
-    VERIFY_URL = "https://www.slenderhub.shop/api/keys/verify",
-    LOADER_URL = "https://www.slenderhub.shop/api/scripts/loader",
-    SHOP_URL = "https://slenderhub.shop/",
+    -- Storage
+    FOLDER      = "SlenderHub_Universal",
+    FILE        = "KeyData_" .. LocalPlayer.UserId .. ".json",
+    -- SlenderHub API
+    VERIFY_URL  = "https://www.slenderhub.shop/api/keys/verify",
+    LOADER_URL  = "https://www.slenderhub.shop/api/scripts/loader",
+    SHOP_URL    = "https://slenderhub.shop/",
 }
 
-local FILE_PATH = Config.FOLDER .. "/" .. Config.FILE
+local FILE_PATH          = Config.FOLDER .. "/" .. Config.FILE
+local isAccessAuthorized = false
+local authorizedKeyType  = "Premium"
+local authorizedDuration = math.huge
+local savedLicenseKey    = ""
 
 --// ==============================[ GAME MAPPING ]============================== //--
--- Troque scriptId pelos IDs reais do Script Manager
+-- Cada jogo precisa de: name (exibição) e scriptId (ID do script no backend da SlenderHub)
 local GameModules = {
-    [120405647949186] = {
-        name = "Royal Hatchers Script",
-        scriptId = "cc5d4ff1-f602-4eb5-964b-c02d9982f6b6&key"
-    },
-    [4924922222] = {
-        name = "Brookhaven script",
-        scriptId = "COLOQUE_O_ID_REAL_DO_SCRIPT"
-    },
-    [93787311916283] = {
-        name = "Horse Race",
-        scriptId = "COLOQUE_O_ID_REAL_DO_SCRIPT"
-    },
-    [82013336390273] = {
-        name = "Pickaxe Simulator script",
-        scriptId = "COLOQUE_O_ID_REAL_DO_SCRIPT"
-    },
-    [75992362647444] = {
-        name = "Tap simulator",
-        scriptId = "COLOQUE_O_ID_REAL_DO_SCRIPT"
-    },
-    [76558904092080] = {
-        name = "The Forge Script",
-        scriptId = "COLOQUE_O_ID_REAL_DO_SCRIPT"
-    },
-    [109983668079237] = {
-        name = "Steal a Branrot(Premium)",
-        scriptId = "COLOQUE_O_ID_REAL_DO_SCRIPT"
-    },
-    [107807115409153] = {
-        name = "Bee Tappers Script",
-        scriptId = "COLOQUE_O_ID_REAL_DO_SCRIPT"
-    },
-    [826437311311] = {
-        name = "pet simulator 99 script",
-        scriptId = "COLOQUE_O_ID_REAL_DO_SCRIPT"
-    },
+    [120405647949186] = { name = "Royal Hatchers Script",     scriptId = "cc5d4ff1-f602-4eb5-964b-c02d9982f6b6&key"      },
+    [4924922222]      = { name = "Brookhaven script",         scriptId = "brookhaven"           },
+    [93787311916283]  = { name = "Horse Race",                scriptId = "horse-race"           },
+    [82013336390273]  = { name = "Pickaxe Simulator script",  scriptId = "pickaxe-simulator"    },
+    [75992362647444]  = { name = "Tap simulator",             scriptId = "tap-simulator"        },
+    [76558904092080]  = { name = "The Forge Script",          scriptId = "the-forge"            },
+    [109983668079237] = { name = "Steal a Branrot(Premium)",  scriptId = "steal-branrot"        },
+    [107807115409153] = { name = "Bee Tappers Script",        scriptId = "bee-tappers"          },
+    [826437311311]    = { name = "pet simulator 99 script",   scriptId = "pet-simulator-99"     },
 }
-
---// ==============================[ STATE ]============================== //--
-local isAccessAuthorized = false
-local authorizedKeyType = "basic"
-local authorizedDuration = math.huge
-local savedLicenseKey = ""
 
 --// ==============================[ SINGLETON GUARD ]============================== //--
 if getgenv().SlenderHubLoaded then
@@ -88,7 +58,6 @@ getgenv().SlenderHubLoaded = true
 local swOk, SlenderWind = pcall(function()
     return loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
 end)
-
 if not swOk or not SlenderWind then
     error("[SlenderHub] CRITICAL: Failed to load SlenderWind!")
     return
@@ -96,9 +65,9 @@ end
 
 --// ==============================[ WINDOW ]============================== //--
 local Window = SlenderWind.Window({
-    Name = "Slender Hub | Universal",
+    Name      = "Slender Hub | Universal",
     KeySystem = false,
-    Theme = { Accent = Color3.fromRGB(0, 255, 128) }
+    Theme     = { Accent = Color3.fromRGB(0, 255, 128) }
 })
 
 --// ==============================[ HELPERS ]============================== //--
@@ -109,90 +78,61 @@ local function Notify(title: string, text: string, nType: string?, duration: num
 end
 
 local function formatTime(seconds: number): string
-    if seconds == math.huge then
-        return "Lifetime"
-    end
-
+    if seconds == math.huge then return "Lifetime" end
     local d = math.floor(seconds / 86400)
     local h = math.floor((seconds % 86400) / 3600)
     local m = math.floor((seconds % 3600) / 60)
     return string.format("%dd %02dh %02dm", d, h, m)
 end
 
+--// ==============================[ HWID ]============================== //--
 local function getHWID(): string
     local ok, hwid = pcall(function()
-        return RbxAnalyticsService:GetClientId()
+        return game:GetService("RbxAnalyticsService"):GetClientId()
     end)
     return ok and hwid or "UNKNOWN_HWID"
 end
 
-local function getGameInfo()
-    return GameModules[CurrentPlaceId]
-end
-
 --// ==============================[ KEY STORAGE ]============================== //--
 local function saveKey(keyType: string, key: string, duration: number)
-    if not isfolder(Config.FOLDER) then
-        makefolder(Config.FOLDER)
-    end
-
+    if not isfolder(Config.FOLDER) then makefolder(Config.FOLDER) end
     writefile(FILE_PATH, HttpService:JSONEncode({
-        Type = keyType,
-        Key = key,
-        Time = workspace:GetServerTimeNow(),
+        Type           = keyType,
+        Key            = key,
+        Time           = workspace:GetServerTimeNow(),
         CustomDuration = duration,
     }))
 end
 
-local function clearSavedKey()
-    if isfile(FILE_PATH) then
-        pcall(function()
-            delfile(FILE_PATH)
-        end)
-    end
-end
-
 local function checkLocalKey(): (boolean, any, number?)
-    if not isfile(FILE_PATH) then
-        return false, nil
-    end
-
-    local ok, data = pcall(function()
-        return HttpService:JSONDecode(readfile(FILE_PATH))
-    end)
-
+    if not isfile(FILE_PATH) then return false, nil end
+    local ok, data = pcall(function() return HttpService:JSONDecode(readfile(FILE_PATH)) end)
     if not ok or not data or not data.Time then
-        clearSavedKey()
+        pcall(function() delfile(FILE_PATH) end)
         return false, nil
     end
-
     local dur = data.CustomDuration or math.huge
-    if dur == math.huge then
-        return true, data, math.huge
-    end
-
+    if dur == math.huge then return true, data, math.huge end
     local elapsed = workspace:GetServerTimeNow() - data.Time
     if elapsed > dur then
-        clearSavedKey()
+        pcall(function() delfile(FILE_PATH) end)
         return false, nil
     end
-
     return true, data, (dur - elapsed)
 end
 
---// ==============================[ API ]============================== //--
-local function verifySlenderHubKey(inputKey: string): (boolean, string?, number?, string?)
-    local hwid = getHWID()
-    local url = Config.VERIFY_URL
-        .. "?key=" .. HttpService:UrlEncode(inputKey)
-        .. "&hwid=" .. HttpService:UrlEncode(hwid)
+--// ==============================[ SLENDERHUB KEY VERIFICATION ]============================== //--
+local function verifySlenderHubKey(inputKey: string): (boolean, string?, number?)
+    local HWID = getHWID()
+    local url  = Config.VERIFY_URL .. "?key=" .. inputKey .. "&hwid=" .. HWID
 
     local ok, response = pcall(function()
         return HttpService:GetAsync(url)
     end)
 
     if not ok or not response then
-        return false, nil, nil, "HTTP request failed during verification."
+        warn("[SlenderHub] HTTP request failed during key verification.")
+        return false, "Erro de conexão com o servidor.", nil
     end
 
     local decodeOk, data = pcall(function()
@@ -200,95 +140,99 @@ local function verifySlenderHubKey(inputKey: string): (boolean, string?, number?
     end)
 
     if not decodeOk or not data then
-        return false, nil, nil, "Failed to parse verification response."
+        warn("[SlenderHub] Failed to parse API response.")
+        return false, "Resposta inválida da API.", nil
     end
 
     if not data.success then
-        return false, nil, nil, tostring(data.message or "Key invalid.")
+        warn("[SlenderHub] Key invalid: " .. tostring(data.message))
+        return false, tostring(data.message), nil
     end
 
-    local keyType = tostring((data.data and data.data.tier) or data.tier or "basic")
+    local keyType = data.type or data.plan or "Premium"
     local duration = math.huge
 
-    local expiresRaw = (data.data and data.data.expires) or data.expires_at
-    if type(expiresRaw) == "string" and expiresRaw ~= "" then
-        -- Se quiser, depois dá para trocar por parsing real de ISO date
-        duration = math.huge
+    if data.expires_at then
+        local expiry = tonumber(data.expires_at)
+        if expiry then
+            duration = math.max(0, expiry - workspace:GetServerTimeNow())
+        end
     end
 
-    return true, keyType, duration, nil
+    return true, keyType, duration
 end
 
+--// ==============================[ SLENDERHUB SCRIPT LOADER ]============================== //--
 local function loadGameScriptViaSlenderHub(licenseKey: string): boolean
-    local gameInfo = getGameInfo()
+    local gameInfo = GameModules[CurrentPlaceId]
     if not gameInfo then
         warn("[SlenderHub] No mapped script for this game.")
         return false
     end
 
-    if not gameInfo.scriptId or gameInfo.scriptId == "" or gameInfo.scriptId == "COLOQUE_O_ID_REAL_DO_SCRIPT" then
-        Notify("Error", "scriptId not configured for this game.", "Error", 5)
-        warn("[SlenderHub] Missing scriptId for PlaceId: " .. tostring(CurrentPlaceId))
+    if not gameInfo.scriptId or gameInfo.scriptId == "" then
+        warn("[SlenderHub] Missing scriptId for this game.")
         return false
     end
 
     local hwid = getHWID()
     local loaderUrl = Config.LOADER_URL
         .. "?script_id=" .. HttpService:UrlEncode(gameInfo.scriptId)
-        .. "&key=" .. HttpService:UrlEncode(licenseKey)
-        .. "&hwid=" .. HttpService:UrlEncode(hwid)
+        .. "&key="       .. HttpService:UrlEncode(licenseKey)
+        .. "&hwid="      .. HttpService:UrlEncode(hwid)
 
     local ok, err = pcall(function()
         loadstring(game:HttpGet(loaderUrl))()
     end)
 
     if not ok then
-        warn("[SlenderHub] Loader endpoint failed: " .. tostring(err))
+        warn("[SlenderHub] Loader failed: " .. tostring(err))
         return false
     end
 
     return true
 end
 
---// ==============================[ LOAD FLOW ]============================== //--
+--// ==============================[ GAME SCRIPT LOADER ]============================== //--
 local function loadGameScript(accessLevel: string)
-    local gameInfo = getGameInfo()
+    local gameInfo = GameModules[CurrentPlaceId]
     if not gameInfo then
-        Notify("SlenderHub", "Game not supported (PlaceId: " .. tostring(CurrentPlaceId) .. ")", "Error")
+        Notify("SlenderHub", "Game not supported (PlaceId: " .. CurrentPlaceId .. ")", "Error")
         return
     end
 
+    -- Expõe o nível de acesso globalmente para os game scripts
     if getgenv then
         getgenv().SlenderHubAccessLevel = accessLevel
     else
         _G.SlenderHubAccessLevel = accessLevel
     end
 
-    if savedLicenseKey == "" then
-        Notify("Error", "No saved license key in memory.", "Error", 4)
-        return
+    -- Tenta carregar via backend protegido da SlenderHub
+    if savedLicenseKey ~= "" then
+        Notify("Carregando...", "Buscando script via SlenderHub...", "Success", 2)
+        local loaderOk = loadGameScriptViaSlenderHub(savedLicenseKey)
+        if loaderOk then
+            Notify("Loaded", "Game script launched via SlenderHub loader.", "Success")
+            print("[SlenderHub] Launched '" .. gameInfo.name .. "' via protected loader.")
+            return
+        end
+        -- Loader falhou
+        Notify("Error", "Protected loader failed. Verifique sua key e conexão.", "Error", 5)
+        warn("[SlenderHub] Protected loader failed for: " .. gameInfo.name)
+    else
+        Notify("Error", "Nenhuma key em memória. Insira sua key antes de lançar.", "Error", 4)
     end
-
-    Notify("Loading...", "Connecting to SlenderHub loader...", "Success", 2)
-
-    local loaderOk = loadGameScriptViaSlenderHub(savedLicenseKey)
-    if loaderOk then
-        Notify("Loaded", "Game script launched via SlenderHub loader.", "Success", 4)
-        print("[SlenderHub] Launched via protected loader: " .. gameInfo.name)
-        return
-    end
-
-    Notify("Error", "Protected loader failed.", "Error", 4)
 end
 
---// ==============================[ AUTO LOGIN ]============================== //--
+--// ==============================[ AUTO-LOGIN CHECK ]============================== //--
 local isSaved, savedData, remainingTime = checkLocalKey()
 
 if isSaved and savedData then
     isAccessAuthorized = true
-    authorizedKeyType = savedData.Type or "basic"
+    authorizedKeyType  = savedData.Type or "Premium"
     authorizedDuration = savedData.CustomDuration or math.huge
-    savedLicenseKey = savedData.Key or ""
+    savedLicenseKey    = savedData.Key or ""
 
     local timeMsg = (remainingTime == math.huge) and "Lifetime Access" or formatTime(remainingTime)
     Notify("Auto-Login", "Welcome back! Remaining: " .. timeMsg, "Success", 3)
@@ -297,68 +241,68 @@ if isSaved and savedData then
     return
 end
 
---// ==============================[ AUTH TAB ]============================== //--
+--// ==============================[ AUTHENTICATION TAB ]============================== //--
 local TabAuth = Window:Tab("Authentication")
 
+-- Game Status Info
 local gameName = "Unknown Game"
 pcall(function()
-    gameName = MarketplaceService:GetProductInfo(CurrentPlaceId).Name
+    gameName = game:GetService("MarketplaceService"):GetProductInfo(CurrentPlaceId).Name
 end)
-
-local mappedGame = getGameInfo()
-local statusText = mappedGame
-    and ("Supported: " .. gameName)
-    or ("Not Supported (PlaceId: " .. tostring(CurrentPlaceId) .. ")")
-
+local gameInfo = GameModules[CurrentPlaceId]
+local statusText = gameInfo
+    and ("✅ Supported: " .. gameName .. " [ID: " .. gameInfo.scriptId .. "]")
+    or  ("⚠️ Not Supported (PlaceId: " .. CurrentPlaceId .. ")")
 TabAuth:Paragraph("Game Status", statusText)
-TabAuth:Label("── Key Methods ──")
-TabAuth:Section("SlenderHub Key")
 
-TabAuth:Input("License Key", "SLENDER-XXXX-XXXX-XXXX", "SlenderKeyInput", "Paste your SlenderHub key", function(text)
+TabAuth:Label("── Key Methods ──")
+
+--// ======= SLENDERHUB KEY =======
+TabAuth:Section("🔑 SlenderHub Key")
+
+TabAuth:Input("SlenderHub Key", "SLENDER-XXXX-XXXX-XXXX", "SlenderKeyInput", "Paste your SlenderHub key", function(text)
     local key = text:gsub("%s+", "")
-    if #key < 5 then
-        return
-    end
+    if #key < 5 then return end
 
     Notify("Checking...", "Verifying your SlenderHub key...", "Success", 2)
 
-    local valid, keyType, duration, errMsg = verifySlenderHubKey(key)
+    local valid, keyType, duration = verifySlenderHubKey(key)
 
     if valid and keyType and duration then
         isAccessAuthorized = true
-        authorizedKeyType = keyType
+        authorizedKeyType  = keyType
         authorizedDuration = duration
-        savedLicenseKey = key
-
+        savedLicenseKey    = key
         saveKey(keyType, key, duration)
-
         local durText = (duration == math.huge) and "Lifetime" or formatTime(duration)
-        Notify("Key Valid", keyType .. " - " .. durText, "Success", 5)
+        Notify("✅ Key Valid!", keyType .. " — " .. durText, "Success", 5)
     else
         isAccessAuthorized = false
-        Notify("Invalid Key", errMsg or "Key invalid or HWID not authorized.", "Error", 5)
+        savedLicenseKey    = ""
+        local errMsg = (type(keyType) == "string" and keyType) or "Key inválida ou HWID não autorizado."
+        Notify("❌ Invalid Key", errMsg, "Error", 5)
     end
 end)
 
-TabAuth:Button("Buy Key (slenderhub.shop)", "Copies the store link", function()
+TabAuth:Button("💎 Comprar Key (slenderhub.shop)", "Abre o link da loja SlenderHub", function()
     setclipboard(Config.SHOP_URL)
-    Notify("Copied", "Store link copied to clipboard.", "Success", 3)
+    Notify("Copiado!", "Link da loja copiado para o clipboard.", "Success", 3)
 end)
 
+--// ======= LAUNCH BUTTON =======
 TabAuth:Label("── Launch ──")
-TabAuth:Button("Launch Hub", "Verify and load the protected game script", function()
+TabAuth:Button("🚀 Launch Hub", "Verify and load the game script", function()
     if not isAccessAuthorized then
         Notify("Access Denied", "Enter a valid SlenderHub key first.", "Error", 4)
         return
     end
-
-    if not getGameInfo() then
+    if not GameModules[CurrentPlaceId] then
         Notify("Error", "Game not supported yet.", "Error", 3)
         return
     end
 
     local durText = (authorizedDuration == math.huge) and "Lifetime" or formatTime(authorizedDuration)
-    Notify("Loading...", authorizedKeyType .. " Access - " .. durText, "Success", 2)
+    Notify("Loading...", authorizedKeyType .. " Access — " .. durText, "Success", 2)
     task.wait(0.5)
     loadGameScript(authorizedKeyType)
 end)
@@ -371,12 +315,10 @@ TabUniversal:Button("CPU Optimizer (Low Render)", "Disables 3D rendering to redu
     RunService:Set3dRenderingEnabled(false)
     Notify("Optimizer", "3D rendering disabled.", "Success", 3)
 end)
-
 TabUniversal:Button("Restore Rendering", "Re-enables 3D rendering", function()
     RunService:Set3dRenderingEnabled(true)
     Notify("Optimizer", "Rendering restored.", "Success", 3)
 end)
-
 TabUniversal:Button("Anti-AFK (Enable)", "Prevents disconnection from inactivity", function()
     local VirtualUser = game:GetService("VirtualUser")
     LocalPlayer.Idled:Connect(function()
@@ -385,21 +327,20 @@ TabUniversal:Button("Anti-AFK (Enable)", "Prevents disconnection from inactivity
     end)
     Notify("Anti-AFK", "Active! You won't be kicked.", "Success", 3)
 end)
-
 TabUniversal:Button("Rejoin Server", "Teleports you back into the game", function()
-    TeleportService:Teleport(CurrentPlaceId, LocalPlayer)
+    game:GetService("TeleportService"):Teleport(CurrentPlaceId, LocalPlayer)
 end)
 
 TabUniversal:Label("--- Account ---")
-TabUniversal:Button("Reset Saved Key", "Deletes the saved key locally", function()
+TabUniversal:Button("Restaurar Key", "Deleta a chave salva localmente (Re-execute após clicar)", function()
     if isfile(FILE_PATH) then
-        clearSavedKey()
-        savedLicenseKey = ""
+        pcall(function() delfile(FILE_PATH) end)
+        savedLicenseKey    = ""
         isAccessAuthorized = false
-        Notify("Key Reset", "Saved key removed. Re-execute the script.", "Success", 5)
+        Notify("Key Restaurada", "Sua chave foi removida. Por favor, re-execute o script.", "Success", 5)
     else
-        Notify("Error", "No saved key found.", "Error", 5)
+        Notify("Erro", "Nenhuma chave salva encontrada para deletar.", "Error", 5)
     end
 end)
 
-print("[SlenderHub] Universal V14.0 loaded. PlaceId: " .. tostring(CurrentPlaceId))
+print("[SlenderHub] Universal V13.1 (Full SlenderHub Integration) loaded. PlaceId: " .. tostring(CurrentPlaceId))
