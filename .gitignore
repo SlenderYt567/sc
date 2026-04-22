@@ -1,392 +1,229 @@
 --!strict
 --[[
-    SlenderHub | Universal Loader (V13.0 - SlenderHub Global Key System)
-    Architect: SlenderHub Systems Expert
-    Key System:
-        [1] SlenderHub Global Keys - Free and Premium via slenderhub.shop
-        API: https://www.slenderhub.shop/api/keys/verify
-        Claim Page: https://www.slenderhub.shop/#/claim
+    SlenderHub | Punch Simulator (V13.0 UI Edition)
+    UI Library: SlenderWind Internal (V13.0 Premium Default)
+    Architect: SlenderHub Lead / Roblox Lua Expert Agent
+    Expertise Applied: [Roblox_Lua_Expert, Roblox_UI_Expert, Roblox_Bypass_Expert]
 ]]
 
---// ==============================[ SERVICES ]============================== //--
-local HttpService    = game:GetService("HttpService")
-local Analytics      = game:GetService("RbxAnalyticsService")
-local Players        = game:GetService("Players")
-local StarterGui     = game:GetService("StarterGui")
-local RunService     = game:GetService("RunService")
-local CoreGui        = game:GetService("CoreGui")
-local LocalPlayer    = Players.LocalPlayer
-local CurrentPlaceId = game.PlaceId
-
---// ==============================[ CONFIG ]============================== //--
-local Config = {
-    -- Storage
-    FOLDER        = "SlenderHub_Universal",
-    KEY_FILE      = "SlenderHubKey.json",
-    -- SlenderHub Key API
-    VERIFY_URL    = "https://www.slenderhub.shop/api/keys/verify",
-    SHOP_URL      = "https://www.slenderhub.shop/",
-    -- Claim URLs
-    CLAIM_FREE        = "https://www.slenderhub.shop/#/claim?owner=47aa6260-3141-40de-ad1f-b204cab6ef73&duration=1&prefix=SLENDER&note=Free+1+Day+Key&label=Free+-+1+Day",
-    CLAIM_PREMIUM_7   = "https://www.slenderhub.shop/#/claim?owner=47aa6260-3141-40de-ad1f-b204cab6ef73&duration=7&prefix=SLENDER&note=Weekly+Premium+Key&label=Premium+-+Weekly",
-    CLAIM_PREMIUM_30  = "https://www.slenderhub.shop/#/claim?owner=47aa6260-3141-40de-ad1f-b204cab6ef73&duration=30&prefix=SLENDER&note=Monthly+Premium+Key&label=Premium+-+Monthly",
-    CLAIM_PREMIUM_LT  = "https://www.slenderhub.shop/#/claim?owner=47aa6260-3141-40de-ad1f-b204cab6ef73&duration=0&prefix=SLENDER&note=Lifetime+Premium+Key&label=Premium+-+Lifetime",
-}
-
-local KEY_FILE_PATH      = Config.FOLDER .. "/" .. Config.KEY_FILE
-local isAccessAuthorized = false
-local authorizedKeyType  = "free"
-local authorizedTier     = "free"
-
---// ==============================[ GAME MAPPING ]============================== //--
-local GameModules = {
-    [120405647949186] = "Royal Hatchers Script",
-    [4924922222]      = "Brookhaven script",
-    [93787311916283]  = "Horse Race",
-    [82013336390273]  = "Pickaxe Simulator script",
-    [75992362647444]  = "Tap simulator",
-    [76558904092080]  = "The Forge Script",
-    [109983668079237] = "Steal a Branrot(Premium)",
-    [107807115409153] = "Bee Tappers Script",
-    [826437311311]    = "pet simulator 99 script",
-}
-
---// ==============================[ SINGLETON GUARD ]============================== //--
-if getgenv().SlenderHubLoaded then
-    warn("[SlenderHub] Loader already active.")
-    return
+--// 1. Singleton Pattern & Configuration
+if getgenv().PunchSimulatorLoaded then 
+    warn("[SlenderHub] Instance already active.") 
+    return 
 end
-getgenv().SlenderHubLoaded = true
+getgenv().PunchSimulatorLoaded = true
 
---// ==============================[ LOAD UI LIBRARY ]============================== //--
-local swOk, SlenderWind = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
-end)
-if not swOk or not SlenderWind then
-    error("[SlenderHub] CRITICAL: Failed to load SlenderWind!")
-    return
+--// 2. Load SlenderWind V11+ (Compatible with V13 loader)
+local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
+
+--// 3. Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+
+--// 4. Remotes Cache
+local Events = ReplicatedStorage:WaitForChild("Events")
+local PunchRemote = Events:WaitForChild("DamageIncreaseOnClickEvent")
+local EggRemote = Events:WaitForChild("PlayerPressedKeyOnEgg")
+local SpinRemote = Events:WaitForChild("SpinWheelEvent")
+local PushRemote = Events:WaitForChild("PushEvent")
+local TeleportRemote = Events:WaitForChild("TeleportEvent")
+local MergeRemote = Events:WaitForChild("PlayerMergeEquipment")
+local MinerRemote = Events:WaitForChild("MinerCurrency")
+
+--// 5. Skills Integration (Embedded for Standalone)
+local UISkill = {}
+function UISkill.Animate(object, properties, info)
+    if not object then return end
+    local tween = TweenService:Create(object, info or TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), properties)
+    tween:Play()
+    return tween
 end
 
---// ==============================[ WINDOW ]============================== //--
+function UISkill.CreateRipple(buttonInstance)
+    if not buttonInstance or not buttonInstance:IsA("GuiObject") then return end
+    buttonInstance.ClipsDescendants = true
+    buttonInstance.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            local ripple = Instance.new("Frame")
+            ripple.Name = "Ripple"
+            ripple.Parent = buttonInstance
+            ripple.BackgroundColor3 = Color3.new(1, 1, 1)
+            ripple.BackgroundTransparency = 0.6
+            ripple.Size = UDim2.new(0, 0, 0, 0)
+            ripple.Position = UDim2.new(0, input.Position.X - buttonInstance.AbsolutePosition.X, 0, input.Position.Y - buttonInstance.AbsolutePosition.Y)
+            ripple.AnchorPoint = Vector2.new(0.5, 0.5)
+            
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(1, 0)
+            corner.Parent = ripple
+            
+            UISkill.Animate(ripple, {
+                Size = UDim2.new(0, buttonInstance.AbsoluteSize.X * 2.5, 0, buttonInstance.AbsoluteSize.X * 2.5),
+                BackgroundTransparency = 1
+            }, TweenInfo.new(0.6))
+            
+            task.delay(0.6, function() ripple:Destroy() end)
+        end
+    end)
+end
+
+--// 6. Flags & State
+local Flags = {
+    AutoPunch = false,
+    AutoWin = false,
+    AutoEgg = false,
+    SelectedEgg = "1",
+    AutoSpin = false,
+    AutoMiner = false,
+    WalkSpeed = 16,
+    JumpPower = 50,
+    InfJump = false
+}
+
+--// 7. UI Construction
 local Window = SlenderWind.Window({
-    Name      = "Slender Hub | Universal",
+    Name = "SlenderHub | Punch Simulator",
     KeySystem = false,
-    Theme     = { Accent = Color3.fromRGB(0, 255, 128) }
+    Theme = { 
+        Accent = Color3.fromRGB(0, 255, 128),
+        Background = Color3.fromRGB(15, 15, 20)
+    } 
 })
 
---// ==============================[ HELPERS ]============================== //--
-local function Notify(title: string, text: string, nType: string?, duration: number?)
-    pcall(function()
-        Window:Notify(title, text, duration or 5, nType or "Success")
-    end)
-end
+local TabFarm = Window:Tab("Main Farm")
+local TabEggs = Window:Tab("Eggs")
+local TabMisc = Window:Tab("Misc & TP")
+local TabPlayer = Window:Tab("Player")
 
-local function formatTime(seconds: number): string
-    if seconds == math.huge then return "Lifetime" end
-    local d = math.floor(seconds / 86400)
-    local h = math.floor((seconds % 86400) / 3600)
-    local m = math.floor((seconds % 3600) / 60)
-    return string.format("%dd %02dh %02dm", d, h, m)
-end
+--================= FARMING TAB =================--
+TabFarm:Label("── Automations ──")
 
---// ==============================[ HWID ]============================== //--
-local function getHWID(): string
-    local ok, hwid = pcall(function()
-        return Analytics:GetClientId()
-    end)
-    return ok and hwid or "UNKNOWN_HWID"
-end
-
---// ==============================[ KEY STORAGE ]============================== //--
-local function saveGlobalKey(key: string)
-    pcall(function()
-        if not isfolder(Config.FOLDER) then makefolder(Config.FOLDER) end
-        writefile(KEY_FILE_PATH, HttpService:JSONEncode({ key = key }))
-    end)
-end
-
-local function loadSavedKey(): string?
-    if not isfile or not isfile(KEY_FILE_PATH) then return nil end
-    local ok, parsed = pcall(function()
-        return HttpService:JSONDecode(readfile(KEY_FILE_PATH))
-    end)
-    if ok and parsed and parsed.key then
-        return parsed.key
-    end
-    return nil
-end
-
-local function deleteSavedKey()
-    pcall(function()
-        if isfile and isfile(KEY_FILE_PATH) then
-            delfile(KEY_FILE_PATH)
+TabFarm:Toggle("Auto Punch", false, "AutoPunch", "Automatically trains your damage", function(Value)
+    Flags.AutoPunch = Value
+    task.spawn(function()
+        while Flags.AutoPunch do
+            pcall(function() PunchRemote:FireServer() end)
+            task.wait(0.01)
         end
     end)
-end
+end)
 
---// ==============================[ SLENDERHUB KEY VERIFY ]============================== //--
-local function verifyKey(licenseKey: string): (boolean, any)
-    local hwid = getHWID()
-    local url = Config.VERIFY_URL
-        .. "?key=" .. HttpService:UrlEncode(licenseKey)
-        .. "&hwid=" .. HttpService:UrlEncode(hwid)
-
-    local ok, response = pcall(function()
-        return game:HttpGet(url)
+TabFarm:Toggle("Auto Win (Push)", false, "AutoWin", "Automatically pushes for the win", function(Value)
+    Flags.AutoWin = Value
+    task.spawn(function()
+        while Flags.AutoWin do
+            pcall(function() PushRemote:FireServer(true) end)
+            task.wait(0.1)
+        end
     end)
+end)
 
-    if not ok then
-        warn("[SlenderHub] verify request failed: " .. tostring(response))
-        return false, "Request failed"
-    end
-
-    local decodeOk, data = pcall(function()
-        return HttpService:JSONDecode(response)
-    end)
-
-    if not decodeOk or not data then
-        warn("[SlenderHub] Failed to decode verify response.")
-        return false, "Decode error"
-    end
-
-    if not data.success then
-        return false, data.message or "Invalid key"
-    end
-
-    return true, data
-end
-
-local function authenticateWithKey(licenseKey: string): boolean
-    local ok, valid, payload = pcall(function()
-        return verifyKey(licenseKey)
-    end)
-
-    if not ok then
-        warn("[SlenderHub] Authentication error: " .. tostring(valid))
-        return false
-    end
-
-    if not valid then
-        warn("[SlenderHub] Invalid key: " .. tostring(payload))
-        return false
-    end
-
-    saveGlobalKey(licenseKey)
-
-    local tier = payload.tier or payload.type or "free"
-    authorizedTier     = tier
-    authorizedKeyType  = tier
-    isAccessAuthorized = true
-
-    print("[SlenderHub] Authenticated with tier:", tier)
-    return true
-end
-
---// ==============================[ GAME SCRIPT LOADER ]============================== //--
-local LoaderConfig = {
-    ModulesPath  = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/",
-    ScriptFolder = "script/"
-}
-
-local function loadGameScript(accessLevel: string)
-    local targetFile = GameModules[CurrentPlaceId]
-    if not targetFile then
-        Notify("SlenderHub", "Game not supported (PlaceId: " .. CurrentPlaceId .. ")", "Error")
-        return
-    end
-
-    -- Set global access level for game scripts to read
-    if getgenv then
-        getgenv().SlenderHubAccessLevel = accessLevel
-    else
-        _G.SlenderHubAccessLevel = accessLevel
-    end
-
-    local moduleContent = nil
-    local loadSource    = ""
-
-    -- Local search first
-    if readfile then
-        for _, path in ipairs({LoaderConfig.ScriptFolder .. targetFile, targetFile}) do
-            local lok, res = pcall(function() return readfile(path) end)
-            if lok and res and #res > 0 then
-                moduleContent = res
-                loadSource    = "Local"
-                break
+TabFarm:Toggle("Auto Miner Claim", false, "AutoMiner", "Automatically claims miner currency", function(Value)
+    Flags.AutoMiner = Value
+    task.spawn(function()
+        while Flags.AutoMiner do
+            local hitbox = workspace:FindFirstChild("TouchHexagons") and workspace.TouchHexagons:FindFirstChild("MinerHexagon") and workspace.TouchHexagons.MinerHexagon:FindFirstChild("MinerUI") and workspace.TouchHexagons.MinerHexagon.MinerUI:FindFirstChild("HitboxPart")
+            if hitbox then
+                pcall(function() MinerRemote:InvokeServer("Claim", hitbox) end)
             end
+            task.wait(1)
         end
-    end
-
-    -- GitHub fallback (URL-encode spaces)
-    if not moduleContent then
-        local encoded = targetFile:gsub(" ", "%%20")
-        for _, url in ipairs({
-            LoaderConfig.ModulesPath .. encoded,
-            LoaderConfig.ModulesPath .. LoaderConfig.ScriptFolder .. encoded,
-        }) do
-            local gok, res = pcall(function() return game:HttpGet(url) end)
-            if gok and res and #res > 100 and not res:find("404") and not res:find("<html") then
-                moduleContent = res
-                loadSource    = "GitHub"
-                break
-            end
-        end
-    end
-
-    if not moduleContent then
-        Notify("Error", "Failed to find game script!", "Error")
-        return
-    end
-
-    -- Execute
-    local func, err = loadstring(moduleContent)
-    if not func then
-        Notify("Error", "Script compile error: " .. tostring(err), "Error")
-        return
-    end
-
-    local execOk, result = pcall(func)
-    if execOk and type(result) == "table" and type(result.Init) == "function" then
-        pcall(function() result.Init(Window) end)
-    end
-
-    Notify("Loaded", "Game script launched from " .. loadSource, "Success")
-    print("[SlenderHub] Launched: " .. targetFile .. " via " .. loadSource)
-end
-
---// ==============================[ AUTO-LOGIN CHECK ]============================== //--
-local rememberedKey = loadSavedKey()
-
-if rememberedKey then
-    print("[SlenderHub] Found saved key, verifying...")
-    Notify("Auto-Login", "Verifying saved key...", "Success", 2)
-    task.wait(0.5)
-
-    if authenticateWithKey(rememberedKey) then
-        local tierLabel = authorizedTier:sub(1,1):upper() .. authorizedTier:sub(2)
-        Notify("Auto-Login", "Welcome back! Tier: " .. tierLabel, "Success", 3)
-        task.wait(0.5)
-        loadGameScript(authorizedTier)
-        return
-    else
-        -- Saved key is invalid/expired, remove it
-        deleteSavedKey()
-        Notify("Session Expired", "Saved key is no longer valid. Please enter a new key.", "Error", 4)
-    end
-end
-
---// ==============================[ AUTHENTICATION TAB ]============================== //--
-local TabAuth = Window:Tab("Authentication")
-
--- Game Status Info
-local gameName = "Unknown Game"
-pcall(function()
-    gameName = game:GetService("MarketplaceService"):GetProductInfo(CurrentPlaceId).Name
-end)
-local statusText = GameModules[CurrentPlaceId]
-    and ("✅ Supported: " .. gameName)
-    or  ("⚠️ Not Supported (PlaceId: " .. CurrentPlaceId .. ")")
-TabAuth:Paragraph("Game Status", statusText)
-
-TabAuth:Label("── SlenderHub Key System ──")
-
---// ======= KEY INPUT =======
-TabAuth:Section("🔑 Global Key (Free / Premium)")
-TabAuth:Input("License Key", "SLENDER-XXXX-XXXX", "KeyInput", "Paste your SlenderHub key here", function(text)
-    local key = text:gsub("%s+", "")
-    if #key < 5 then return end
-
-    Notify("Verifying...", "Checking your key with SlenderHub...", "Success", 2)
-    task.wait(0.5)
-
-    local success = authenticateWithKey(key)
-    if success then
-        local tierLabel = authorizedTier:sub(1,1):upper() .. authorizedTier:sub(2)
-        Notify("✅ Key Valid!", "Tier: " .. tierLabel .. " — Key saved locally.", "Success", 5)
-    else
-        isAccessAuthorized = false
-        Notify("❌ Invalid Key", "Key not found or HWID mismatch. Try again.", "Error", 4)
-    end
-end)
-
---// ======= FREE KEY =======
-TabAuth:Section("🎁 Free Key — 1 Day (Public)")
-TabAuth:Paragraph("Como pegar sua Free Key", "Acesse o link abaixo, complete o gateway e cole a key recebida no campo acima. Keys gratuitas duram 1 dia.")
-TabAuth:Button("🔓 Pegar Free Key (1 Dia)", "Copia o link da claim page gratuita para o clipboard", function()
-    setclipboard(Config.CLAIM_FREE)
-    Notify("Link Copiado!", "Cole no seu navegador para pegar sua Free Key de 1 dia.", "Success", 5)
-end)
-
---// ======= PREMIUM KEYS =======
-TabAuth:Section("💎 Premium Keys — Comprar com o Dono")
-TabAuth:Paragraph("Como obter Premium", "Keys premium são vendidas diretamente pelo dono do SlenderHub. Após a compra, você receberá a key manualmente.")
-TabAuth:Button("📅 Premium Semanal (7 Dias)", "Copia o link da key semanal (uso interno do dono)", function()
-    setclipboard(Config.CLAIM_PREMIUM_7)
-    Notify("Link Copiado!", "Premium Semanal — 7 dias.", "Success", 3)
-end)
-TabAuth:Button("📆 Premium Mensal (30 Dias)", "Copia o link da key mensal (uso interno do dono)", function()
-    setclipboard(Config.CLAIM_PREMIUM_30)
-    Notify("Link Copiado!", "Premium Mensal — 30 dias.", "Success", 3)
-end)
-TabAuth:Button("♾️ Premium Lifetime", "Copia o link da key vitalícia (uso interno do dono)", function()
-    setclipboard(Config.CLAIM_PREMIUM_LT)
-    Notify("Link Copiado!", "Premium Lifetime — acesso vitalício.", "Success", 3)
-end)
-TabAuth:Button("🛒 Loja SlenderHub", "Abre a loja para comprar planos premium", function()
-    setclipboard(Config.SHOP_URL)
-    Notify("Link Copiado!", "Cole no navegador para acessar a loja.", "Success", 3)
-end)
-
---// ======= LAUNCH BUTTON =======
-TabAuth:Label("── Launch ──")
-TabAuth:Button("🚀 Launch Hub", "Verify and load the game script", function()
-    if not isAccessAuthorized then
-        Notify("Access Denied", "Enter a valid SlenderHub key first.", "Error", 4)
-        return
-    end
-    if not GameModules[CurrentPlaceId] then
-        Notify("Error", "Game not supported yet.", "Error", 3)
-        return
-    end
-
-    local tierLabel = authorizedTier:sub(1,1):upper() .. authorizedTier:sub(2)
-    Notify("Loading...", "Tier: " .. tierLabel, "Success", 2)
-    task.wait(0.5)
-    loadGameScript(authorizedTier)
-end)
-
---// ==============================[ UNIVERSAL TAB ]============================== //--
-local TabUniversal = Window:Tab("Universal")
-
-TabUniversal:Label("--- Performance ---")
-TabUniversal:Button("CPU Optimizer (Low Render)", "Disables 3D rendering to reduce lag", function()
-    RunService:Set3dRenderingEnabled(false)
-    Notify("Optimizer", "3D rendering disabled.", "Success", 3)
-end)
-TabUniversal:Button("Restore Rendering", "Re-enables 3D rendering", function()
-    RunService:Set3dRenderingEnabled(true)
-    Notify("Optimizer", "Rendering restored.", "Success", 3)
-end)
-TabUniversal:Button("Anti-AFK (Enable)", "Prevents disconnection from inactivity", function()
-    local VirtualUser = game:GetService("VirtualUser")
-    LocalPlayer.Idled:Connect(function()
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
     end)
-    Notify("Anti-AFK", "Active! You won't be kicked.", "Success", 3)
-end)
-TabUniversal:Button("Rejoin Server", "Teleports you back into the game", function()
-    game:GetService("TeleportService"):Teleport(CurrentPlaceId, LocalPlayer)
 end)
 
-TabUniversal:Label("--- Account ---")
-TabUniversal:Button("Restaurar Key", "Deleta a chave salva localmente (Re-execute após clicar)", function()
-    if isfile and isfile(KEY_FILE_PATH) then
-        deleteSavedKey()
-        Notify("Key Restaurada", "Sua chave foi removida. Por favor, re-execute o script.", "Success", 5)
-    else
-        Notify("Erro", "Nenhuma chave salva encontrada para deletar.", "Error", 5)
+--================= EGGS TAB =================--
+TabEggs:Label("── Egg System ──")
+
+TabEggs:Dropdown("Select Egg", {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}, "SelectedEgg", function(Value)
+    Flags.SelectedEgg = Value
+end)
+
+TabEggs:Toggle("Auto Open Egg", false, "AutoEgg", "Spams egg opening", function(Value)
+    Flags.AutoEgg = Value
+    task.spawn(function()
+        while Flags.AutoEgg do
+            pcall(function() EggRemote:FireServer(Flags.SelectedEgg) end)
+            task.wait(0.5)
+        end
+    end)
+end)
+
+--================= MISC TAB =================--
+TabMisc:Label("── Teleports ──")
+
+local Worlds = {"Forest", "Desert", "Lava", "Crystal", "Hacker", "Space"}
+TabMisc:Dropdown("Teleport to World", Worlds, "TPWorld", function(Value)
+    local worldId = table.find(Worlds, Value)
+    if worldId then
+        pcall(function() TeleportRemote:InvokeServer("Teleport", worldId) end)
     end
 end)
 
-print("[SlenderHub] Universal V13.0 loaded. PlaceId: " .. tostring(CurrentPlaceId))
+TabMisc:Label("── Others ──")
+
+TabMisc:Toggle("Auto Spin Wheel", false, "AutoSpin", "Automatically spins the daily wheel", function(Value)
+    Flags.AutoSpin = Value
+    task.spawn(function()
+        while Flags.AutoSpin do
+            pcall(function() SpinRemote:FireServer("Spin") end)
+            task.wait(5)
+        end
+    end)
+end)
+
+local btnUGC = TabMisc:Button("Claim UGC Event", "Attempts to claim the current UGC", function()
+    pcall(function() 
+        ReplicatedStorage.Events.NewUGCEvents.ClickedEventClaimButton:FireServer("NextBossEvent") 
+    end)
+end)
+
+--================= PLAYER TAB =================--
+TabPlayer:Slider("WalkSpeed", 16, 250, 16, "SpeedValue", function(Value)
+    Flags.WalkSpeed = Value
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = Value
+    end
+end)
+
+TabPlayer:Slider("JumpPower", 50, 500, 50, "JumpValue", function(Value)
+    Flags.JumpPower = Value
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.JumpPower = Value
+        LocalPlayer.Character.Humanoid.UseJumpPower = true
+    end
+end)
+
+TabPlayer:Toggle("Infinite Jump", false, "InfJump", "Allows you to jump in mid-air", function(Value)
+    Flags.InfJump = Value
+end)
+
+-- Character Loop
+task.spawn(function()
+    while task.wait(0.5) do
+        pcall(function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                LocalPlayer.Character.Humanoid.WalkSpeed = Flags.WalkSpeed
+                if Flags.JumpPower ~= 50 then
+                    LocalPlayer.Character.Humanoid.JumpPower = Flags.JumpPower
+                    LocalPlayer.Character.Humanoid.UseJumpPower = true
+                end
+            end
+        end)
+    end
+end)
+
+-- Infinite Jump Logic
+game:GetService("UserInputService").JumpRequest:Connect(function()
+    if Flags.InfJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid:ChangeState("Jumping")
+    end
+end)
+
+-- Apply Ripples to UGC button
+UISkill.CreateRipple(btnUGC.Instance or btnUGC)
+
+print("[SlenderHub] Punch Simulator Script Loaded. Expertise applied.")
