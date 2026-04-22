@@ -36,16 +36,17 @@ local authorizedDuration = 86400
 local savedLicenseKey    = ""
 
 --// ==============================[ GAME MAPPING ]============================== //--
+-- Each entry: { name = "Display Name", scriptId = "ID_DO_SCRIPT_NO_PAINEL" }
 local GameModules = {
-    [120405647949186] = "Royal Hatchers Script",
-    [4924922222]      = "Brookhaven script",
-    [93787311916283]  = "Horse Race",
-    [82013336390273]  = "Pickaxe Simulator script",
-    [75992362647444]  = "Tap simulator",
-    [76558904092080]  = "The Forge Script",
-    [109983668079237] = "Steal a Branrot(Premium)",
-    [107807115409153] = "Bee Tappers Script",
-    [826437311311]    = "pet simulator 99 script",
+    [120405647949186] = { name = "Royal Hatchers Script",       scriptId = "ID_DO_SCRIPT_NO_PAINEL" },
+    [4924922222]      = { name = "Brookhaven script",           scriptId = "ID_DO_SCRIPT_NO_PAINEL" },
+    [93787311916283]  = { name = "Horse Race",                  scriptId = "ID_DO_SCRIPT_NO_PAINEL" },
+    [82013336390273]  = { name = "Pickaxe Simulator script",    scriptId = "ID_DO_SCRIPT_NO_PAINEL" },
+    [75992362647444]  = { name = "Tap simulator",               scriptId = "ID_DO_SCRIPT_NO_PAINEL" },
+    [76558904092080]  = { name = "The Forge Script",            scriptId = "ID_DO_SCRIPT_NO_PAINEL" },
+    [109983668079237] = { name = "Steal a Branrot(Premium)",    scriptId = "ID_DO_SCRIPT_NO_PAINEL" },
+    [107807115409153] = { name = "Bee Tappers Script",          scriptId = "ID_DO_SCRIPT_NO_PAINEL" },
+    [826437311311]    = { name = "pet simulator 99 script",     scriptId = "ID_DO_SCRIPT_NO_PAINEL" },
 }
 
 --// ==============================[ SINGLETON GUARD ]============================== //--
@@ -171,8 +172,19 @@ local LoaderConfig = {
 
 local function loadGameScriptViaSlenderHub(licenseKey: string)
     -- Use SlenderHub's loader endpoint directly (Luarmor-like flow)
-    local HWID = getHWID()
-    local loaderUrl = Config.SH_LOADER_URL .. "?key=" .. licenseKey .. "&hwid=" .. HWID
+    -- Sends script_id so the backend knows which script to deliver (required for global keys)
+    local HWID     = getHWID()
+    local gameInfo = GameModules[CurrentPlaceId]
+
+    if not gameInfo then
+        warn("[SlenderHub] No mapped script for this game.")
+        return false
+    end
+
+    local loaderUrl = Config.SH_LOADER_URL
+        .. "?script_id=" .. HttpService:UrlEncode(gameInfo.scriptId)
+        .. "&key="       .. HttpService:UrlEncode(licenseKey)
+        .. "&hwid="      .. HttpService:UrlEncode(HWID)
 
     local ok, err = pcall(function()
         loadstring(game:HttpGet(loaderUrl))()
@@ -187,11 +199,12 @@ local function loadGameScriptViaSlenderHub(licenseKey: string)
 end
 
 local function loadGameScript(accessLevel: string)
-    local targetFile = GameModules[CurrentPlaceId]
-    if not targetFile then
+    local targetGame = GameModules[CurrentPlaceId]
+    if not targetGame then
         Notify("SlenderHub", "Game not supported (PlaceId: " .. CurrentPlaceId .. ")", "Error")
         return
     end
+    local targetFile = targetGame.name
 
     -- Set global access level for game scripts to read
     if getgenv then
@@ -289,7 +302,7 @@ pcall(function()
     gameName = game:GetService("MarketplaceService"):GetProductInfo(CurrentPlaceId).Name
 end)
 local statusText = GameModules[CurrentPlaceId]
-    and ("✅ Supported: " .. gameName)
+    and ("✅ Supported: " .. gameName .. " [" .. (GameModules[CurrentPlaceId].scriptId ~= "ID_DO_SCRIPT_NO_PAINEL" and "ID ok" or "⚠ scriptId pendente") .. "]")
     or  ("⚠️ Not Supported (PlaceId: " .. CurrentPlaceId .. ")")
 TabAuth:Paragraph("Game Status", statusText)
 
