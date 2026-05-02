@@ -30,11 +30,26 @@ local Players = game:GetService("Players")
 
 local Player = Players.LocalPlayer
 
--- Tentar carregar a Library de forma segura
+-- Tentar carregar a Library de forma segura (PS99 tem estruturas variadas)
 local Library = nil
-pcall(function()
-    Library = require(ReplicatedStorage:WaitForChild("Library"))
-end)
+local function GetLibrary()
+    local paths = {
+        ReplicatedStorage:FindFirstChild("Library"),
+        ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client")
+    }
+    
+    for _, path in pairs(paths) do
+        if path and path:IsA("ModuleScript") then
+            local s, res = pcall(require, path)
+            if s and res and (res.Network or res.Message) then
+                return res
+            end
+        end
+    end
+    return nil
+end
+
+Library = GetLibrary()
 
 -- Funções Auxiliares
 local function SendWebhook(msg)
@@ -135,11 +150,26 @@ if not game:IsLoaded() then game.Loaded:Wait() end
 -- Verificar PlaceId (Trading Plaza ou Pro Trading Plaza)
 if game.PlaceId == 15502339080 or game.PlaceId == 15588442388 then
     print("✅ Trading Plaza detectada.")
-    -- Esperar a Library carregar (PS99 demora um pouco)
-    task.wait(5)
-    repeat task.wait(1) print("Aguardando Library...") until Library and Library.Network
-    print("🚀 Library Pronta. Iniciando Sniper...")
-    ScanBooths()
+    
+    -- Loop de tentativa de carregamento (máximo 30 segundos)
+    local retries = 0
+    while not (Library and Library.Network) and retries < 30 do
+        Library = GetLibrary()
+        if not (Library and Library.Network) then
+            retries = retries + 1
+            print("⏳ Aguardando Library e Network... (" .. retries .. "/30)")
+            task.wait(1)
+        end
+    end
+    
+    if Library and Library.Network then
+        print("🚀 Library Pronta. Iniciando Sniper...")
+        task.wait(2)
+        ScanBooths()
+    else
+        warn("❌ Erro: Library não carregou a tempo. Trocando de servidor...")
+        ServerHop()
+    end
 else
-    print("❌ Você não está na Trading Plaza. Entre em uma para usar o Sniper.")
+    print("❌ Você não está na Trading Plaza.")
 end
