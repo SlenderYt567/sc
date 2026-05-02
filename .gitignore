@@ -1,310 +1,113 @@
---!strict
 --[[
-    SlenderHub | Punch Simulator (V13.0 - ADVANCED)
-    UI Library: SlenderWind Internal (V13.0 Premium Default)
-    Architect: SlenderHub Lead / Roblox Lua Expert Agent
-    Expertise Applied: [Roblox_Lua_Expert, Roblox_UI_Expert, Roblox_Bypass_Expert]
-    
-    Features: Auto Punch, Auto Fight, Auto Ascend, Auto Altar, Auto Hack, Auto Miner, etc.
+    Pet Simulator 99 - Titanic Booth Sniper
+    Desenvolvido para SlenderHub
 ]]
 
---// 1. Singleton Pattern
-if getgenv().PunchSimulatorLoaded then 
-    warn("[SlenderHub] Instance already active.") 
-    return 
-end
-getgenv().PunchSimulatorLoaded = true
+-- Configurações (Exemplo solicitado pelo usuário)
+_G.ZapHubBoothsSniperSettings = _G.ZapHubBoothsSniperSettings or {
+    MinimumGems = 3000000000, -- 3 Bilhões
+    Items = {},
+    Extras = {
+        ["TitanicPet"] = {
+            {Enabled = true, Tier = nil, Shiny = nil, MaxPrice = 4000000000, PercentageProfit = "0", BlackList = {}}, -- 4 Bilhões
+        },
+        ["HugePet"] = {
+            {Enabled = false, Tier = nil, Shiny = nil, MaxPrice = 0, PercentageProfit = "0", BlackList = {}},
+        }
+    },
+    ServerHop = {
+        Enabled = true,
+        Type = "Normal" -- "Normal", "Pro"
+    },
+    Webhook = {
+        Enabled = false,
+        WebhookURL = "",
+    },
+}
 
---// 2. Load SlenderWind
-local SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
-
---// 3. Services
+-- Serviços
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local LocalPlayer = Players.LocalPlayer
 
---// 4. Remotes & Modules
-local Events = ReplicatedStorage:WaitForChild("Events")
-local Remotes = {
-    Punch = Events:WaitForChild("DamageIncreaseOnClickEvent"),
-    Push = Events:WaitForChild("PushEvent"),
-    Egg = Events:WaitForChild("PlayerPressedKeyOnEgg"),
-    Spin = Events:WaitForChild("SpinWheelEvent"),
-    Ascend = Events:WaitForChild("AscendEvent"),
-    Altar = Events:WaitForChild("ClickedAltarPay"),
-    Hack = Events:WaitForChild("HackEvent"),
-    Miner = Events:WaitForChild("MinerCurrency"),
-    Teleport = Events:WaitForChild("TeleportEvent"),
-    PowerCore = Events:WaitForChild("PowerCore"),
-    WishingWell = Events:WaitForChild("WishingWell"),
-    ClaimAchievement = Events:WaitForChild("ClaimAchievement"),
-    AutoFight = nil -- Loaded via ModuleLoader if needed
-}
+local Player = Players.LocalPlayer
+local Network = ReplicatedStorage:WaitForChild("Network")
+local Library = require(ReplicatedStorage.Library)
 
--- Safe Module Loader
-local function GetModule(name)
-    local ok, mod = pcall(function() return require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild(name)) end)
-    return ok and mod or nil
-end
-
---// 5. Skills Integration
-local UISkill = {}
-function UISkill.Animate(object, properties, info)
-    if not object then return end
-    local tween = TweenService:Create(object, info or TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), properties)
-    tween:Play()
-    return tween
-end
-
-function UISkill.CreateRipple(buttonInstance)
-    if not buttonInstance or not buttonInstance:IsA("GuiObject") then return end
-    buttonInstance.ClipsDescendants = true
-    buttonInstance.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            local ripple = Instance.new("Frame")
-            ripple.Name = "Ripple"
-            ripple.Parent = buttonInstance
-            ripple.BackgroundColor3 = Color3.new(1, 1, 1)
-            ripple.BackgroundTransparency = 0.6
-            ripple.Size = UDim2.new(0, 0, 0, 0)
-            ripple.Position = UDim2.new(0, input.Position.X - buttonInstance.AbsolutePosition.X, 0, input.Position.Y - buttonInstance.AbsolutePosition.Y)
-            ripple.AnchorPoint = Vector2.new(0.5, 0.5)
-            
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(1, 0)
-            corner.Parent = ripple
-            
-            UISkill.Animate(ripple, {
-                Size = UDim2.new(0, buttonInstance.AbsoluteSize.X * 2.5, 0, buttonInstance.AbsoluteSize.X * 2.5),
-                BackgroundTransparency = 1
-            }, TweenInfo.new(0.6))
-            
-            task.delay(0.6, function() ripple:Destroy() end)
-        end
-    end)
-end
-
---// 6. Flags & State
-local Flags = {
-    AutoPunch = false,
-    AutoWin = false,
-    AutoEgg = false,
-    SelectedEgg = "1",
-    AutoMiner = false,
-    AutoAscend = false,
-    AutoAltar = false,
-    AltarType = "gems", -- gems, materials, coins
-    AutoHack = false,
-    AutoWishingWell = false,
-    AutoClaimAchievements = false,
-    
-    -- Character
-    WalkSpeed = 16,
-    JumpPower = 50,
-    InfJump = false
-}
-
---// 7. UI Construction
-local Window = SlenderWind.Window({
-    Name = "SlenderHub | Punch Simulator [ADVANCED]",
-    KeySystem = false,
-    Theme = { Accent = Color3.fromRGB(0, 255, 128) } 
-})
-
-local TabMain = Window:Tab("Main Farm")
-local TabNPC = Window:Tab("Auto Fight")
-local TabEggs = Window:Tab("Eggs")
-local TabMisc = Window:Tab("Misc & World")
-local TabPlayer = Window:Tab("Character")
-
---================= MAIN FARM TAB =================--
-TabMain:Label("── Core Farming ──")
-
-TabMain:Toggle("Auto Punch", false, "AutoPunch", "Train damage automatically", function(v)
-    Flags.AutoPunch = v
-    task.spawn(function()
-        while Flags.AutoPunch do
-            pcall(function() Remotes.Punch:FireServer() end)
-            task.wait(0.01)
-        end
-    end)
-end)
-
-TabMain:Toggle("Auto Win (Push)", false, "AutoWin", "Spam push for victory", function(v)
-    Flags.AutoWin = v
-    task.spawn(function()
-        while Flags.AutoWin do
-            pcall(function() Remotes.Push:FireServer(true) end)
-            task.wait(0.1)
-        end
-    end)
-end)
-
-TabMain:Toggle("Auto Ascend", false, "AutoAscend", "Ascends automatically when ready", function(v)
-    Flags.AutoAscend = v
-    task.spawn(function()
-        while Flags.AutoAscend do
-            pcall(function() Remotes.Ascend:FireServer(true) end)
-            task.wait(5)
-        end
-    end)
-end)
-
-TabMain:Label("── Altar Sacrifice ──")
-
-TabMain:Dropdown("Sacrifice Type", {"gems", "materials", "coins"}, "AltarType", function(v)
-    Flags.AltarType = v
-end)
-
-TabMain:Toggle("Auto Sacrifice", false, "AutoAltar", "Sacrifices resources for damage bonus", function(v)
-    Flags.AutoAltar = v
-    task.spawn(function()
-        while Flags.AutoAltar do
-            pcall(function() Remotes.Altar:FireServer(Flags.AltarType) end)
-            task.wait(2)
-        end
-    end)
-end)
-
---================= AUTO FIGHT TAB =================--
-TabNPC:Label("── NPC Auto Fight ──")
-TabNPC:Paragraph("Info", "Auto Fight uses game's internal combat system to target nearest NPCs.")
-
-TabNPC:Button("Start Auto Fight (Stage 1)", "Starts fight with first stage enemy", function()
-    local fightRemote = GetModule("RemoteHandler") and GetModule("RemoteHandler").GetRemoteEvent("AutoFight")
-    if fightRemote then
-        pcall(function() fightRemote:FireServer("Fight", 1, "1") end)
-        Notify("Auto Fight", "Sent fight command to Stage 1.", "Success")
-    end
-end)
-
-TabNPC:Button("Stop Auto Fight", "Stops current combat", function()
-    local fightRemote = GetModule("RemoteHandler") and GetModule("RemoteHandler").GetRemoteEvent("AutoFight")
-    if fightRemote then
-        pcall(function() fightRemote:FireServer("StopFight") end)
-    end
-end)
-
---================= EGGS TAB =================--
-TabEggs:Label("── Egg System ──")
-
-TabEggs:Dropdown("Select Egg ID", {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"}, "SelectedEgg", function(v)
-    Flags.SelectedEgg = v
-end)
-
-TabEggs:Toggle("Auto Open Egg", false, "AutoEgg", "Spams egg opening", function(v)
-    Flags.AutoEgg = v
-    task.spawn(function()
-        while Flags.AutoEgg do
-            pcall(function() Remotes.Egg:FireServer(Flags.SelectedEgg) end)
-            task.wait(0.5)
-        end
-    end)
-end)
-
---================= MISC TAB =================--
-TabMisc:Label("── Automations ──")
-
-TabMisc:Toggle("Auto Hacker", false, "AutoHack", "Spams hacker begin command", function(v)
-    Flags.AutoHack = v
-    task.spawn(function()
-        while Flags.AutoHack do
-            pcall(function() Remotes.Hack:InvokeServer("Begin") end)
-            task.wait(1)
-        end
-    end)
-end)
-
-TabMisc:Toggle("Auto Wishing Well", false, "AutoWishingWell", "Spams Mega wish", function(v)
-    Flags.AutoWishingWell = v
-    task.spawn(function()
-        while Flags.AutoWishingWell do
-            pcall(function() Remotes.WishingWell:FireServer("Mega") end)
-            task.wait(10)
-        end
-    end)
-end)
-
-TabMisc:Toggle("Auto Claim Miner", false, "AutoMiner", "Claims miner currency", function(v)
-    Flags.AutoMiner = v
-    task.spawn(function()
-        while Flags.AutoMiner do
-            local hitbox = workspace:FindFirstChild("TouchHexagons") and workspace.TouchHexagons:FindFirstChild("MinerHexagon") and workspace.TouchHexagons.MinerHexagon:FindFirstChild("MinerUI") and workspace.TouchHexagons.MinerHexagon.MinerUI:FindFirstChild("HitboxPart")
-            if hitbox then
-                pcall(function() Remotes.Miner:InvokeServer("Claim", hitbox) end)
-            end
-            task.wait(5)
-        end
-    end)
-end)
-
-TabMisc:Toggle("Auto Claim Achievements", false, "AutoClaimAchievements", "Claims all pending achievements", function(v)
-    Flags.AutoClaimAchievements = v
-    task.spawn(function()
-        while Flags.AutoClaimAchievements do
-            -- Simple loop for 1-50 IDs (or based on Data if possible)
-            for i = 1, 50 do
-                pcall(function() Remotes.ClaimAchievement:InvokeServer("Claim", tostring(i)) end)
-            end
-            task.wait(60)
-        end
-    end)
-end)
-
-TabMisc:Label("── Teleports ──")
-local Worlds = {"Forest", "Desert", "Lava", "Crystal", "Hacker", "Space", "Magic", "Heaven", "Hell"}
-TabMisc:Dropdown("Travel to World", Worlds, "TPWorld", function(v)
-    local worldId = table.find(Worlds, v)
-    if worldId then
-        pcall(function() Remotes.Teleport:InvokeServer("Teleport", worldId) end)
-    end
-end)
-
---================= PLAYER TAB =================--
-TabPlayer:Label("── Movement ──")
-
-TabPlayer:Slider("WalkSpeed", 16, 250, 16, "SpeedValue", function(v)
-    Flags.WalkSpeed = v
-end)
-
-TabPlayer:Slider("JumpPower", 50, 500, 50, "JumpValue", function(v)
-    Flags.JumpPower = v
-end)
-
-TabPlayer:Toggle("Infinite Jump", false, "InfJump", "Jump in mid-air", function(v)
-    Flags.InfJump = v
-end)
-
--- Background Character Loop
-task.spawn(function()
-    while task.wait(0.5) do
+-- Funções Auxiliares
+local function SendWebhook(msg)
+    if _G.ZapHubBoothsSniperSettings.Webhook.Enabled and _G.ZapHubBoothsSniperSettings.Webhook.WebhookURL ~= "" then
         pcall(function()
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-            if hum then
-                hum.WalkSpeed = Flags.WalkSpeed
-                if Flags.JumpPower ~= 50 then
-                    hum.JumpPower = Flags.JumpPower
-                    hum.UseJumpPower = true
-                end
-            end
+            request({
+                Url = _G.ZapHubBoothsSniperSettings.Webhook.WebhookURL,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = HttpService:JSONEncode({content = msg})
+            })
         end)
     end
-end)
-
--- Infinite Jump Hook
-game:GetService("UserInputService").JumpRequest:Connect(function()
-    if Flags.InfJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid:ChangeState("Jumping")
-    end
-end)
-
--- Final Premium Touch
-local function Notify(title, text, nType)
-    pcall(function() Window:Notify(title, text, 5, nType or "Success") end)
 end
 
-Notify("SlenderHub", "Punch Simulator Advanced Script Loaded!", "Success")
-print("[SlenderHub] Advanced Punch Simulator Script Active.")
+local function ServerHop()
+    if not _G.ZapHubBoothsSniperSettings.ServerHop.Enabled then return end
+    
+    local PlaceID = game.PlaceId
+    local Servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Desc&limit=100"))
+    
+    for _, s in pairs(Servers.data) do
+        if s.playing < s.maxPlayers and s.id ~= game.JobId then
+            TeleportService:TeleportToPlaceInstance(PlaceID, s.id, Player)
+            break
+        end
+    end
+end
+
+-- Lógica de Compra
+local function PurchaseItem(boothOwnerID, itemUID, price)
+    local success, result = Network.TradingBooth_PurchaseItem:InvokeServer(boothOwnerID, itemUID)
+    if success then
+        warn("!!! ITEM COMPRADO: " .. tostring(itemUID) .. " por " .. tostring(price))
+        SendWebhook("🚀 Titanic comprado por " .. tostring(price) .. " diamantes!")
+    end
+    return success
+end
+
+-- Scanner de Booths
+local function ScanBooths()
+    print("Iniciando scan de booths...")
+    local allListings = Network.TradingBooth_GetAllListings:InvokeServer()
+    
+    for playerID, listings in pairs(allListings) do
+        for itemUID, itemData in pairs(listings) do
+            local itemName = itemData.Item.id or "Unknown"
+            local itemPrice = itemData.Price
+            local isTitanic = string.find(itemName:lower(), "titanic")
+            
+            -- Verificar se é Titanic e está dentro do preço
+            local titanicSettings = _G.ZapHubBoothsSniperSettings.Extras["TitanicPet"][1]
+            
+            if isTitanic and titanicSettings.Enabled then
+                if itemPrice <= titanicSettings.MaxPrice and itemPrice >= _G.ZapHubBoothsSniperSettings.MinimumGems then
+                    print("Titanic Encontrado! Tentando comprar: " .. itemName .. " por " .. itemPrice)
+                    PurchaseItem(playerID, itemUID, itemPrice)
+                end
+            end
+        end
+    end
+    
+    -- Se não encontrou nada ou terminou o scan, server hop
+    task.wait(2)
+    print("Nenhum item encontrado no critério. Mudando de servidor...")
+    ServerHop()
+end
+
+-- Inicialização
+if game.PlaceId == 15502339080 or game.PlaceId == 15588442388 then -- Trading Plaza IDs
+    task.wait(5) -- Esperar carregar
+    ScanBooths()
+else
+    print("Você não está na Trading Plaza. Teleportando...")
+    -- Lógica de teleport para Plaza aqui se necessário
+    -- Recomenda-se entrar manualmente ou via script de teleport
+end
