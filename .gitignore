@@ -1,5 +1,5 @@
 --[[
-    Pet Simulator 99 - Titanic Booth Sniper (ULTIMATE)
+    Pet Simulator 99 - Titanic Booth Sniper (ULTIMATE V2)
     Baseado na lógica oficial do jogo.
 ]]
 
@@ -9,7 +9,7 @@ _G.ZapHubBoothsSniperSettings = _G.ZapHubBoothsSniperSettings or {
     Items = {},
     Extras = {
         ["TitanicPet"] = {
-            {Enabled = true, MaxPrice = 4000000000}, -- 4 Bilhões
+            {Enabled = true, MaxPrice = 4500000000}, -- 5 Bilhões (Aumentado conforme console)
         },
     },
     ServerHop = {
@@ -29,11 +29,34 @@ local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
 
--- Carregar a Library (conforme o dump fornecido)
-local Library = nil
-pcall(function()
-    Library = require(ReplicatedStorage:WaitForChild("Library"))
-end)
+-- Carregar Módulos (Tentativa mais leve e compatível)
+local Network = nil
+local function GetNetwork()
+    -- Tenta pegar de variáveis globais (outros scripts podem ter carregado)
+    if getgenv and getgenv().Network then return getgenv().Network end
+    if _G.Network then return _G.Network end
+    
+    -- Tenta caminhos comuns
+    local paths = {
+        ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client") and ReplicatedStorage.Library.Client:FindFirstChild("Network"),
+        ReplicatedStorage:FindFirstChild("Network")
+    }
+    
+    for _, path in pairs(paths) do
+        if path and path:IsA("ModuleScript") then
+            local s, res = pcall(require, path)
+            if s and res then return res end
+        end
+    end
+    
+    -- Tenta pela Library principal se tudo falhar
+    local s, lib = pcall(require, ReplicatedStorage:FindFirstChild("Library"))
+    if s and lib and lib.Network then return lib.Network end
+    
+    return nil
+end
+
+Network = GetNetwork()
 
 -- Funções Auxiliares
 local function SendWebhook(msg)
@@ -51,11 +74,21 @@ end
 
 local function ServerHop()
     if not _G.ZapHubBoothsSniperSettings.ServerHop.Enabled then return end
-    print("🚀 Buscando novo servidor...")
+    print("🚀 Tentando trocar de servidor (Ignorando Anti-Scam)...")
     
     local PlaceID = game.PlaceId
-    local Servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Desc&limit=100"))
     
+    -- Tenta usar a Remote de teleporte do próprio jogo se disponível
+    pcall(function()
+        if Network then
+            Network.Invoke("TradingBooth_RequestTradingPlaza")
+        end
+    end)
+    
+    task.wait(1)
+    
+    -- Fallback para TeleportService padrão
+    local Servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Desc&limit=100"))
     for _, s in pairs(Servers.data) do
         if s.playing < s.maxPlayers and s.id ~= game.JobId then
             TeleportService:TeleportToPlaceInstance(PlaceID, s.id, Player)
@@ -66,12 +99,10 @@ end
 
 -- Lógica de Compra (Baseada no dump: Booths_RequestPurchase)
 local function PurchaseItem(ownerID, itemUID, price)
-    print("🛒 Tentando comprar item de: " .. tostring(ownerID))
+    print("🛒 Tentando comprar de " .. tostring(ownerID))
     
-    -- No dump vimos que a compra usa Booths_RequestPurchase
-    -- Parametros: ownerID, itemTable, scannerValue
     local success, result = pcall(function()
-        return Library.Network.Invoke("Booths_RequestPurchase", ownerID, {[itemUID] = 1}, -1)
+        return Network.Invoke("Booths_RequestPurchase", ownerID, {[itemUID] = 1}, -1)
     end)
     
     if success and result then
@@ -83,17 +114,16 @@ local function PurchaseItem(ownerID, itemUID, price)
     return false
 end
 
--- Scanner (Baseado no dump)
+-- Scanner
 local function ScanBooths()
-    print("📡 Iniciando varredura de booths...")
+    print("📡 Iniciando varredura...")
     
-    -- Tenta pegar todas as listagens (GetAllListings)
     local success, allListings = pcall(function()
-        return Library.Network.Invoke("Booths_GetAllListings")
+        return Network.Invoke("Booths_GetAllListings")
     end)
     
     if not success or not allListings then
-        warn("⚠️ Falha ao obter listagens. Tentando próximo servidor...")
+        warn("⚠️ Falha ao obter listagens. Pulando servidor...")
         ServerHop()
         return
     end
@@ -105,7 +135,6 @@ local function ScanBooths()
             local itemName = tostring(itemData.Item.id or "")
             local itemPrice = tonumber(itemData.DiamondCost or itemData.Price) or 0
             
-            -- Verificação de Titanic
             if string.find(itemName:lower(), "titanic") and titanicConfig.Enabled then
                 if itemPrice <= titanicConfig.MaxPrice and itemPrice >= _G.ZapHubBoothsSniperSettings.MinimumGems then
                     print("💎 Titanic Detectado: " .. itemName .. " | Preço: " .. itemPrice)
@@ -116,32 +145,32 @@ local function ScanBooths()
     end
     
     task.wait(1)
-    print("✅ Varredura finalizada. Trocando de servidor...")
+    print("✅ Varredura finalizada. Próximo servidor...")
     ServerHop()
 end
 
 -- Inicialização
 if not game:IsLoaded() then game.Loaded:Wait() end
 
--- Verificar se está na Plaza
 if game.PlaceId == 15502339080 or game.PlaceId == 15588442388 then
-    print("📍 Plaza detectada. Aguardando carregamento dos módulos...")
+    print("📍 Plaza detectada. Carregando rede...")
     
     local retries = 0
-    while not (Library and Library.Network) and retries < 40 do
-        pcall(function() Library = require(ReplicatedStorage.Library) end)
+    while not (Network and Network.Invoke) and retries < 40 do
+        Network = GetNetwork()
         retries = retries + 1
         task.wait(1)
+        if retries % 5 == 0 then print("⏳ Tentando carregar rede... (" .. retries .. "/40)") end
     end
     
-    if Library and Library.Network then
-        print("🚀 Sistema pronto. Começando caça aos Titanics...")
-        task.wait(3)
+    if Network and Network.Invoke then
+        print("🚀 Rede carregada com sucesso!")
+        task.wait(2)
         ScanBooths()
     else
-        warn("❌ Erro ao carregar módulos. Pulando servidor...")
+        warn("❌ Falha crítica na rede. Trocando de servidor...")
         ServerHop()
     end
 else
-    print("❌ Script só funciona na Trading Plaza.")
+    print("❌ Use este script apenas na Trading Plaza.")
 end
