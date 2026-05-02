@@ -1,23 +1,20 @@
 --[[
-    Pet Simulator 99 - Titanic Booth Sniper
+    Pet Simulator 99 - Titanic Booth Sniper (REBORN)
     Desenvolvido para SlenderHub
 ]]
 
--- Configurações (Exemplo solicitado pelo usuário)
+-- Configurações
 _G.ZapHubBoothsSniperSettings = _G.ZapHubBoothsSniperSettings or {
     MinimumGems = 3000000000, -- 3 Bilhões
     Items = {},
     Extras = {
         ["TitanicPet"] = {
-            {Enabled = true, Tier = nil, Shiny = nil, MaxPrice = 4000000000, PercentageProfit = "0", BlackList = {}}, -- 4 Bilhões
+            {Enabled = true, Tier = nil, Shiny = nil, MaxPrice = 4000000000, PercentageProfit = "0", BlackList = {}},
         },
-        ["HugePet"] = {
-            {Enabled = false, Tier = nil, Shiny = nil, MaxPrice = 0, PercentageProfit = "0", BlackList = {}},
-        }
     },
     ServerHop = {
         Enabled = true,
-        Type = "Normal" -- "Normal", "Pro"
+        Type = "Normal"
     },
     Webhook = {
         Enabled = false,
@@ -32,8 +29,12 @@ local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 
 local Player = Players.LocalPlayer
-local Network = ReplicatedStorage:WaitForChild("Network")
-local Library = require(ReplicatedStorage.Library)
+
+-- Tentar carregar a Library de forma segura
+local Library = nil
+pcall(function()
+    Library = require(ReplicatedStorage:WaitForChild("Library"))
+end)
 
 -- Funções Auxiliares
 local function SendWebhook(msg)
@@ -51,6 +52,7 @@ end
 
 local function ServerHop()
     if not _G.ZapHubBoothsSniperSettings.ServerHop.Enabled then return end
+    print("🚀 Trocando de servidor...")
     
     local PlaceID = game.PlaceId
     local Servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Desc&limit=100"))
@@ -63,51 +65,81 @@ local function ServerHop()
     end
 end
 
--- Lógica de Compra
-local function PurchaseItem(boothOwnerID, itemUID, price)
-    local success, result = Library.Network.Invoke("TradingBooth_PurchaseItem", boothOwnerID, itemUID)
-    if success then
-        warn("!!! ITEM COMPRADO: " .. tostring(itemUID) .. " por " .. tostring(price))
-        SendWebhook("🚀 Titanic comprado por " .. tostring(price) .. " diamantes!")
+local function PurchaseItem(playerID, itemUID, price)
+    print("🛒 Tentando comprar item " .. itemUID .. " de " .. playerID)
+    local success, result = pcall(function()
+        return Library.Network.Invoke("TradingBooth_PurchaseItem", playerID, itemUID)
+    end)
+    
+    if success and result then
+        warn("!!! ITEM COMPRADO POR " .. price)
+        SendWebhook("🚀 Titanic comprado por " .. price .. " diamantes!")
+        return true
     end
-    return success
+    print("❌ Falha na compra ou item já vendido.")
+    return false
 end
 
--- Scanner de Booths
+-- Scanner Robusto
 local function ScanBooths()
-    print("Iniciando scan de booths...")
-    local allListings = Library.Network.Invoke("TradingBooth_GetAllListings")
+    print("📡 Iniciando scan de booths...")
     
-    for playerID, listings in pairs(allListings) do
-        for itemUID, itemData in pairs(listings) do
-            local itemName = itemData.Item.id or "Unknown"
-            local itemPrice = itemData.Price
-            local isTitanic = string.find(itemName:lower(), "titanic")
-            
-            -- Verificar se é Titanic e está dentro do preço
-            local titanicSettings = _G.ZapHubBoothsSniperSettings.Extras["TitanicPet"][1]
-            
-            if isTitanic and titanicSettings.Enabled then
-                if itemPrice <= titanicSettings.MaxPrice and itemPrice >= _G.ZapHubBoothsSniperSettings.MinimumGems then
-                    print("Titanic Encontrado! Tentando comprar: " .. itemName .. " por " .. itemPrice)
-                    PurchaseItem(playerID, itemUID, itemPrice)
+    -- Tenta pegar os pins (mais confiável em algumas versões)
+    local success, allListings = pcall(function()
+        return Library.Network.Invoke("TradingBooth_GetPins")
+    end)
+    
+    if not success or not allListings then
+        -- Fallback para GetAllListings
+        print("⚠️ GetPins falhou, tentando GetAllListings...")
+        success, allListings = pcall(function()
+            return Library.Network.Invoke("TradingBooth_GetAllListings")
+        end)
+    end
+    
+    if not success or not allListings then
+        warn("❌ Não foi possível obter as booths. Pulando servidor...")
+        ServerHop()
+        return
+    end
+
+    local titanicConfig = _G.ZapHubBoothsSniperSettings.Extras["TitanicPet"][1]
+
+    for playerID, boothData in pairs(allListings) do
+        -- Alguns retornos vem como {Listings = {...}}, outros vem a lista direto
+        local listings = boothData.Listings or boothData
+        
+        if type(listings) == "table" then
+            for itemUID, itemData in pairs(listings) do
+                local itemName = tostring(itemData.Item.id or "")
+                local itemPrice = tonumber(itemData.Price) or 0
+                
+                if string.find(itemName:lower(), "titanic") and titanicConfig.Enabled then
+                    if itemPrice <= titanicConfig.MaxPrice and itemPrice >= _G.ZapHubBoothsSniperSettings.MinimumGems then
+                        print("💎 Titanic Encontrado: " .. itemName .. " | Preço: " .. itemPrice)
+                        PurchaseItem(playerID, itemUID, itemPrice)
+                    end
                 end
             end
         end
     end
     
-    -- Se não encontrou nada ou terminou o scan, server hop
     task.wait(2)
-    print("Nenhum item encontrado no critério. Mudando de servidor...")
+    print("Busca finalizada. Próximo servidor...")
     ServerHop()
 end
 
 -- Inicialização
 if not game:IsLoaded() then game.Loaded:Wait() end
-if game.PlaceId == 15502339080 or game.PlaceId == 15588442388 then -- Trading Plaza IDs
-    repeat task.wait() until Library.Loaded
+
+-- Verificar PlaceId (Trading Plaza ou Pro Trading Plaza)
+if game.PlaceId == 15502339080 or game.PlaceId == 15588442388 then
+    print("✅ Trading Plaza detectada.")
+    -- Esperar a Library carregar (PS99 demora um pouco)
     task.wait(5)
+    repeat task.wait(1) print("Aguardando Library...") until Library and Library.Network
+    print("🚀 Library Pronta. Iniciando Sniper...")
     ScanBooths()
 else
-    print("Você não está na Trading Plaza.")
+    print("❌ Você não está na Trading Plaza. Entre em uma para usar o Sniper.")
 end
