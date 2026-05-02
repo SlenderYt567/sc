@@ -1,175 +1,918 @@
---[[
-    Pet Simulator 99 - Titanic Booth Sniper (REBORN)
-    Desenvolvido para SlenderHub
-]]
+--Help: https://discord.gg/xGucmFjGVD
+local l_Assets_0 = game.ReplicatedStorage:WaitForChild("Assets")
+local r_Functions_0 = require(game.ReplicatedStorage.Library.Functions)
+local r_GUI_0 = require(game.ReplicatedStorage.Library.Client.GUI)
+require(game.ReplicatedStorage.Library.Shared)
+require(game.ReplicatedStorage.Library.Client.UI.ItemUI)
+local r_TradingPlazaCmds_0 = require(game.ReplicatedStorage.Library.Client.TradingPlazaCmds)
+local r_GUIFX_0 = require(game.ReplicatedStorage.Library.Client.GUIFX)
+local r_TabController_0 = require(game.ReplicatedStorage.Library.Client.TabController)
+local r_Save_0 = require(game.ReplicatedStorage.Library.Client.Save)
+local r_PlaceFile_0 = require(game.ReplicatedStorage.Library.Modules.PlaceFile)
+local v1 = r_GUI_0.TradePlazaChoice()
+local l_GreenGradient_0 = l_Assets_0.UI.Gradients.GreenGradient
+local l_BlueGradient_0 = l_Assets_0.UI.Gradients.BlueGradient
+local _ = l_Assets_0.UI.Gradients.GreyGradient
+local l_Contents_0 = v1.Frame.Contents
+local l_Normal_0 = l_Contents_0.Normal
+local l_Pro_0 = l_Contents_0.Pro
+r_Functions_0.Lock()
+local v_u_2 = false
+local function update() --[[ Line: 27 ]]
+	-- upvalues: [1](r) v_u_2, [2](c) r_TradingPlazaCmds_0, [3](c) l_Pro_0, [4](c) r_GUIFX_0, [5](c) l_Normal_0, [6](c) r_GUI_0, [7](c) r_PlaceFile_0, [8](c) r_Functions_0, [9](c) l_BlueGradient_0, [10](c) l_GreenGradient_0
+	if not v_u_2 then
+		v_u_2 = true
+		l_Pro_0.Visible = #r_TradingPlazaCmds_0.GetAvailable() > 1
+		r_GUIFX_0.ButtonFX(l_Normal_0.Option)
+		r_GUI_0.ButtonActivated(l_Normal_0.Option, function() --[[ (unnamed) Line: 35 ]]
+			-- upvalues: [1](r) r_TradingPlazaCmds_0, [2](r) r_PlaceFile_0
+			r_TradingPlazaCmds_0.RequestTradingPlaza(r_PlaceFile_0.LocalPlaces.Trading)
+		end)
+		r_GUIFX_0.ButtonFX(l_Pro_0.Option)
+		r_GUI_0.ButtonActivated(l_Pro_0.Option, function() --[[ (unnamed) Line: 40 ]]
+			-- upvalues: [1](r) r_TradingPlazaCmds_0, [2](r) r_PlaceFile_0
+			r_TradingPlazaCmds_0.RequestTradingPlaza(r_PlaceFile_0.LocalPlaces.ProTrading)
+		end)
+		local l_IsRegularTrading_0 = r_PlaceFile_0.IsRegularTrading
+		local l_IsProTrading_0 = r_PlaceFile_0.IsProTrading
+		r_Functions_0.GradientSwap(l_Normal_0.Option, l_IsRegularTrading_0 and l_BlueGradient_0 or l_GreenGradient_0)
+		r_Functions_0.GradientSwap(l_Pro_0.Option, l_IsProTrading_0 and l_BlueGradient_0 or l_GreenGradient_0)
+	end
+end
+r_TabController_0.AddOpenListener(function(p3, _) --[[ (unnamed) Line: 52 ]]
+	-- upvalues: [1](c) r_Save_0, [2](c) update
+	if p3 == "TradePlazaChoice" then
+		while not r_Save_0.Get() do
+			task.wait()
+		end
+		update()
+	end
+end)
 
--- Configurações
-_G.ZapHubBoothsSniperSettings = _G.ZapHubBoothsSniperSettings or {
-    MinimumGems = 3000000000, -- 3 Bilhões
-    Items = {},
-    Extras = {
-        ["TitanicPet"] = {
-            {Enabled = true, Tier = nil, Shiny = nil, MaxPrice = 4000000000, PercentageProfit = "0", BlackList = {}},
-        },
-    },
-    ServerHop = {
-        Enabled = true,
-        Type = "Normal"
-    },
-    Webhook = {
-        Enabled = false,
-        WebhookURL = "",
-    },
+boothCmds 
+--Help: https://discord.gg/xGucmFjGVD
+local l_LocalPlayer_0 = game.Players.LocalPlayer
+local s_RunService_0 = game:GetService("RunService")
+local r_Items_0 = require(game.ReplicatedStorage.Library.Items)
+local r_AbstractItem_0 = require(game.ReplicatedStorage.Library.Items.AbstractItem)
+local r_BoothsImplementation_0 = require(game.ReplicatedStorage.Library.Types.BoothsImplementation)
+local r_Trading_0 = require(game.ReplicatedStorage.Library.Types.Trading)
+local r_InventorySelect_0 = require(game.ReplicatedStorage.Library.Client.UI.InventorySelect)
+local r_ItemContainerUI_0 = require(game.ReplicatedStorage.Library.Client.UI.ItemContainerUI)
+local r_ItemUI_0 = require(game.ReplicatedStorage.Library.Client.UI.ItemUI)
+local r_WorldFX_0 = require(game.ReplicatedStorage.Library.Client.WorldFX)
+local r_TextInput_0 = require(game.ReplicatedStorage.Library.Client.UI.TextInput)
+require(game.ReplicatedStorage.Library.Client.GUIFX)
+require(game.ReplicatedStorage.Library.Functions)
+local r_InventoryCmds_0 = require(game.ReplicatedStorage.Library.Client.InventoryCmds)
+require(game.ReplicatedStorage.Library.Client.Save)
+require(game.ReplicatedStorage.Library.Client.Message)
+local r_CurrencyCmds_0 = require(game.ReplicatedStorage.Library.Client.CurrencyCmds)
+local r_TabController_0 = require(game.ReplicatedStorage.Library.Client.TabController)
+local r_Interact_0 = require(game.ReplicatedStorage.Library.Client.Interact)
+local r_Functions_0 = require(game.ReplicatedStorage.Library.Functions)
+local r_GUI_0 = require(game.ReplicatedStorage.Library.Client.GUI)
+local r_GUIFX_0 = require(game.ReplicatedStorage.Library.Client.GUIFX)
+require(game.ReplicatedStorage.Library.Shared.Variables)
+local r_Functions_1 = require(game.ReplicatedStorage.Library.Shared.Functions)
+local r_AutoGridLayout_0 = require(game.ReplicatedStorage.Library.Client.AutoGridLayout)
+local r_FFlags_0 = require(game.ReplicatedStorage.Library.Client.FFlags)
+local r_Message_0 = require(game.ReplicatedStorage.Library.Client.Message)
+local r_Network_0 = require(game.ReplicatedStorage.Library.Client.Network)
+local r_Audio_0 = require(game.ReplicatedStorage.Library.Audio)
+local r_Save_0 = require(game.ReplicatedStorage.Library.Client.Save)
+local r_Directory_0 = require(game.ReplicatedStorage.Library.Directory)
+local r_Player_0 = require(game.ReplicatedStorage.Library.Player)
+local r_Signal_0 = require(game.ReplicatedStorage.Library.Signal)
+local r_PetItem_0 = require(game.ReplicatedStorage.Library.Items.PetItem)
+local r_PlaceFile_0 = require(game.ReplicatedStorage.Library.Modules.PlaceFile)
+local r_LuaScanner_0 = require(game.ReplicatedStorage.Library.Modules.LuaScanner)
+local v1 = not r_PlaceFile_0.IsTradingPlaza and r_PlaceFile_0.KeepPlazaOnStudio
+if v1 then
+	v1 = game:GetService("RunService"):IsStudio()
+end
+if not v1 then
+	return {}
+end
+local v2 = r_GUI_0.BoothPrompt()
+local l_Items_0 = v2.Frame.Slots.Items
+local l_Amount_0 = l_Items_0.Desc.Amount
+local l_Slots_0 = l_Items_0.SlotsSection.Slots
+local l_Post_0 = l_Slots_0.Post
+local l_BottomBar_0 = v2.Frame.BottomBar
+local l_Input_0 = l_BottomBar_0.Search.Input
+local l_CloseBooth_0 = l_BottomBar_0.Container.CloseBooth
+local l_Customize_0 = l_BottomBar_0.Container.Customize
+local l_History_0 = l_BottomBar_0.Container.History
+local v3 = r_GUI_0.BoothOtherPlayer()
+local l_Items_1 = v3.Frame.Slots.Items
+local l_Slots_1 = l_Items_1.SlotsSection.Slots
+local l_Input_1 = v3.Frame.BottomBar.Search.Input
+local v_u_4 = nil
+local t_u_5 = {}
+local t_u_6 = {}
+local t_u_7 = {}
+local v_u_8 = false
+local v_u_9 = nil
+local v_u_10 = false
+local v_u_11 = false
+local l_GreenGradient_0 = game.ReplicatedStorage.Assets.UI.Gradients.GreenGradient
+local l_GreyGradient_0 = game.ReplicatedStorage.Assets.UI.Gradients.GreyGradient
+local t_u_12 = {}
+local t13 = {
+	{
+		["ResolutionThreshold"] = 0.65,
+		["PerRow"] = 4,
+		["Padding"] = nil,
+		["Padding"] = UDim2.new(0, 10, 0, 20)
+	},
+	{
+		["ResolutionThreshold"] = 1.2,
+		["PerRow"] = 5,
+		["Padding"] = nil,
+		["Padding"] = UDim2.new(0, 20, 0, 30)
+	},
+	{
+		["ResolutionThreshold"] = (1 / 0),
+		["PerRow"] = 6,
+		["Padding"] = nil,
+		["Padding"] = UDim2.new(0, 20, 0, 30)
+	}
 }
+local t_u_14 = {
+	["MaximumListingsPerPlayer"] = 25
+}
+local v_u_15 = r_AutoGridLayout_0(l_Slots_0, t13, true)
+r_AutoGridLayout_0(l_Slots_1, t13, true)
+local t_u_29 = {
+	["MINE"] = function(p16) --[[ (unnamed) Line: 117 ]]
+		-- upvalues: [1](c) r_Interact_0, [2](c) r_FFlags_0, [3](c) r_Message_0, [4](c) r_TabController_0
+		local l_Interact_0 = p16:FindFirstChild("Interact")
+		local v17 = l_Interact_0 and l_Interact_0.Position or p16:GetPivot() + Vector3.new(0, 6, 0)
+		local v18, v19 = r_Interact_0.Add(v17)
+		v18:Connect(function() --[[ (unnamed) Line: 121 ]]
+			-- upvalues: [1](r) r_FFlags_0, [2](r) r_Message_0, [3](r) r_TabController_0
+			if r_FFlags_0.Get(r_FFlags_0.Keys.Booth) or r_FFlags_0.CanBypass() then
+				r_TabController_0.OpenTab("BoothPrompt")
+			else
+				r_Message_0.New("Sorry! This is disabled right now, try again soon!", {
+					["err"] = true
+				})
+			end
+		end)
+		return v19
+	end,
+	["CLAIM"] = function(p_u_20) --[[ (unnamed) Line: 130 ]]
+		-- upvalues: [1](c) r_Interact_0, [2](c) r_FFlags_0, [3](c) r_Message_0, [4](c) r_Network_0
+		local l_Interact_1 = p_u_20:FindFirstChild("Interact")
+		local v21 = l_Interact_1 and l_Interact_1.Position or p_u_20:GetPivot() + Vector3.new(0, 6, 0)
+		local v22, v23 = r_Interact_0.Add(v21)
+		v22:Connect(function() --[[ (unnamed) Line: 134 ]]
+			-- upvalues: [1](r) r_FFlags_0, [2](r) r_Message_0, [3](r) r_Network_0, [4](c) p_u_20
+			if r_FFlags_0.Get(r_FFlags_0.Keys.Booth) or r_FFlags_0.CanBypass() then
+				if r_Network_0.Invoke("Booths_ClaimBooth", p_u_20:GetAttribute("ID")) then
+					promptRestore()
+				end
+			else
+				r_Message_0.New("Sorry! This is disabled right now, try again soon!", {
+					["err"] = true
+				})
+			end
+		end)
+		return v23
+	end,
+	["OTHER"] = function(p24, p_u_25) --[[ (unnamed) Line: 146 ]]
+		-- upvalues: [1](c) r_Interact_0, [2](c) r_FFlags_0, [3](c) r_Message_0
+		local l_Interact_2 = p24:FindFirstChild("Interact")
+		local v26 = l_Interact_2 and l_Interact_2.Position or p24:GetPivot() + Vector3.new(0, 6, 0)
+		local v27, v28 = r_Interact_0.Add(v26)
+		v27:Connect(function() --[[ (unnamed) Line: 150 ]]
+			-- upvalues: [1](r) r_FFlags_0, [2](r) r_Message_0, [3](c) p_u_25
+			if r_FFlags_0.Get(r_FFlags_0.Keys.Booth) or r_FFlags_0.CanBypass() then
+				if p_u_25 then
+					promptOtherPlayerBooth2(p_u_25.Player)
+				end
+			else
+				r_Message_0.New("Sorry! This is disabled right now, try again soon!", {
+					["err"] = true
+				})
+			end
+		end)
+		return v28
+	end
+}
+function getItemDeal(p30, p31) --[[ Line: 164 ]]
+	if p30 and p31 then
+		local l_RAP_0 = p30:GetRAP()
+		if l_RAP_0 and l_RAP_0 > 0 then
+			return 1.2 * l_RAP_0 <= p31 and 0 or (0.8 * l_RAP_0 <= p31 and p31 <= 1.2 * l_RAP_0 and 1 or (p31 <= 0.8 * l_RAP_0 and 2 or nil))
+		else
+			return nil
+		end
+	else
+		return nil
+	end
+end
+function promptRestore() --[[ Line: 187 ]]
+	-- upvalues: [1](c) r_FFlags_0, [2](c) r_Save_0, [3](c) r_Message_0, [4](c) r_Network_0
+	if r_FFlags_0.Get(r_FFlags_0.Keys.BoothRestoring) then
+		local v32 = r_Save_0.Get()
+		if v32 then
+			if v32.BoothRecovery and next(v32.BoothRecovery) then
+				if r_Message_0.New("Would you like to restore your booth listings?", true) then
+					task.defer(function() --[[ (unnamed) Line: 204 ]]
+						-- upvalues: [1](r) r_Network_0, [2](r) r_Message_0
+						if r_Network_0.Invoke("Booths_Restore") then
+							r_Message_0.New("Your listings have been restored!")
+						else
+							r_Message_0.New("Failed to restore your listings.", {
+								["err"] = true
+							})
+						end
+					end)
+				else
+					r_Network_0.Fire("Booths_WipeSavedListings")
+				end
+			else
+				return
+			end
+		else
+			return
+		end
+	else
+		return
+	end
+end
+function updateScrolling(p33, p34) --[[ Line: 214 ]]
+	local v35 = p33:FindFirstChildOfClass("UIListLayout")
+	local v36 = p33:FindFirstChildOfClass("UIPadding")
+	local v37 = 0
+	if v35 and p34 == "X" then
+		v37 = v37 + v35.AbsoluteContentSize.X
+	elseif v35 and p34 == "Y" then
+		v37 = v37 + v35.AbsoluteContentSize.Y
+	end
+	if v36 and p34 == "X" then
+		v37 = v37 + (v36.PaddingLeft.Offset + v36.PaddingRight.Offset)
+	elseif v36 and p34 == "Y" then
+		v37 = v37 + (v36.PaddingTop.Offset + v36.PaddingBottom.Offset)
+	end
+	if p34 == "X" then
+		p33.CanvasSize = UDim2.new(0, v37, 0, 0)
+	else
+		p33.CanvasSize = UDim2.new(0, 0, 0, v37)
+	end
+end
+function sortListingFrames(p38, p39) --[[ Line: 235 ]]
+	-- upvalues: [1](c) r_ItemContainerUI_0
+	local t40 = {}
+	for v41, v42 in pairs(p39) do
+		table.insert(t40, {
+			["Listing"] = v42,
+			["ListingUID"] = v41
+		})
+	end
+	table.sort(t40, function(p43, p44) --[[ (unnamed) Line: 243 ]]
+		-- upvalues: [1](r) r_ItemContainerUI_0
+		return r_ItemContainerUI_0.Comparators.Default(p43.Listing.Item, p44.Listing.Item)
+	end)
+	for v45, v46 in ipairs(t40) do
+		local v47 = p38:FindFirstChild(v46.ListingUID)
+		if v47 then
+			v47.LayoutOrder = v45
+		end
+	end
+end
+function getByOwnerId(p48) --[[ Line: 255 ]]
+	-- upvalues: [1](c) t_u_5
+	local l_PlayerByUserId_0 = game.Players:GetPlayerByUserId(p48)
+	if l_PlayerByUserId_0 then
+		return t_u_5[l_PlayerByUserId_0]
+	else
+		return nil
+	end
+end
+function getFullInventory() --[[ Line: 263 ]]
+	-- upvalues: [1](c) r_InventoryCmds_0, [2](c) r_Items_0
+	local v49 = r_InventoryCmds_0.Container()
+	if not v49 then
+		return {}
+	end
+	local t50 = {}
+	for _, v51 in pairs(r_Items_0.Types) do
+		for v52, v53 in pairs(v49:All(v51)) do
+			t50[v52] = v53
+		end
+	end
+	return t50
+end
+function customizeBooth() --[[ Line: 277 ]]
+	-- upvalues: [1](c) r_InventorySelect_0, [2](c) r_ItemContainerUI_0, [3](c) r_Items_0, [4](c) r_Network_0, [5](c) r_Message_0
+	local l_Select_0 = r_InventorySelect_0.Select
+	local t54 = {
+		["Title"] = "Select a Booth!",
+		["ClassWhitelist"] = nil,
+		["SelectionMode"] = nil,
+		["QuantityMode"] = nil,
+		["ResolutionSettings"] = nil,
+		["ClassWhitelist"] = { "Booth" },
+		["SelectionMode"] = r_ItemContainerUI_0.SelectionMode.SINGULAR,
+		["QuantityMode"] = r_ItemContainerUI_0.QuantityMode.BINARY,
+		["ResolutionSettings"] = {
+			{
+				["ResolutionThreshold"] = 0.65,
+				["PerRow"] = 4,
+				["Padding"] = nil,
+				["Padding"] = UDim2.new(0, 10, 0, 10)
+			},
+			{
+				["ResolutionThreshold"] = 1.2,
+				["PerRow"] = 5,
+				["Padding"] = nil,
+				["Padding"] = UDim2.new(0, 15, 0, 15)
+			},
+			{
+				["ResolutionThreshold"] = (1 / 0),
+				["PerRow"] = 6,
+				["Padding"] = nil,
+				["Padding"] = UDim2.new(0, 15, 0, 15)
+			}
+		}
+	}
+	local v55, v56 = l_Select_0(t54)
+	if v55 and v56 then
+		local v57 = next(v56)
+		if v57 then
+			local v58 = r_Items_0.Booth:Get(v57)
+			if v58 then
+				if not r_Network_0.Invoke("Booths_ChangeAppearance", v58:GetId()) then
+					r_Message_0.StandardError()
+				end
+			else
+				return
+			end
+		else
+			return
+		end
+	else
+		return
+	end
+end
+function warmupListingButton(p59, p_u_60) --[[ Line: 320 ]]
+	-- upvalues: [1](c) r_GUIFX_0, [2](c) r_Functions_0, [3](c) l_GreyGradient_0, [4](c) l_GreenGradient_0
+	local l_CircularBar_0 = p59.CircularBar
+	local l_Buy_0 = p59.Buy
+	r_GUIFX_0.CircularBar(l_CircularBar_0)
+	task.spawn(function() --[[ (unnamed) Line: 327 ]]
+		-- upvalues: [1](c) l_CircularBar_0, [2](r) r_Functions_0, [3](c) l_Buy_0, [4](r) l_GreyGradient_0, [5](c) p_u_60, [6](r) l_GreenGradient_0
+		l_CircularBar_0.Visible = true
+		r_Functions_0.GradientSwap(l_Buy_0, l_GreyGradient_0)
+		while l_Buy_0.Parent do
+			local _ = p_u_60.Timestamp
+			local v61 = p_u_60.ReadyTimestamp - workspace:GetServerTimeNow()
+			if v61 <= 0 then
+				break
+			end
+			l_CircularBar_0:SetAttribute("Progress", 1 - r_Functions_0.RangeMap(v61, 0, p_u_60.ReadyTimestamp - p_u_60.Timestamp, 0, 1))
+			task.wait()
+		end
+		l_CircularBar_0:Destroy()
+		r_Functions_0.GradientSwap(l_Buy_0, l_GreenGradient_0)
+	end)
+end
+function warmupBuyButton(p_u_62, p_u_63) --[[ Line: 345 ]]
+	-- upvalues: [1](c) r_Functions_0, [2](c) l_GreyGradient_0, [3](c) l_GreenGradient_0
+	task.spawn(function() --[[ (unnamed) Line: 349 ]]
+		-- upvalues: [1](r) r_Functions_0, [2](c) p_u_62, [3](r) l_GreyGradient_0, [4](c) p_u_63, [5](r) l_GreenGradient_0
+		r_Functions_0.GradientSwap(p_u_62, l_GreyGradient_0)
+		while p_u_62.Parent do
+			local v64 = p_u_63.ReadyTimestamp - workspace:GetServerTimeNow()
+			if v64 <= 0 then
+				break
+			end
+			p_u_62.Cost.Amount.Text = ("\240\159\149\146 %*"):format((string.format("%.2f", v64)))
+			task.wait()
+		end
+		r_Functions_0.GradientSwap(p_u_62, l_GreenGradient_0)
+		if p_u_62.Parent then
+			p_u_62.Cost.Amount.Text = "Buy"
+		end
+	end)
+end
+function promptDiamonds(p65) --[[ Line: 366 ]]
+	-- upvalues: [1](c) r_TextInput_0, [2](c) r_Message_0
+	local v66 = p65:GetAmount() == 1 and "How many Diamonds would you like to sell this item for?" or "How many Diamonds would you like to sell EACH item for?"
+	local v67, v68, v69 = r_TextInput_0.Get({
+		["Title"] = "Create a Listing!",
+		["Prompt"] = nil,
+		["DiamondPrompt"] = true,
+		["Placeholder"] = "Price...",
+		["Prompt"] = v66
+	})
+	if v69 then
+		return nil
+	end
+	if not v67 then
+		r_Message_0.New("Please enter a valid amount of Diamonds.", {
+			["err"] = true,
+			["dontRestore"] = true
+		})
+		return nil
+	end
+	local v70 = tonumber(v68)
+	if v70 and (math.floor(v70) == v70 and v70 >= 0) then
+		return v70
+	end
+	r_Message_0.New("Please enter a valid amount of Diamonds.", {
+		["err"] = true,
+		["dontRestore"] = true
+	})
+	return nil
+end
+function updateAllInteracts() --[[ Line: 401 ]]
+	-- upvalues: [1](c) t_u_5, [2](r) v_u_4, [3](c) t_u_6, [4](c) t_u_12, [5](c) t_u_7, [6](c) t_u_29
+	local t71 = {}
+	for _, v72 in pairs(t_u_5) do
+		t71[v72.BoothID] = v72
+	end
+	local v73 = v_u_4 ~= nil
+	for v74, v75 in pairs(t_u_6) do
+		local v76 = t_u_12[v74]
+		local v77 = t71[v74]
+		local v78
+		if v73 then
+			v78 = v77 == v_u_4 and "MINE" or (v77 ~= nil and "OTHER" or nil)
+		else
+			v78 = v77 == nil and "CLAIM" or "OTHER"
+		end
+		if v78 == nil and v76 then
+			v76.cancel()
+			t_u_12[v74] = nil
+		elseif v78 ~= nil and (not v76 or v76.interactType ~= v78) then
+			if v76 and v76.interactType ~= v78 then
+				v76.cancel()
+			end
+			local v79 = t_u_7[v74] or v75
+			t_u_12[v74] = {
+				["interactType"] = v78,
+				["cancel"] = t_u_29[v78](v79, v77)
+			}
+		end
+	end
+end
+function PromptPurchase2(p80, p81) --[[ Line: 441 ]]
+	-- upvalues: [1](c) r_FFlags_0, [2](c) r_Message_0, [3](c) t_u_5, [4](c) r_CurrencyCmds_0, [5](c) r_Functions_0, [6](c) r_Network_0, [7](c) r_LuaScanner_0
+	if not (r_FFlags_0.Get(r_FFlags_0.Keys.Booth) or r_FFlags_0.CanBypass()) then
+		r_Message_0.New("Sorry! This is disabled right now, try again soon!", {
+			["err"] = true
+		})
+		return
+	end
+	if not (r_FFlags_0.Get(r_FFlags_0.Keys.BoothPurchase) or r_FFlags_0.CanBypass()) then
+		r_Message_0.New("Sorry! This is disabled right now, try again soon!", {
+			["err"] = true
+		})
+		return
+	end
+	local l_PlayerByUserId_1 = game.Players:GetPlayerByUserId(p80)
+	if not l_PlayerByUserId_1 then
+		r_Message_0.New("Seller has left the game!", {
+			["err"] = true
+		})
+		return
+	end
+	local v82 = t_u_5[l_PlayerByUserId_1]
+	if not v82 then
+		r_Message_0.New("Seller\'s booth is no longer available.", {
+			["err"] = true
+		})
+		return
+	end
+	local v83 = 0
+	local v84 = 0
+	local t85 = {}
+	for v86, v87 in pairs(p81) do
+		local v88 = v82.Listings[v86]
+		if not v88 then
+			r_Message_0.New("That item is no longer available!", {
+				["err"] = true
+			})
+			return
+		end
+		v83 = v83 + v88.DiamondCost * v87
+		v84 = v84 + 1
+		local v89 = v88.Item:Clone()
+		table.insert(t85, v89:SetAmount(v87))
+	end
+	if not r_CurrencyCmds_0.CanAfford("Diamonds", v83) then
+		r_Message_0.New("You cannot afford that!", {
+			["err"] = true
+		})
+		return
+	end
+	local v90
+	if v84 == 1 and t85[1]:GetAmount() == 1 then
+		v90 = ("Purchase this item for %* diamonds?"):format((r_Functions_0.Commas(v83)))
+	else
+		v90 = ("Purchase these items for %* diamonds?"):format((r_Functions_0.Commas(v83)))
+	end
+	if not r_Message_0.New(v90, true, {
+		["items"] = t85
+	}) then
+		return
+	end
+	local v91 = false
+	for v92, _ in pairs(p81) do
+		local v93 = v82.Listings[v92]
+		local v94 = v93.Item:Clone():SetAmount(1):GetRAP() or 0
+		local v95
+		if v94 > 0 then
+			v95 = v93.DiamondCost >= v94 * 10
+		else
+			v95 = false
+		end
+		if v95 then
+			v91 = true
+			break
+		end
+	end
+	if v91 and not r_Message_0.New("This listing costs much more than usual. Are you sure you\'d like to buy it?", true, {
+		["timedLock"] = 3,
+		["title"] = "Heads Up!",
+		["icon"] = "rbxassetid://15287270574",
+		["iconColor"] = nil,
+		["iconColor"] = Color3.fromRGB(255, 0, 0)
+	}) then
+		return
+	else
+		local v96, v97 = r_Network_0.Invoke("Booths_RequestPurchase", p80, p81, r_LuaScanner_0.Create(-1))
+		if v96 then
+			r_Message_0.New("\226\156\133 Purchase successful!")
+			return
+		elseif v96 or not v97 then
+			r_Message_0.StandardError()
+		else
+			r_Message_0.New(v97, {
+				["err"] = true
+			})
+		end
+	end
+end
+function promptOtherPlayerBooth2(p98) --[[ Line: 538 ]]
+	-- upvalues: [1](r) v_u_9, [2](c) t_u_5, [3](c) r_InventorySelect_0, [4](c) r_Functions_0, [5](c) r_ItemContainerUI_0
+	if p98 then
+		v_u_9 = p98
+		local v99 = v_u_9
+		assert(v99)
+		if t_u_5[v_u_9] then
+			local v_u_100 = true
+			local t_u_101 = {}
+			local t_u_102 = {}
+			local t_u_103 = {}
+			local t_u_104 = {}
+			local t_u_105 = {}
+			task.spawn(function() --[[ (unnamed) Line: 557 ]]
+				-- upvalues: [1](r) v_u_100, [2](r) t_u_5, [3](r) v_u_9, [4](c) t_u_103, [5](c) t_u_105, [6](c) t_u_104, [7](c) t_u_101, [8](c) t_u_102, [9](r) r_InventorySelect_0
+				while v_u_100 do
+					local v106 = t_u_5[v_u_9]
+					if not (v106 and v106.Listings) then
+						break
+					end
+					local l_Listings_0 = v106.Listings
+					local v107 = false
+					for v108, v109 in pairs(l_Listings_0) do
+						if not t_u_103[v108] then
+							local v110 = v109.Item:Clone()
+							v110:SetUID(nil)
+							v110:PopulateUID()
+							local l_UID_0 = v110:GetUID()
+							local v111 = getItemDeal(v110, v109.DiamondCost)
+							if v111 then
+								t_u_105[l_UID_0] = v111
+							end
+							t_u_104[l_UID_0] = v109.DiamondCost
+							t_u_101[l_UID_0] = v108
+							t_u_103[v108] = l_UID_0
+							local v112 = t_u_102
+							table.insert(v112, v110)
+							v107 = true
+						end
+					end
+					for v113 = #t_u_102, 1, -1 do
+						local l_UID_1 = t_u_102[v113]:GetUID()
+						local v114 = t_u_101[l_UID_1]
+						if not l_Listings_0[v114] then
+							t_u_104[l_UID_1] = nil
+							t_u_105[l_UID_1] = nil
+							t_u_101[l_UID_1] = nil
+							t_u_103[v114] = nil
+							table.remove(t_u_102, v113)
+							v107 = true
+						end
+					end
+					if v107 then
+						r_InventorySelect_0.Refresh()
+					end
+					task.wait(0.35)
+				end
+			end)
+			local t116 = {
+				["Title"] = nil,
+				["Icon"] = "rbxassetid://15057348474",
+				["SelectionMode"] = nil,
+				["QuantityMode"] = nil,
+				["HideTotalRAP"] = true,
+				["NoTabs"] = true,
+				["ShowDeal"] = nil,
+				["Permitted"] = nil,
+				["ArrayPopulator"] = nil,
+				["RefreshPopulator"] = true,
+				["PurchaseMode"] = true,
+				["PurchasePrices"] = nil,
+				["Title"] = ("%* Stuff!"):format((r_Functions_0.AddApostrophe(v_u_9.Name))),
+				["SelectionMode"] = r_ItemContainerUI_0.SelectionMode.SINGULAR,
+				["QuantityMode"] = r_ItemContainerUI_0.QuantityMode.NORMAL,
+				["ShowDeal"] = function(p115) --[[ Line: 629 ]] --[[ Name: ShowDeal ]]
+					-- upvalues: [1](c) t_u_105
+					return t_u_105[p115:GetUID()]
+				end,
+				["Permitted"] = function(_) --[[ Line: 633 ]] --[[ Name: Permitted ]]
+					return true
+				end,
+				["ArrayPopulator"] = function() --[[ Line: 636 ]] --[[ Name: ArrayPopulator ]]
+					-- upvalues: [1](c) t_u_102
+					return t_u_102
+				end,
+				["PurchasePrices"] = function() --[[ Line: 641 ]] --[[ Name: PurchasePrices ]]
+					-- upvalues: [1](c) t_u_104
+					return t_u_104
+				end
+			}
+			local v117, v118 = r_InventorySelect_0.Select(t116)
+			v_u_100 = false
+			if v117 and v118 then
+				local t119 = {}
+				for v120, v121 in pairs(v118) do
+					t119[t_u_101[v120]] = v121
+				end
+				if next(t119) then
+					PromptPurchase2(v_u_9.UserId, t11
 
--- Serviços
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local Players = game:GetService("Players")
-
-local Player = Players.LocalPlayer
-
--- Tentar carregar a Library de forma segura (PS99 tem estruturas variadas)
-local Library = nil
-local function GetLibrary()
-    local paths = {
-        ReplicatedStorage:FindFirstChild("Library"),
-        ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Client")
-    }
-    
-    for _, path in pairs(paths) do
-        if path and path:IsA("ModuleScript") then
-            local s, res = pcall(require, path)
-            if s and res and (res.Network or res.Message) then
-                return res
-            end
-        end
-    end
-    return nil
+trading booth
+--Help: https://discord.gg/xGucmFjGVD
+require(game.ReplicatedStorage.Library.Shared.Variables)
+local r_Save_0 = require(game.ReplicatedStorage.Library.Client.Save)
+local r_Functions_0 = require(game.ReplicatedStorage.Library.Functions)
+local r_Network_0 = require(game.ReplicatedStorage.Library.Client.Network)
+local r_Signal_0 = require(game.ReplicatedStorage.Library.Signal)
+require(game.ReplicatedStorage.Library.Client.Message)
+local r_NotificationCmds_0 = require(game.ReplicatedStorage.Library.Client.NotificationCmds)
+local r_PlaceFile_0 = require(game.ReplicatedStorage.Library.Modules.PlaceFile)
+require(game.ReplicatedStorage.Library.Types.Migration)
+return function(p1, p2) --[[ (unnamed) Line: 15 ]]
+	-- upvalues: [1](c) r_PlaceFile_0, [2](c) r_Save_0, [3](c) r_Network_0, [4](c) r_Signal_0, [5](c) r_Functions_0, [6](c) r_NotificationCmds_0
+	if p2.WasMigrated then
+		if r_PlaceFile_0.IsTradingPlaza then
+			if p1.RecentBoothId then
+				if p1.BoothRecovery and next(p1.BoothRecovery) then
+					task.delay(5, function() --[[ (unnamed) Line: 32 ]]
+						-- upvalues: [1](r) r_Save_0, [2](r) r_Network_0, [3](r) r_Signal_0, [4](r) r_Functions_0, [5](r) r_NotificationCmds_0
+						local v3 = r_Save_0.Get()
+						if v3 and v3.RecentBoothId then
+							if v3.BoothRecovery and next(v3.BoothRecovery) then
+								local v4, v5 = r_Network_0.Invoke("Booths_ClaimAnyBooth")
+								if v4 then
+									local v6 = r_Signal_0.Invoke("Booths_GetPlaceholderModelFromID", (tostring(v5)))
+									local v7 = r_Signal_0.Invoke("Booths_GetActiveModel")
+									if v6 then
+										local l_Pivot_0 = v6:GetPivot()
+										r_Functions_0.TeleportCharacterTo((l_Pivot_0 * CFrame.new(0, 0, -8)).Position, (l_Pivot_0 * CFrame.new(0, 0, -12)).Position)
+										if v7 then
+											local l_Booth_0 = v7:FindFirstChild("Booth")
+											if l_Booth_0 and l_Booth_0:FindFirstChild("Seat") then
+												local l_CFrame_0 = l_Booth_0:FindFirstChild("Seat").CFrame
+												task.delay(2, function() --[[ (unnamed) Line: 57 ]]
+													-- upvalues: [1](r) r_Functions_0, [2](c) l_CFrame_0
+													r_Functions_0.TeleportCharacterTo((l_CFrame_0 * CFrame.new(0, 5, 0)).Position)
+												end)
+											end
+										end
+										task.spawn(function() --[[ (unnamed) Line: 65 ]]
+											-- upvalues: [1](r) r_NotificationCmds_0
+											r_NotificationCmds_0.Message.Bottom({
+												["Message"] = "Your booth listings have been automatically restored!",
+												["Color"] = nil,
+												["Color"] = Color3.fromRGB(255, 255, 0)
+											})
+										end)
+									end
+								end
+							end
+						else
+							return
+						end
+					end)
+				end
+			else
+				return
+			end
+		else
+			return
+		end
+	else
+		return
+	end
 end
 
-Library = GetLibrary()
 
--- Funções Auxiliares
-local function SendWebhook(msg)
-    if _G.ZapHubBoothsSniperSettings.Webhook.Enabled and _G.ZapHubBoothsSniperSettings.Webhook.WebhookURL ~= "" then
-        pcall(function()
-            request({
-                Url = _G.ZapHubBoothsSniperSettings.Webhook.WebhookURL,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = HttpService:JSONEncode({content = msg})
-            })
-        end)
-    end
+purchaseblade booth 
+--Help: https://discord.gg/xGucmFjGVD
+local s_CollectionService_0 = game:GetService("CollectionService")
+local s_MarketplaceService_0 = game:GetService("MarketplaceService")
+local s_RunService_0 = game:GetService("RunService")
+local r_Functions_0 = require(game.ReplicatedStorage.Library.Functions)
+local r_FFlags_0 = require(game.ReplicatedStorage.Library.Client.FFlags)
+local r_Message_0 = require(game.ReplicatedStorage.Library.Client.Message)
+local r_Directory_0 = require(game.ReplicatedStorage.Library.Directory)
+local r_Shared_0 = require(game.ReplicatedStorage.Library.Shared)
+local r_Network_0 = require(game.ReplicatedStorage.Library.Client.Network)
+local r_Items_0 = require(game.ReplicatedStorage.Library.Items)
+local r_Interact_0 = require(game.ReplicatedStorage.Library.Client.Interact)
+local r_PlaceFile_0 = require(game.ReplicatedStorage.Library.Modules.PlaceFile)
+local l_Assets_0 = game.ReplicatedStorage:WaitForChild("Assets")
+if r_PlaceFile_0.IsTradingPlaza or s_RunService_0:IsStudio() then
+	local t_u_1 = {}
+	local v_u_2 = r_Functions_0.Lock()
+	function initialInit() --[[ Line: 34 ]]
+		local l_TradingPlaza_0 = workspace:FindFirstChild("TradingPlaza")
+		if l_TradingPlaza_0 then
+			local l_INTERACT_0 = l_TradingPlaza_0:FindFirstChild("INTERACT")
+			if l_INTERACT_0 then
+				local l_PurchasableBooths_0 = l_INTERACT_0:FindFirstChild("PurchasableBooths")
+				if l_PurchasableBooths_0 then
+					init(l_PurchasableBooths_0)
+				end
+			else
+				return
+			end
+		else
+			return
+		end
+	end
+	function init(p3) --[[ Line: 53 ]]
+		-- upvalues: [1](c) r_Directory_0, [2](c) r_Items_0, [3](c) r_Shared_0, [4](c) l_Assets_0, [5](c) s_MarketplaceService_0, [6](r) t_u_1, [7](c) r_Interact_0, [8](c) v_u_2, [9](c) r_FFlags_0, [10](c) r_Message_0, [11](c) r_Functions_0, [12](c) r_Network_0
+		for _, v4 in p3:GetChildren() do
+			local l_StyleID_0 = v4:GetAttribute("StyleID")
+			if l_StyleID_0 then
+				assert(l_StyleID_0)
+				local v5 = r_Directory_0.Booths[l_StyleID_0]
+				if v5 then
+					assert(v5)
+					local v6 = r_Items_0.Booth(l_StyleID_0)
+					assert(v6)
+					local v7
+					if v6:CountAny() > 0 then
+						v7 = v6:IsTradable() == false
+					else
+						v7 = false
+					end
+					local l_DiamondPrice_0 = v5.DiamondPrice
+					local l_ProductId_0 = v5.ProductId
+					if l_ProductId_0 then
+						l_ProductId_0 = r_Shared_0.GetProductByID(v5.ProductId)
+					end
+					assert(l_ProductId_0 or l_DiamondPrice_0)
+					local l_Billboards_0 = l_Assets_0.UI.Booths.Billboards
+					local v_u_8 = (l_DiamondPrice_0 or v7) and l_Billboards_0.DiamondsPurchase:Clone() or l_Billboards_0.RobuxPurchase:Clone()
+					v4.Parent = nil
+					local v9 = v5.Model:Clone()
+					local t10 = {
+						["Booth"] = true,
+						["Backface"] = true,
+						["Backface2"] = true,
+						["BackfaceTop"] = true,
+						["BackfaceBottom"] = true,
+						["Interact"] = true,
+						["SpecialBooth"] = true,
+						["Spiral"] = true,
+						["Mesh"] = true,
+						["light1"] = true,
+						["Pets"] = true,
+						["light2"] = true,
+						["UFO-crystal"] = true,
+						["UFO-glow1"] = true,
+						["UFO-glow2"] = true,
+						["UFO-glow3"] = true,
+						["UFO-transparent"] = true,
+						["UFO Beam"] = true
+					}
+					for _, v11 in ipairs(v9:GetDescendants()) do
+						if not (v11:IsA("ParticleEmitter") or v11:IsA("Attachment")) then
+							if t10[v11.Name] then
+								if v11:IsA("BasePart") then
+									v11.Anchored = true
+								end
+							else
+								v11:Destroy()
+							end
+						end
+					end
+					local l_Backface_0 = v9.Backface
+					assert(l_Backface_0)
+					v_u_8.Parent = v9.Backface
+					if l_DiamondPrice_0 == nil then
+						task.spawn(function() --[[ (unnamed) Line: 128 ]]
+							-- upvalues: [1](c) l_ProductId_0, [2](r) s_MarketplaceService_0, [3](c) v_u_8
+							local v12 = l_ProductId_0
+							assert(v12)
+							local v13, v14 = pcall(function() --[[ (unnamed) Line: 130 ]]
+								-- upvalues: [1](r) s_MarketplaceService_0, [2](r) l_ProductId_0
+								return s_MarketplaceService_0:GetProductInfo(l_ProductId_0.ProductId, "Product")
+							end)
+							if v13 then
+								local l_PriceInRobux_0 = v14.PriceInRobux
+								assert(l_PriceInRobux_0)
+								local l_PriceInRobux_1 = v14.PriceInRobux
+								v_u_8.TextLabel.Text = l_PriceInRobux_1
+							end
+						end)
+					elseif v7 then
+						v_u_8.TextLabel.Text = "Owned!"
+					end
+					v9:PivotTo(v4:GetPivot())
+					v9.Parent = p3
+					t_u_1[l_StyleID_0] = v9
+				end
+			end
+		end
+		for v_u_15, v16 in pairs(t_u_1) do
+			local _ = v16:GetPivot() + Vector3.new(0, 2, 0)
+			local v_u_17 = r_Directory_0.Booths[v_u_15]
+			assert(v_u_17)
+			local l_DiamondPrice_1 = v_u_17.DiamondPrice
+			local l_ProductId_1 = v_u_17.ProductId
+			if l_ProductId_1 then
+				l_ProductId_1 = r_Shared_0.GetProductByID(v_u_17.ProductId)
+			end
+			assert(l_ProductId_1 or l_DiamondPrice_1)
+			local v18, _ = r_Interact_0.Add(v16.Interact, {
+				["label"] = "Buy!"
+			})
+			v18:Connect(function() --[[ (unnamed) Line: 160 ]]
+				-- upvalues: [1](r) v_u_2, [2](r) r_FFlags_0, [3](r) r_Message_0, [4](c) v_u_17, [5](c) l_DiamondPrice_1, [6](r) r_Functions_0, [7](r) r_Network_0, [8](c) v_u_15, [9](c) l_ProductId_1, [10](r) r_Shared_0
+				v_u_2(function() --[[ (unnamed) Line: 161 ]]
+					-- upvalues: [1](r) r_FFlags_0, [2](r) r_Message_0, [3](r) v_u_17, [4](r) l_DiamondPrice_1, [5](r) r_Functions_0, [6](r) r_Network_0, [7](r) v_u_15, [8](r) l_ProductId_1, [9](r) r_Shared_0
+					if r_FFlags_0.Get(r_FFlags_0.Keys.Booth) or r_FFlags_0.CanBypass() then
+						if r_FFlags_0.Get(r_FFlags_0.Keys.BoothStyles) or r_FFlags_0.CanBypass() then
+							if v_u_17.OffSale == true then
+								r_Message_0.New("This isn\'t for sale!")
+							elseif l_DiamondPrice_1 then
+								if not r_Message_0.New("Purchase " .. v_u_17.DisplayName .. " for " .. r_Functions_0.FormatAbbreviated(l_DiamondPrice_1) .. " Diamonds?", true) then
+									return
+								end
+								local v19, v20 = r_Network_0.Invoke("Booths_PurchaseStyle", v_u_15)
+								if not v19 then
+									r_Message_0.New(v20 or "Something went wrong!")
+									return
+								end
+							elseif l_ProductId_1 then
+								r_Shared_0.PromptPurchase.Prompt(l_ProductId_1.ProductId, true)
+							end
+						else
+							r_Message_0.New("Sorry! This is disabled right now, try again soon!", {
+								["err"] = true
+							})
+							return
+						end
+					else
+						r_Message_0.New("Sorry! This is disabled right now, try again soon!", {
+							["err"] = true
+						})
+						return
+					end
+				end)
+			end)
+		end
+	end
+	s_CollectionService_0:GetInstanceAddedSignal("Purchasable Booths"):Connect(function(p21) --[[ (unnamed) Line: 196 ]]
+		init(p21)
+	end)
+	s_CollectionService_0:GetInstanceRemovedSignal("Purchasable Booths"):Connect(function(_) --[[ (unnamed) Line: 200 ]]
+		-- upvalues: [1](r) t_u_1
+		t_u_1 = {}
+	end)
+	initialInit()
+	local t_u_22 = {}
+	s_RunService_0.RenderStepped:Connect(function(p23) --[[ (unnamed) Line: 208 ]]
+		-- upvalues: [1](r) t_u_1, [2](c) r_Directory_0, [3](c) t_u_22
+		for v24, v25 in pairs(t_u_1) do
+			local v26 = r_Directory_0.Booths[v24]
+			if v26.RenderStepped then
+				local v27 = (t_u_22[v24] or 0) + p23
+				t_u_22[v24] = v27
+				v26.RenderStepped(v25, p23, v27)
+			end
+		end
+	end)
 end
 
-local function ServerHop()
-    if not _G.ZapHubBoothsSniperSettings.ServerHop.Enabled then return end
-    print("🚀 Trocando de servidor...")
-    
-    local PlaceID = game.PlaceId
-    local Servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Desc&limit=100"))
-    
-    for _, s in pairs(Servers.data) do
-        if s.playing < s.maxPlayers and s.id ~= game.JobId then
-            TeleportService:TeleportToPlaceInstance(PlaceID, s.id, Player)
-            break
-        end
-    end
-end
-
-local function PurchaseItem(playerID, itemUID, price)
-    print("🛒 Tentando comprar item " .. itemUID .. " de " .. playerID)
-    local success, result = pcall(function()
-        return Library.Network.Invoke("TradingBooth_PurchaseItem", playerID, itemUID)
-    end)
-    
-    if success and result then
-        warn("!!! ITEM COMPRADO POR " .. price)
-        SendWebhook("🚀 Titanic comprado por " .. price .. " diamantes!")
-        return true
-    end
-    print("❌ Falha na compra ou item já vendido.")
-    return false
-end
-
--- Scanner Robusto
-local function ScanBooths()
-    print("📡 Iniciando scan de booths...")
-    
-    -- Tenta pegar os pins (mais confiável em algumas versões)
-    local success, allListings = pcall(function()
-        return Library.Network.Invoke("TradingBooth_GetPins")
-    end)
-    
-    if not success or not allListings then
-        -- Fallback para GetAllListings
-        print("⚠️ GetPins falhou, tentando GetAllListings...")
-        success, allListings = pcall(function()
-            return Library.Network.Invoke("TradingBooth_GetAllListings")
-        end)
-    end
-    
-    if not success or not allListings then
-        warn("❌ Não foi possível obter as booths. Pulando servidor...")
-        ServerHop()
-        return
-    end
-
-    local titanicConfig = _G.ZapHubBoothsSniperSettings.Extras["TitanicPet"][1]
-
-    for playerID, boothData in pairs(allListings) do
-        -- Alguns retornos vem como {Listings = {...}}, outros vem a lista direto
-        local listings = boothData.Listings or boothData
-        
-        if type(listings) == "table" then
-            for itemUID, itemData in pairs(listings) do
-                local itemName = tostring(itemData.Item.id or "")
-                local itemPrice = tonumber(itemData.Price) or 0
-                
-                if string.find(itemName:lower(), "titanic") and titanicConfig.Enabled then
-                    if itemPrice <= titanicConfig.MaxPrice and itemPrice >= _G.ZapHubBoothsSniperSettings.MinimumGems then
-                        print("💎 Titanic Encontrado: " .. itemName .. " | Preço: " .. itemPrice)
-                        PurchaseItem(playerID, itemUID, itemPrice)
-                    end
-                end
-            end
-        end
-    end
-    
-    task.wait(2)
-    print("Busca finalizada. Próximo servidor...")
-    ServerHop()
-end
-
--- Inicialização
-if not game:IsLoaded() then game.Loaded:Wait() end
-
--- Verificar PlaceId (Trading Plaza ou Pro Trading Plaza)
-if game.PlaceId == 15502339080 or game.PlaceId == 15588442388 then
-    print("✅ Trading Plaza detectada.")
-    
-    -- Loop de tentativa de carregamento (máximo 30 segundos)
-    local retries = 0
-    while not (Library and Library.Network) and retries < 30 do
-        Library = GetLibrary()
-        if not (Library and Library.Network) then
-            retries = retries + 1
-            print("⏳ Aguardando Library e Network... (" .. retries .. "/30)")
-            task.wait(1)
-        end
-    end
-    
-    if Library and Library.Network then
-        print("🚀 Library Pronta. Iniciando Sniper...")
-        task.wait(2)
-        ScanBooths()
-    else
-        warn("❌ Erro: Library não carregou a tempo. Trocando de servidor...")
-        ServerHop()
-    end
-else
-    print("❌ Você não está na Trading Plaza.")
-end
