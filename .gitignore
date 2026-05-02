@@ -65,7 +65,7 @@ end
 
 -- Lógica de Compra
 local function PurchaseItem(boothOwnerID, itemUID, price)
-    local success, result = Network.TradingBooth_PurchaseItem:InvokeServer(boothOwnerID, itemUID)
+    local success, result = Library.Network.Invoke("TradingBooth_PurchaseItem", boothOwnerID, itemUID)
     if success then
         warn("!!! ITEM COMPRADO: " .. tostring(itemUID) .. " por " .. tostring(price))
         SendWebhook("🚀 Titanic comprado por " .. tostring(price) .. " diamantes!")
@@ -76,7 +76,7 @@ end
 -- Scanner de Booths
 local function ScanBooths()
     print("Iniciando scan de booths...")
-    local allListings = Network.TradingBooth_GetAllListings:InvokeServer()
+    local allListings = Library.Network.Invoke("TradingBooth_GetAllListings")
     
     for playerID, listings in pairs(allListings) do
         for itemUID, itemData in pairs(listings) do
@@ -103,11 +103,11 @@ local function ScanBooths()
 end
 
 -- Inicialização
+if not game:IsLoaded() then game.Loaded:Wait() end
 if game.PlaceId == 15502339080 or game.PlaceId == 15588442388 then -- Trading Plaza IDs
-    task.wait(5) -- Esperar carregar
+    repeat task.wait() until Library.Loaded
+    task.wait(5)
     ScanBooths()
 else
-    print("Você não está na Trading Plaza. Teleportando...")
-    -- Lógica de teleport para Plaza aqui se necessário
-    -- Recomenda-se entrar manualmente ou via script de teleport
+    print("Você não está na Trading Plaza.")
 end
