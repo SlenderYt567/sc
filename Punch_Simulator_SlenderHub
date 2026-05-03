@@ -46,8 +46,15 @@ local Remotes = {
 
 -- Safe Module Loader
 local function GetModule(name)
-    local ok, mod = pcall(function() return require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild(name)) end)
     return ok and mod or nil
+end
+
+--// 5. Global Helpers
+local Window -- Forward declaration
+local function Notify(title, text, nType)
+    if Window and Window.Notify then
+        pcall(function() Window:Notify(title, text, 5, nType or "Success") end)
+    end
 end
 
 --// 5. Skills Integration
@@ -104,11 +111,14 @@ local Flags = {
     -- Character
     WalkSpeed = 16,
     JumpPower = 50,
-    InfJump = false
+    InfJump = false,
+    
+    -- Eggs
+    TripleEgg = false
 }
 
 --// 7. UI Construction
-local Window = SlenderWind.Window({
+Window = SlenderWind.Window({
     Name = "SlenderHub | Punch Simulator [ADVANCED]",
     KeySystem = false,
     Theme = { Accent = Color3.fromRGB(0, 255, 128) } 
@@ -204,7 +214,11 @@ if CheckPremium() then
         Flags.FastEgg = v
         task.spawn(function()
             while Flags.FastEgg do
-                pcall(function() Remotes.Egg:FireServer(Flags.SelectedEgg) end)
+                pcall(function() 
+                    local eggId = Flags.SelectedEgg
+                    if tonumber(eggId) then eggId = "Egg" .. eggId end
+                    Remotes.Egg:FireServer(eggId, Flags.TripleEgg) 
+                end)
                 task.wait(0.05) -- Very fast bypass
             end
         end)
@@ -258,18 +272,63 @@ end)
 --================= EGGS TAB =================--
 TabEggs:Label("── Egg System ──")
 
-TabEggs:Dropdown("Select Egg ID", {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"}, "SelectedEgg", function(v)
+-- Função para detectar ovos no mapa
+local function GetEggList()
+    local list = {}
+    local eggsFolder = workspace:FindFirstChild("Eggs") or (workspace:FindFirstChild("Scene") and workspace.Scene:FindFirstChild("Eggs"))
+    if eggsFolder then
+        for _, v in pairs(eggsFolder:GetChildren()) do
+            if not table.find(list, v.Name) then
+                table.insert(list, v.Name)
+            end
+        end
+    end
+    
+    -- Se não encontrar nada, usa IDs padrão de 1 a 50
+    if #list == 0 then
+        for i = 1, 50 do table.insert(list, tostring(i)) end
+    end
+    table.sort(list, function(a, b) 
+        local na, nb = tonumber(a), tonumber(b)
+        if na and nb then return na < nb end
+        return a < b 
+    end)
+    return list
+end
+
+local EggList = GetEggList()
+
+TabEggs:Dropdown("Select Egg", EggList, "SelectedEgg", function(v)
     Flags.SelectedEgg = v
+end)
+
+TabEggs:Toggle("Triple Open", false, "TripleEgg", "Use triple hatch if unlocked", function(v)
+    Flags.TripleEgg = v
 end)
 
 TabEggs:Toggle("Auto Open Egg", false, "AutoEgg", "Spams egg opening", function(v)
     Flags.AutoEgg = v
     task.spawn(function()
         while Flags.AutoEgg do
-            pcall(function() Remotes.Egg:FireServer(Flags.SelectedEgg) end)
+            pcall(function() 
+                local eggId = Flags.SelectedEgg
+                -- Se o ID for apenas um número, tenta prefixar com "Egg" pois é o padrão do jogo
+                if tonumber(eggId) then 
+                    eggId = "Egg" .. eggId 
+                end
+                
+                Remotes.Egg:FireServer(eggId, Flags.TripleEgg) 
+            end)
             task.wait(0.5)
         end
     end)
+end)
+
+TabEggs:Button("Refresh Egg List", "Updates the dropdown with found eggs", function()
+    -- Em uma UI real, precisaríamos atualizar o dropdown. 
+    -- Como é uma UI estática carregada, vamos apenas notificar.
+    local newList = GetEggList()
+    Notify("Eggs", "Found " .. #newList .. " eggs in workspace.", "Success")
 end)
 
 --================= MISC TAB =================--
@@ -367,11 +426,6 @@ game:GetService("UserInputService").JumpRequest:Connect(function()
         LocalPlayer.Character.Humanoid:ChangeState("Jumping")
     end
 end)
-
--- Final Premium Touch
-local function Notify(title, text, nType)
-    pcall(function() Window:Notify(title, text, 5, nType or "Success") end)
-end
 
 Notify("SlenderHub", "Punch Simulator Advanced Script Loaded!", "Success")
 print("[SlenderHub] Advanced Punch Simulator Script Active.")
