@@ -41,12 +41,21 @@ local Remotes = {
     PowerCore = Events:WaitForChild("PowerCore"),
     WishingWell = Events:WaitForChild("WishingWell"),
     ClaimAchievement = Events:WaitForChild("ClaimAchievement"),
-    AutoFight = nil -- Loaded via ModuleLoader if needed
+    AutoFight = nil
 }
 
--- Safe Module Loader
+-- FIX 1: GetModule corrigido
 local function GetModule(name)
-    return ok and mod or nil
+    local success, module = pcall(function()
+        return require(ReplicatedStorage:WaitForChild(name))
+    end)
+    
+    if success then
+        return module
+    else
+        warn("[SlenderHub] Failed to load module:", name)
+        return nil
+    end
 end
 
 --// 5. Global Helpers
@@ -103,7 +112,7 @@ local Flags = {
     AutoMiner = false,
     AutoAscend = false,
     AutoAltar = false,
-    AltarType = "gems", -- gems, materials, coins
+    AltarType = "gems",
     AutoHack = false,
     AutoWishingWell = false,
     AutoClaimAchievements = false,
@@ -112,9 +121,6 @@ local Flags = {
     WalkSpeed = 16,
     JumpPower = 50,
     InfJump = false,
-    
-    -- Eggs
-    TripleEgg = false
 }
 
 --// 7. UI Construction
@@ -210,16 +216,16 @@ if CheckPremium() then
         end)
     end)
 
+    -- FIX 3 (Premium Fast Egg): Removido TripleEgg e prefixo "Egg"
     TabPremium:Toggle("Fast Auto Egg (OP Speed)", false, "FastEgg", "Opens eggs with almost NO delay (Bypass)", function(v)
         Flags.FastEgg = v
         task.spawn(function()
             while Flags.FastEgg do
                 pcall(function() 
-                    local eggId = Flags.SelectedEgg
-                    if tonumber(eggId) then eggId = "Egg" .. eggId end
-                    Remotes.Egg:FireServer(eggId, Flags.TripleEgg) 
+                    local eggId = tostring(Flags.SelectedEgg)
+                    Remotes.Egg:FireServer(eggId) 
                 end)
-                task.wait(0.05) -- Very fast bypass
+                task.wait(0.05)
             end
         end)
     end)
@@ -254,46 +260,62 @@ end
 TabNPC:Label("── NPC Auto Fight ──")
 TabNPC:Paragraph("Info", "Auto Fight uses game's internal combat system to target nearest NPCs.")
 
+-- FIX 2: Auto Fight corrigido com GetModule fixado
 TabNPC:Button("Start Auto Fight (Stage 1)", "Starts fight with first stage enemy", function()
-    local fightRemote = GetModule("RemoteHandler") and GetModule("RemoteHandler").GetRemoteEvent("AutoFight")
+    local remoteHandler = GetModule("RemoteHandler")
+    local fightRemote = remoteHandler and remoteHandler.GetRemoteEvent and remoteHandler:GetRemoteEvent("AutoFight")
+
     if fightRemote then
-        pcall(function() fightRemote:FireServer("Fight", 1, "1") end)
+        pcall(function()
+            fightRemote:FireServer("Fight", 1, "1")
+        end)
         Notify("Auto Fight", "Sent fight command to Stage 1.", "Success")
+    else
+        Notify("Error", "AutoFight remote not found.", "Error")
     end
 end)
 
 TabNPC:Button("Stop Auto Fight", "Stops current combat", function()
-    local fightRemote = GetModule("RemoteHandler") and GetModule("RemoteHandler").GetRemoteEvent("AutoFight")
+    local remoteHandler = GetModule("RemoteHandler")
+    local fightRemote = remoteHandler and remoteHandler.GetRemoteEvent and remoteHandler:GetRemoteEvent("AutoFight")
+
     if fightRemote then
-        pcall(function() fightRemote:FireServer("StopFight") end)
+        pcall(function()
+            fightRemote:FireServer("StopFight")
+        end)
     end
 end)
 
 --================= EGGS TAB =================--
 TabEggs:Label("── Egg System ──")
 
--- Função para detectar ovos no mapa
+-- FIX 4: Lista completa de eggs (IDs exatos do remote)
 local function GetEggList()
-    local list = {}
-    local eggsFolder = workspace:FindFirstChild("Eggs") or (workspace:FindFirstChild("Scene") and workspace.Scene:FindFirstChild("Eggs"))
-    if eggsFolder then
-        for _, v in pairs(eggsFolder:GetChildren()) do
-            if not table.find(list, v.Name) then
-                table.insert(list, v.Name)
-            end
-        end
-    end
-    
-    -- Se não encontrar nada, usa IDs padrão de 1 a 50
-    if #list == 0 then
-        for i = 1, 50 do table.insert(list, tostring(i)) end
-    end
-    table.sort(list, function(a, b) 
-        local na, nb = tonumber(a), tonumber(b)
-        if na and nb then return na < nb end
-        return a < b 
-    end)
-    return list
+    return {
+        -- Básicos (numéricos)
+        "1","2","3","4","5","6","7","8","9","10",
+        "11","12","13","14","15","16","17","18","19","20",
+        "21","22","23","24","25","26","27","28","29","30",
+
+        -- Nomeados (do módulo)
+        "Forest2",
+        "SummerEgg",
+        "Season3Egg",
+        "WinterEgg",
+
+        -- Robux Eggs
+        "Robux1","Robux2","Robux3","Robux4","Robux5",
+        "Robux6","Robux7","Robux8","Robux9","Robux10",
+        "Robux11","Robux12","Robux13","Robux14","Robux15",
+        "Robux16","Robux17","Robux18","Robux19","Robux20",
+        "Robux21","Robux22","Robux23","Robux24","Robux25",
+        "Robux26"
+    }
+end
+
+-- Valida se o egg existe na lista antes de usar
+local function IsValidEgg(id)
+    return table.find(GetEggList(), id) ~= nil
 end
 
 local EggList = GetEggList()
@@ -302,33 +324,26 @@ TabEggs:Dropdown("Select Egg", EggList, "SelectedEgg", function(v)
     Flags.SelectedEgg = v
 end)
 
-TabEggs:Toggle("Triple Open", false, "TripleEgg", "Use triple hatch if unlocked", function(v)
-    Flags.TripleEgg = v
-end)
-
+-- FIX 3: Auto Egg corrigido — sem TripleEgg, sem prefixo "Egg", ID direto como string
 TabEggs:Toggle("Auto Open Egg", false, "AutoEgg", "Spams egg opening", function(v)
     Flags.AutoEgg = v
+
     task.spawn(function()
         while Flags.AutoEgg do
-            pcall(function() 
-                local eggId = Flags.SelectedEgg
-                -- Se o ID for apenas um número, tenta prefixar com "Egg" pois é o padrão do jogo
-                if tonumber(eggId) then 
-                    eggId = "Egg" .. eggId 
-                end
-                
-                Remotes.Egg:FireServer(eggId, Flags.TripleEgg) 
+            local eggId = tostring(Flags.SelectedEgg)
+
+            pcall(function()
+                Remotes.Egg:FireServer(eggId)
             end)
-            task.wait(0.5)
+
+            task.wait(0.8)
         end
     end)
 end)
 
 TabEggs:Button("Refresh Egg List", "Updates the dropdown with found eggs", function()
-    -- Em uma UI real, precisaríamos atualizar o dropdown. 
-    -- Como é uma UI estática carregada, vamos apenas notificar.
     local newList = GetEggList()
-    Notify("Eggs", "Found " .. #newList .. " eggs in workspace.", "Success")
+    Notify("Eggs", "Found " .. #newList .. " eggs in list.", "Success")
 end)
 
 --================= MISC TAB =================--
@@ -371,7 +386,6 @@ TabMisc:Toggle("Auto Claim Achievements", false, "AutoClaimAchievements", "Claim
     Flags.AutoClaimAchievements = v
     task.spawn(function()
         while Flags.AutoClaimAchievements do
-            -- Simple loop for 1-50 IDs (or based on Data if possible)
             for i = 1, 50 do
                 pcall(function() Remotes.ClaimAchievement:InvokeServer("Claim", tostring(i)) end)
             end
