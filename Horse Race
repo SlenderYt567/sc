@@ -1,6 +1,6 @@
 --!strict
 --[[
-    Slender Hub - PlatoBoost Edition (V3.1)
+    Slender Hub - PlatoBoost Edition (V3.2 Fixed)
     Architecture: Universal Key System with PlatoBoost
     UI Library: SlenderWind V5 (Internal)
     Integration: PlatoBoost API (Inline)
@@ -15,11 +15,10 @@ local lEncode, lDecode, lDigest = a3, aw, Z;
 
 --//==============================[ PLATOBOOST API CORE ]==============================//--
 local PB = {}
-PB.service = 28805           -- PlatoBoost Service ID
-PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"  -- PlatoBoost Secret
+PB.service = 28805
+PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"
 PB.useNonce = true
 
--- Safe request function
 local function safeRequest(options)
     local req = request or http_request or syn_request or (http and http.request)
     if not req then return nil, "HTTP requests not supported" end
@@ -28,20 +27,23 @@ local function safeRequest(options)
 end
 
 PB.fSetClipboard = setclipboard or toclipboard or function() end
-PB.fGetHwid = gethwid or function() return game:GetService("RbxAnalyticsService"):GetClientId() end
+PB.fGetHwid = gethwid or function()
+    local success, clientId = pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end)
+    if success and clientId then return clientId end
+    return game:GetService("Players").LocalPlayer.UserId
+end
 
 PB.cachedLink = ""
 PB.cachedTime = 0
 PB.host = "https://api.platoboost.com"
 
--- Check connectivity
 local function checkConnectivity()
     local response = safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
     if not response or (response.StatusCode ~= 200 and response.StatusCode ~= 429) then
         PB.host = "https://api.platoboost.net"
     end
 end
-checkConnectivity()
+pcall(checkConnectivity)
 
 function PB.generateNonce()
     local seed = os.time() * 1000 + math.floor(tick() * 1000)
@@ -57,7 +59,7 @@ function PB.cacheLink()
         local response = safeRequest({
             Url = PB.host .. "/public/start",
             Method = "POST",
-            Body = lEncode({service = PB.service, identifier = lDigest(PB.fGetHwid())}),
+            Body = lEncode({service = PB.service, identifier = lDigest(tostring(PB.fGetHwid()))}),
             Headers = {["Content-Type"] = "application/json"}
         })
         if response and response.StatusCode == 200 then
@@ -75,7 +77,7 @@ end
 
 function PB.redeemKey(key)
     local nonce = PB.generateNonce()
-    local body = {identifier = lDigest(PB.fGetHwid()), key = key}
+    local body = {identifier = lDigest(tostring(PB.fGetHwid())), key = key}
     if PB.useNonce then body.nonce = nonce end
     
     local response = safeRequest({
@@ -87,7 +89,7 @@ function PB.redeemKey(key)
     
     if response and response.StatusCode == 200 then
         local decoded = lDecode(response.Body)
-        if decoded and decoded.success and decoded.data.valid then
+        if decoded and decoded.success and decoded.data and decoded.data.valid then
             if PB.useNonce then
                 if decoded.data.hash == lDigest("true" .. "-" .. nonce .. "-" .. PB.secret) then
                     return true, "Success"
@@ -106,7 +108,6 @@ local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 local MarketService = game:GetService("MarketplaceService")
 local CoreGui = game:GetService("CoreGui")
-local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -120,9 +121,8 @@ local CONFIG = {
     PremiumUrl      = "https://www.slenderhub.shop"
 }
 
--- Print store URL on execution
 print("==================================================")
-print("[Slender Hub] Initialized successfully!")
+print("[Slender Hub] Initialized V3.2!")
 print("[Slender Hub] Premium Shop: " .. CONFIG.PremiumUrl)
 print("==================================================")
 
@@ -143,11 +143,13 @@ local CurrentPlaceId = game.PlaceId
 local TARGET_SCRIPT_URL = GAMES_MAP[CurrentPlaceId]
 
 --//==============================[ NOTIFICATION HELPER ]==============================//--
-local Window = nil  -- Serál atribuído após o carregamento da UI
+local Window = nil
 
 local function Notify(title, text, duration, nType)
     if Window and Window.Notify then
-        Window:Notify(title, text, duration or 5, nType or "Success")
+        pcall(function()
+            Window:Notify(title, text, duration or 5, nType or "Success")
+        end)
     else
         pcall(function()
             StarterGui:SetCore("SendNotification", {
@@ -163,23 +165,19 @@ end
 local function StartMainScript()
     local pGui = LocalPlayer:WaitForChild("PlayerGui")
     
-    -- Clean old GUIs
-    if pGui:FindFirstChild(CONFIG.OldGuiName) then 
-        pGui[CONFIG.OldGuiName]:Destroy() 
-        task.wait(0.1)
-    end
     pcall(function()
+        if pGui:FindFirstChild(CONFIG.OldGuiName) then 
+            pGui[CONFIG.OldGuiName]:Destroy() 
+        end
         local coreSlender = CoreGui:FindFirstChild("SlenderWind")
         if coreSlender then coreSlender:Destroy() end
     end)
     
-    -- Check support
     if not TARGET_SCRIPT_URL then
         Notify("Slender Hub", "Game Not Supported (ID: " .. CurrentPlaceId .. ")", 5, "Error")
         return
     end
     
-    -- Execute target script
     local success, err = pcall(function()
         loadstring(game:HttpGet(TARGET_SCRIPT_URL))()
     end)
@@ -191,43 +189,55 @@ end
 
 --//==============================[ SAVE/LOAD KEY ]==============================//--
 local function saveKey(key)
-    if writefile then
-        writefile(CONFIG.KeyFileName, key)
-    end
+    pcall(function()
+        if writefile then writefile(CONFIG.KeyFileName, key) end
+    end)
 end
 
 local function checkSavedKey()
-    if isfile and isfile(CONFIG.KeyFileName) then
-        local savedKey = readfile(CONFIG.KeyFileName)
-        if savedKey and savedKey ~= "" then
-            local success, msg = PB.redeemKey(savedKey)
-            if success then
-                Notify("Slender Hub", "Auto-Login Successful!", 3, "Success")
-                task.wait(0.5)
-                StartMainScript()
-                return true
-            end
+    local hasFile, savedKey = false, ""
+    pcall(function()
+        if isfile and isfile(CONFIG.KeyFileName) then
+            hasFile = true
+            savedKey = readfile(CONFIG.KeyFileName)
+        end
+    end)
+
+    if hasFile and savedKey and savedKey ~= "" then
+        local success, msg = PB.redeemKey(savedKey)
+        if success then
+            Notify("Slender Hub", "Auto-Login Successful!", 3, "Success")
+            task.wait(0.5)
+            StartMainScript()
+            return true
         end
     end
     return false
 end
 
---//==============================[ MAIN LOGIC ]==============================//--
-
+-- Check if script is already running
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 if playerGui:FindFirstChild(CONFIG.MainGuiName) then
     StartMainScript()
     return
 end
 
--- Attempt auto-login
+-- Try Auto-Login
 if checkSavedKey() then return end
 
--- Load UI Library
-local SlenderWind = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"
-))()
+--//==============================[ LOAD UI LIBRARY ]==============================//--
+local SlenderWind = nil
+local uiSuccess, uiErr = pcall(function()
+    SlenderWind = loadstring(game:HttpGet("https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"))()
+end)
 
+if not uiSuccess or not SlenderWind then
+    warn("[Slender Hub] UI Load Failed:", uiErr)
+    Notify("Error", "Failed to load UI Library!", 5, "Error")
+    return
+end
+
+-- Render Window
 Window = SlenderWind.Window({
     Name = CONFIG.HubName,
     KeySystem = false,
@@ -239,6 +249,9 @@ Window = SlenderWind.Window({
 })
 
 local Tab = Window:Tab("Key System")
+
+-- Variable to store key input directly (NO MORE CoreGui Scraping!)
+local enteredKey = ""
 
 --// ------------------------------ [ 📊 Game Status ] ------------------------------ //--
 local gameName = "Unknown Game"
@@ -261,23 +274,18 @@ Tab:Button("💎 BUY PREMIUM • slenderhub.shop", "Copy premium store link to c
 end)
 
 --// ------------------------------ [ 🔑 KEY VALIDATION ] ------------------------------ //--
-Tab:Input("PlatoBoost Key", "Paste your key here...", "PBKey", "Enter your PlatoBoost key", function() end)
+Tab:Input("PlatoBoost Key", "Paste your key here...", "PBKey", "Enter key", function(text)
+    enteredKey = text or ""
+end)
 
 local StatusLabel = Tab:Label("Status: Waiting for input...")
 
 --// ------------------------------ [ 🎯 ACTIONS ] ------------------------------ //--
 Tab:Button("VERIFY KEY", "Check key with PlatoBoost", function()
-    local key = ""
-    pcall(function()
-        for _, v in pairs(CoreGui:GetDescendants()) do
-            if v:IsA("TextBox") and v.PlaceholderText:find("Paste your key") then
-                key = v.Text:gsub("%s+", "")
-            end
-        end
-    end)
+    local cleanKey = enteredKey:gsub("%s+", "")
     
-    if key == "" then
-        Notify("Input Required", "Please enter a key first.", 3, "Warning")
+    if cleanKey == "" then
+        Notify("Input Required", "Please enter a key in the box first.", 3, "Warning")
         StatusLabel:Set("Status: Enter a key!")
         return
     end
@@ -285,9 +293,9 @@ Tab:Button("VERIFY KEY", "Check key with PlatoBoost", function()
     Notify("Checking...", "Verifying with PlatoBoost...", 3)
     StatusLabel:Set("Status: Verifying...")
     
-    local success, msg = PB.redeemKey(key)
+    local success, msg = PB.redeemKey(cleanKey)
     if success then
-        saveKey(key)
+        saveKey(cleanKey)
         StatusLabel:Set("Status: Key Valid!")
         Notify("Success!", "Key Validated! Loading...", 3, "Success")
         task.wait(0.5)
@@ -298,8 +306,8 @@ Tab:Button("VERIFY KEY", "Check key with PlatoBoost", function()
         end)
         StartMainScript()
     else
-        StatusLabel:Set("Status: Invalid (" .. msg .. ")")
-        Notify("Invalid Key", msg, 4, "Error")
+        StatusLabel:Set("Status: Invalid (" .. tostring(msg) .. ")")
+        Notify("Invalid Key", tostring(msg), 4, "Error")
     end
 end)
 
@@ -310,7 +318,7 @@ Tab:Button("GET FREE KEY", "Copy PlatoBoost link to clipboard", function()
     if success then
         pcall(function() PB.fSetClipboard(result) end)
         StatusLabel:Set("Status: Link copied!")
-        Notify("Link Copied!", "Open in browser to get your free key.", 3, "Success")
+        Notify("Link Copied!", "Open in browser to get your key.", 3, "Success")
     else
         StatusLabel:Set("Status: Error (" .. tostring(result) .. ")")
         Notify("Error", tostring(result), 4, "Error")
@@ -326,13 +334,15 @@ Tab:Button("RETRY SAVED KEY", "Try auto-login again", function()
 end)
 
 Tab:Button("CLEAR SAVED KEY", "Delete saved key file", function()
-    if isfile and isfile(CONFIG.KeyFileName) then
-        delfile(CONFIG.KeyFileName)
-        StatusLabel:Set("Status: Saved key deleted")
-        Notify("Cleared", "Saved key deleted.", 2, "Warning")
-    else
-        Notify("Nothing", "No saved key found.", 2)
-    end
+    pcall(function()
+        if isfile and isfile(CONFIG.KeyFileName) then
+            delfile(CONFIG.KeyFileName)
+            StatusLabel:Set("Status: Saved key deleted")
+            Notify("Cleared", "Saved key deleted.", 2, "Warning")
+        else
+            Notify("Nothing", "No saved key found.", 2)
+        end
+    end)
 end)
 
 --// ------------------------------ [ ℹ️ About ] ------------------------------ //--
@@ -346,10 +356,12 @@ Tab:Paragraph("ℹ️ About",
 -- Check saved key notification loop
 task.spawn(function()
     task.wait(1.5)
-    if isfile and isfile(CONFIG.KeyFileName) then
+    local hasKey = false
+    pcall(function()
+        if isfile and isfile(CONFIG.KeyFileName) then hasKey = true end
+    end)
+    if hasKey then
         StatusLabel:Set("Status: Saved key detected.")
         Notify("Saved Key Found", "Use 'RETRY SAVED KEY' to auto-login.", 4, "Warning")
-    else
-        StatusLabel:Set("Status: Waiting for input...")
     end
 end)
