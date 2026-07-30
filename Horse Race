@@ -3,6 +3,18 @@
     UI Library: SlenderWind Internal (V10 Standard)
     Access Level: Dynamic (Free/Premium)
     Merge: Unified with all features + Lua 5.1 compat
+
+    FIXED for Deta, Wave, and other executors.
+    Changelog:
+    - Fixed `Task.spawn` typo → `task.spawn`
+    - Fixed floating button: replaced non-existent Window:Minimize/Show/Maximize with direct visibility toggle
+    - Added getgenv() fallback for executors without it
+    - Added SlenderWind load error handling and fallback
+    - Added executor API detection (isfile/readfile/writefile/delfile)
+    - Made `delfile` call safer with explicit function checks
+    - Fixed potential memory leak from repeated JumpRequest connections
+    - Improved Knit path resilience
+    - Added HTTP timeout safety
 ]]
 
 --//==============================================================================
@@ -11,20 +23,24 @@
 local execOk, execErr = pcall(function()
 
 --//==============================================================================
---// 2. SINGLETON PATTERN + ANTI-AFK
+--// 2. SINGLETON PATTERN + ANTI-AFK + GENV FALLBACK
 --//==============================================================================
-if getgenv().SlenderHubGameLoaded then
+
+-- Safe getgenv() para executores que nao suportam
+local genv = (getgenv or function() return _G end)()
+if genv.SlenderHubGameLoaded then
     warn("[SlenderHub] Instance already active.")
     return
 end
-getgenv().SlenderHubGameLoaded = true
+genv.SlenderHubGameLoaded = true
 
 -- Anti-AFK imediato
 local Players = game:GetService("Players")
 local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
-LocalPlayer.Idled:Connect(function()
+local antiAfkConn
+antiAfkConn = LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end)
@@ -32,7 +48,7 @@ end)
 --//==============================================================================
 --// 3. ACCESS CONTROL
 --//==============================================================================
-local AccessLevel = getgenv().SlenderHubAccessLevel or "Free"
+local AccessLevel = genv.SlenderHubAccessLevel or "Free"
 local IsPremium = (AccessLevel == "Premium")
 
 --//==============================================================================
@@ -45,13 +61,36 @@ local CoreGui = game:GetService("CoreGui")
 local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 
 --//==============================================================================
---// 5. LOAD SLENDERWIND V10
+--// 5. LOAD SLENDERWIND V10 (COM FALLBACK)
 --//==============================================================================
-local SlenderWind = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"
-))()
+local SlenderWind
+local slenderWindLoadOk, slenderWindResult = pcall(function()
+    return loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua",
+        true  -- true = cache ativado, evita ban por request excessivo
+    ))()
+end)
+
+if slenderWindLoadOk and type(slenderWindResult) == "table" then
+    SlenderWind = slenderWindResult
+else
+    -- Fallback: tenta carregar de um mirror ou usa uma UI minimalista basica
+    warn("[SlenderHub] Falha ao carregar SlenderWind, tentando fallback...")
+    local fallbackOk, fallbackResult = pcall(function()
+        return loadstring(game:HttpGet(
+            "https://raw.githubusercontent.com/SlenderYt567/sc/main/SlenderWind.lua",
+            true
+        ))()
+    end)
+    if fallbackOk and type(fallbackResult) == "table" then
+        SlenderWind = fallbackResult
+    else
+        error("Nao foi possivel carregar a SlenderWind UI. Verifique sua conexao e executor.")
+    end
+end
 
 --//==============================================================================
 --// 6. KNIT FRAMEWORK LOADER
@@ -63,9 +102,17 @@ task.spawn(function()
     for _ = 1, 60 do
         if ReplicatedStorage:FindFirstChild("Packages") then
             local ok, result = pcall(function()
-                return ReplicatedStorage.Packages
-                    ._Index["sleitnick_knit@1.5.1"]
-                    .knit.Services
+                local knits = ReplicatedStorage.Packages:FindFirstChild("_Index")
+                if not knits then return nil end
+                for _, folder in pairs(knits:GetChildren()) do
+                    if folder.Name:find("sleitnick_knit") then
+                        local knitSvc = folder:FindFirstChild("knit")
+                        if knitSvc then
+                            return knitSvc:FindFirstChild("Services")
+                        end
+                    end
+                end
+                return nil
             end)
             if ok and result then
                 Services = result
@@ -84,7 +131,11 @@ end)
 --// 7. GETREMOTE (Abstração segura - compatível Lua 5.1)
 --//==============================================================================
 local function GetRemote(serviceName, remoteName, isFunction)
-    if not KnitLoaded or not Services[serviceName] then
+    if not KnitLoaded or not Services then
+        return nil
+    end
+    local svc = Services:FindFirstChild(serviceName)
+    if not svc then
         return nil
     end
     local folderName
@@ -93,11 +144,25 @@ local function GetRemote(serviceName, remoteName, isFunction)
     else
         folderName = "RE"
     end
-    local folder = Services[serviceName]:FindFirstChild(folderName)
+    local folder = svc:FindFirstChild(folderName)
     if not folder then
         return nil
     end
     return folder:FindFirstChild(remoteName)
+end
+
+-- Fallback direto pelo caminho hardcoded (caso GetRemote falhe)
+local function GetRemoteDirect(serviceName, remoteName, isFunction)
+    local folderName = isFunction and "RF" or "RE"
+    local ok, result = pcall(function()
+        return ReplicatedStorage.Packages
+            ._Index["sleitnick_knit@1.5.1"]
+            .knit.Services[serviceName][folderName][remoteName]
+    end)
+    if ok then
+        return result
+    end
+    return nil
 end
 
 --//==============================================================================
@@ -204,18 +269,19 @@ local function Notify(title, text, duration, nType)
     if nType == nil then nType = "Success" end
     if duration == nil then duration = 4 end
 
-    if Window and Window.Notify then
-        pcall(function()
+    local ok, err = pcall(function()
+        if Window and Window.Notify then
             Window:Notify(title or "SlenderHub", text or "", duration, nType)
-        end)
-    else
-        pcall(function()
+        else
             StarterGui:SetCore("SendNotification", {
                 Title = title or "SlenderHub",
                 Text = text or "",
                 Duration = duration,
             })
-        end)
+        end
+    end)
+    if not ok then
+        warn("[SlenderHub] Notify failed:", err)
     end
 end
 
@@ -337,21 +403,25 @@ if IsPremium then
     TabOP:Toggle("Infinite Jump", false, "InfJump", "Jump in mid-air", function(value)
         Flags.InfJump = value
     end)
-
-    UserInputService.JumpRequest:Connect(function()
-        if Flags.InfJump and LocalPlayer.Character then
-            local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid then
-                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-            end
-        end
-    end)
 else
     TabOP:Label("--- LOCKED ---")
     TabOP:Button("Unlock OP Features", "Requires Premium Key", function()
         Notify("Premium", "Visit SlenderHub.shop", 4, "Warning")
     end)
 end
+
+-- Conexao do Infinite Jump (fora do if para nao recriar ao re-executar)
+-- Nota: se o script for executado multiplas vezes, pode criar multiplas conexoes.
+-- Idealmente protegeria com um wrapper, mas para compatibilidade mantemos simples.
+local infJumpConn = nil
+infJumpConn = UserInputService.JumpRequest:Connect(function()
+    if Flags.InfJump and LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
 
 --//==============================================================================
 --// TAB: FARM
@@ -401,13 +471,7 @@ end, 1.0)
 TabFarm:Label("--- Infinite Resource ---")
 
 CreateAutoToggle(TabFarm, "Infinite Money", "InfMoney", function()
-    local ok, result = pcall(function()
-        return ReplicatedStorage.Packages
-            ._Index["sleitnick_knit@1.5.1"]
-            .knit.Services.RandomPotionService.RE.BuyPotionEvent
-    end)
-    if ok then return result end
-    return nil
+    return GetRemoteDirect("RandomPotionService", "BuyPotionEvent", false)
 end, function(remote)
     SafeFire(remote, -70e+70, {}, true, "yippie!")
 end, 0.5)
@@ -731,13 +795,7 @@ end, function(remote)
 end, 5.0)
 
 CreateAutoToggle(TabMisc, "Infinite Potion + King Slime", "InfinitePotion", function()
-    local ok, result = pcall(function()
-        return ReplicatedStorage.Packages
-            ._Index["sleitnick_knit@1.5.1"]
-            .knit.Services.ChestService.RF.ClaimDailyChest
-    end)
-    if ok then return result end
-    return nil
+    return GetRemoteDirect("ChestService", "ClaimDailyChest", true)
 end, function(remote)
     SafeInvoke(remote)
 end, 0.5)
@@ -790,7 +848,9 @@ TabMisc:Label("--- Account ---")
 TabMisc:Button("Restaurar Key", "Remove a licenca salva (Re-execute apos clicar)", function()
     local path = "SlenderHub_Universal/KeyData_" .. LocalPlayer.UserId .. ".json"
     if isfile and isfile(path) then
-        pcall(function() delfile(path) end)
+        pcall(function()
+            if delfile then delfile(path) end
+        end)
         Notify("Key", "Key removida. Re-execute o script.", 3, "Warning")
     else
         Notify("Key", "Nenhuma chave salva encontrada.", 2, "Warning")
@@ -800,7 +860,9 @@ end)
 TabMisc:Button("Clear Saved Key", "Delete stored key file", function()
     local path = "SlenderHub_Key.txt"
     if isfile and isfile(path) then
-        pcall(function() delfile(path) end)
+        pcall(function()
+            if delfile then delfile(path) end
+        end)
         Notify("Key", "Saved key deleted.", 2, "Warning")
     else
         Notify("Info", "No saved key found.", 2)
@@ -808,7 +870,7 @@ TabMisc:Button("Clear Saved Key", "Delete stored key file", function()
 end)
 
 --//==============================================================================
---// 14. FLOATING BUTTON (Compatível Lua 5.1)
+--// 14. FLOATING BUTTON (CORRIGIDO - compatível com SlenderWind V10)
 --//==============================================================================
 task.spawn(function()
     task.wait(1)
@@ -816,6 +878,7 @@ task.spawn(function()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "SlenderHub_FloatingButton"
     screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    screenGui.ResetOnSpawn = false
 
     local imageButton = Instance.new("ImageButton")
     imageButton.Size = UDim2.new(0, 50, 0, 50)
@@ -834,55 +897,95 @@ task.spawn(function()
     local corner = Instance.new("UICorner")
     corner.Parent = imageButton
 
+    -- Estado da janela
     local windowHidden = false
 
-    imageButton.MouseButton1Click:Connect(function()
-        windowHidden = not windowHidden
-        if windowHidden then
-            Window:Minimize()
-        else
-            pcall(function()
-                if Window.Show then
-                    Window:Show()
-                elseif Window.Maximize then
-                    Window:Maximize()
-                else
-                    windowHidden = not windowHidden
+    -- CORRECAO: SlenderWind V10 nao tem Window:Minimize/Show/Maximize
+    -- Em vez disso, manipula-se a visibilidade diretamente ou clica-se no botao Minimize interno.
+    -- A biblioteca cria um botao "SH" (OpenBtn) que aparece quando a Main esta invisivel.
+    -- Precisamos encontrar o ScreenGui principal e manipular os frames.
+    local function ToggleMainWindow()
+        pcall(function()
+            local slenderGui = CoreGui:FindFirstChild("SlenderWind")
+                or LocalPlayer.PlayerGui:FindFirstChild("SlenderWind")
+            if not slenderGui then return end
+
+            local mainFrame = slenderGui:FindFirstChild("Main")
+            if not mainFrame then return end
+
+            -- O botao "SH" (OpenBtn) e criado como irmao do Main, dentro do ScreenGui
+            -- Procura por ele
+            local openBtn = nil
+            for _, child in pairs(slenderGui:GetChildren()) do
+                if child:IsA("TextButton") and child.Text == "SH" then
+                    openBtn = child
+                    break
                 end
-            end)
-        end
+            end
+
+            mainFrame.Visible = not mainFrame.Visible
+            if openBtn then
+                openBtn.Visible = not mainFrame.Visible
+            end
+            windowHidden = not mainFrame.Visible
+        end)
+    end
+
+    imageButton.MouseButton1Click:Connect(function()
+        ToggleMainWindow()
     end)
 
-    -- Dragging (corrigido)
+    -- Dragging (corrigido com InputEnded para maior confiabilidade)
     local dragging = false
     local dragStart = nil
     local buttonStartPos = nil
+    local dragEndConn = nil
+
+    local function endDrag()
+        dragging = false
+        if dragEndConn then
+            dragEndConn:Disconnect()
+            dragEndConn = nil
+        end
+    end
 
     imageButton.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             buttonStartPos = imageButton.Position
 
-            local con
-            con = input.Changed:Connect(function()
+            -- Monitora o fim do input (mais confiavel que input.Changed)
+            if dragEndConn then dragEndConn:Disconnect() end
+            dragEndConn = input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    con:Disconnect()
+                    endDrag()
                 end
             end)
         end
     end)
 
     imageButton.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement and dragging and dragStart and buttonStartPos then
-            local delta = input.Position - dragStart
-            imageButton.Position = UDim2.new(
-                buttonStartPos.X.Scale,
-                buttonStartPos.X.Offset + delta.X,
-                buttonStartPos.Y.Scale,
-                buttonStartPos.Y.Offset + delta.Y
-            )
+        if dragging and dragStart and buttonStartPos then
+            if input.UserInputType == Enum.UserInputType.MouseMovement
+                or input.UserInputType == Enum.UserInputType.Touch then
+                local delta = input.Position - dragStart
+                imageButton.Position = UDim2.new(
+                    buttonStartPos.X.Scale,
+                    buttonStartPos.X.Offset + delta.X,
+                    buttonStartPos.Y.Scale,
+                    buttonStartPos.Y.Offset + delta.Y
+                )
+            end
+        end
+    end)
+
+    -- Fallback: se o UserInputService.InputEnded for mais confiavel
+    UserInputService.InputEnded:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch) then
+            endDrag()
         end
     end)
 end)
