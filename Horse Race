@@ -1,12 +1,12 @@
 --!strict
 --[[
-    Slender Hub - PlatoBoost Edition (V3.2)
+    Slender Hub - PlatoBoost Edition (V3.1)
     Architecture: Universal Key System with PlatoBoost
     UI Library: SlenderWind V5 (Internal)
     Integration: PlatoBoost API (Inline)
     
     Copyright (c) 2026 OYB / SlenderYt. All rights reserved.
-    🛒 Shop: https://www.slenderhub.shop
+    Official Shop: https://www.slenderhub.shop
 ]]
 
 --//==============================[ PLATOBOOST LIBS (SHA-256 + JSON + API) ]==============================//--
@@ -16,7 +16,7 @@ local lEncode, lDecode, lDigest = a3, aw, Z;
 --//==============================[ PLATOBOOST API CORE ]==============================//--
 local PB = {}
 PB.service = 28805           -- PlatoBoost Service ID
-PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"  -- PlatoBoost Secret
+PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"  -- PlatoBoost Secret (ofuscar antes de distribuir)
 PB.useNonce = true
 
 -- Safe request function
@@ -34,7 +34,7 @@ PB.cachedLink = ""
 PB.cachedTime = 0
 PB.host = "https://api.platoboost.com"
 
--- Check connectivity
+-- Check connectivity (with FIXED logic)
 local function checkConnectivity()
     local response = safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
     if not response or (response.StatusCode ~= 200 and response.StatusCode ~= 429) then
@@ -44,6 +44,7 @@ end
 checkConnectivity()
 
 function PB.generateNonce()
+    -- Melhor entropia: seed com tempo + tick
     local seed = os.time() * 1000 + math.floor(tick() * 1000)
     for _ = 1, 5 do seed = seed + math.random(-9999, 9999) end
     math.randomseed(seed % 2^31)
@@ -117,7 +118,7 @@ local CONFIG = {
     MainGuiName     = "SlenderHub_Main",
     HubName         = "Slender Hub | PlatoBoost",
     HubDescription  = "Universal Key System",
-    ShopURL         = "https://www.slenderhub.shop"
+    PremiumUrl      = "https://www.slenderhub.shop"
 }
 
 --//==============================[ SUPPORTED GAMES ]==============================//--
@@ -137,7 +138,7 @@ local CurrentPlaceId = game.PlaceId
 local TARGET_SCRIPT_URL = GAMES_MAP[CurrentPlaceId]
 
 --//==============================[ NOTIFICATION HELPER ]==============================//--
-local Window = nil
+local Window = nil  -- Será atribuído depois que a UI for carregada
 
 local function Notify(title, text, duration, nType)
     if Window and Window.Notify then
@@ -235,26 +236,33 @@ Window = SlenderWind.Window({
 
 local Tab = Window:Tab("Key System")
 
--- Game status
+-- 📊 Game Status
 local gameName = "Unknown Game"
 pcall(function() gameName = MarketService:GetProductInfo(CurrentPlaceId).Name end)
 local statusText = TARGET_SCRIPT_URL and "Supported: " .. gameName or "Unsupported Game"
-Tab:Paragraph("Game Status", statusText .. " (ID: " .. CurrentPlaceId .. ")")
+Tab:Paragraph("📊 Game Status", statusText .. " (ID: " .. CurrentPlaceId .. ")")
 
--- ─── Key Input ───
-Tab:Label("─── Key Validation ───")
+-- 💎 PREMIUM ACCESS
+Tab:Paragraph("💎 PREMIUM ACCESS", 
+    "• Skip Key System forever\n" ..
+    "• Ad-free & Faster Execution\n" ..
+    "• Exclusive Premium Scripts & Features\n" ..
+    "• Priority 24/7 Support\n" ..
+    "• Buy at: " .. CONFIG.PremiumUrl
+)
 
+Tab:Button("💎 BUY PREMIUM • slenderhub.shop", "Copy Premium Store link to clipboard", function()
+    pcall(function() PB.fSetClipboard(CONFIG.PremiumUrl) end)
+    Notify("Premium Store", "Shop link copied to clipboard!\n" .. CONFIG.PremiumUrl, 4, "Success")
+end)
+
+-- 🔑 KEY VALIDATION
 Tab:Input("PlatoBoost Key", "Paste your key here...", "PBKey", "Enter your PlatoBoost key", function() end)
-
--- Status label
 local StatusLabel = Tab:Label("Waiting for input...")
 
--- ─── Actions ───
-Tab:Label("─── Actions ───")
-
--- Verify Key
-Tab:Button("Verify Key", "Check key with PlatoBoost", function()
-    -- Find the TextBox by placeholder
+-- 🎯 ACTIONS
+Tab:Button("VERIFY KEY", "Check key with PlatoBoost", function()
+    -- Procurar o TextBox pelo PlaceholderText
     local key = ""
     pcall(function()
         for _, v in pairs(CoreGui:GetDescendants()) do
@@ -291,8 +299,7 @@ Tab:Button("Verify Key", "Check key with PlatoBoost", function()
     end
 end)
 
--- Get Free Key
-Tab:Button("Get Free Key", "Copy PlatoBoost link to clipboard", function()
+Tab:Button("GET FREE KEY", "Copy PlatoBoost link to clipboard", function()
     Notify("Getting Link...", "Contacting PlatoBoost...", 2)
     StatusLabel:Set("Getting link...")
     local success, result = PB.cacheLink()
@@ -306,29 +313,17 @@ Tab:Button("Get Free Key", "Copy PlatoBoost link to clipboard", function()
     end
 end)
 
--- ─── Premium ───
-Tab:Label("─── Premium ───")
+-- ⚡ QUICK ACTIONS
+Tab:Label("⚡ QUICK ACTIONS")
 
--- Buy Premium
-Tab:Button("Buy Premium - slenderhub.shop", "Copy shop link to clipboard", function()
-    pcall(function() PB.fSetClipboard(CONFIG.ShopURL) end)
-    StatusLabel:Set("Link copied!")
-    Notify("Link Copied!", "Open slenderhub.shop in your browser!", 5, "Success")
-end)
-
--- ─── Quick Actions ───
-Tab:Label("─── Quick Actions ───")
-
--- Retry saved key
-Tab:Button("Retry Saved Key", "Try auto-login again", function()
+Tab:Button("RETRY SAVED KEY", "Try auto-login again", function()
     if not checkSavedKey() then
         StatusLabel:Set("No valid saved key")
         Notify("No Saved Key", "No valid saved key found.", 3, "Warning")
     end
 end)
 
--- Clear saved key
-Tab:Button("Clear Saved Key", "Delete saved key file", function()
+Tab:Button("CLEAR SAVED KEY", "Delete saved key file", function()
     if isfile and isfile(CONFIG.KeyFileName) then
         delfile(CONFIG.KeyFileName)
         StatusLabel:Set("Saved key deleted")
@@ -338,25 +333,24 @@ Tab:Button("Clear Saved Key", "Delete saved key file", function()
     end
 end)
 
--- Info
-Tab:Paragraph("Information", 
+-- ℹ️ About
+Tab:Paragraph("ℹ️ About", 
     "Key System: PlatoBoost\n" ..
     "Keys are hardware-bound (HWID)\n" ..
-    "Saved keys auto-login on next launch\n" ..
-    "─────────────────────────\n" ..
-    "Premium: slenderhub.shop"
+    "Official Shop: " .. CONFIG.PremiumUrl .. "\n" ..
+    "Copyright (c) 2026 OYB / SlenderYt. All rights reserved."
 )
 
 -- Auto-check saved key notification
 task.spawn(function()
     task.wait(1.5)
     if isfile and isfile(CONFIG.KeyFileName) then
-        StatusLabel:Set("Saved key detected. Click Retry to use.")
+        StatusLabel:Set("Saved key detected. Click RETRY to use.")
         Notify("Saved Key Found", "Use 'Retry Saved Key' to auto-login.", 4, "Warning")
     else
         StatusLabel:Set("Enter a key or get one.")
     end
 end)
 
-print("[Slender Hub | PlatoBoost V3.2] Loaded successfully!")
-print("Premium Shop: " .. CONFIG.ShopURL)
+print("[Slender Hub | PlatoBoost] Loaded successfully!")
+print("[Slender Hub] Official Shop: " .. CONFIG.PremiumUrl)
