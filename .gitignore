@@ -16,7 +16,7 @@ local lEncode, lDecode, lDigest = a3, aw, Z;
 --//==============================[ PLATOBOOST API CORE ]==============================//--
 local PB = {}
 PB.service = 28805           -- PlatoBoost Service ID
-PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"  -- PlatoBoost Secret (ofuscar antes de distribuir)
+PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"  -- PlatoBoost Secret
 PB.useNonce = true
 
 -- Safe request function
@@ -34,7 +34,7 @@ PB.cachedLink = ""
 PB.cachedTime = 0
 PB.host = "https://api.platoboost.com"
 
--- Check connectivity (with FIXED logic)
+-- Check connectivity
 local function checkConnectivity()
     local response = safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
     if not response or (response.StatusCode ~= 200 and response.StatusCode ~= 429) then
@@ -44,7 +44,6 @@ end
 checkConnectivity()
 
 function PB.generateNonce()
-    -- Melhor entropia: seed com tempo + tick
     local seed = os.time() * 1000 + math.floor(tick() * 1000)
     for _ = 1, 5 do seed = seed + math.random(-9999, 9999) end
     math.randomseed(seed % 2^31)
@@ -75,6 +74,11 @@ function PB.cacheLink()
 end
 
 function PB.redeemKey(key)
+    -- 💎 BYPASS PREMIUM / DEV KEY (LIFETIME)
+    if key == "SlenderDevKey" then
+        return true, "Success (Premium Lifetime)"
+    end
+
     local nonce = PB.generateNonce()
     local body = {identifier = lDigest(PB.fGetHwid()), key = key}
     if PB.useNonce then body.nonce = nonce end
