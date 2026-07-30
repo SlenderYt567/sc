@@ -1,360 +1,967 @@
 --!strict
 --[[
-    Slender Hub - PlatoBoost Edition (V3.1)
-    Architecture: Universal Key System with PlatoBoost
-    UI Library: SlenderWind V5 (Internal)
-    Integration: PlatoBoost API (Inline)
-    
-    Copyright (c) 2026 OYB / SlenderYt. All rights reserved.
-    Official Shop: https://www.slenderhub.shop
+    SlenderHub | V2 - Horse Race (Architect Edition V11)
+    UI Library: SlenderWind Internal (V10 Standard)
+    Access Level: Dynamic (Free/Premium)
+    Merge: Unified with all features + Security Hardening
+    Changelog: Ver relatório de auditoria completa
 ]]
 
---//==============================[ PLATOBOOST LIBS (SHA-256 + JSON + API) ]==============================//--
-local a=2^32;local b=a-1;local function c(d,e)local f,g=0,1;while d~=0 or e~=0 do local h,i=d%2,e%2;local j=(h+i)%2;f=f+j*g;d=math.floor(d/2)e=math.floor(e/2)g=g*2 end;return f%a end;local function k(d,e,l,...)local m;if e then d=d%a;e=e%a;m=c(d,e)if l then m=k(m,l,...)end;return m elseif d then return d%a else return 0 end end;local function n(d,e,l,...)local m;if e then d=d%a;e=e%a;m=(d+e-c(d,e))/2;if l then m=n(m,l,...)end;return m elseif d then return d%a else return b end end;local function o(p)return b-p end;local function q(d,r)if r<0 then return lshift(d,-r)end;return math.floor(d%2^32/2^r)end;local function s(p,r)if r>31 or r<-31 then return 0 end;return q(p%a,r)end;local function lshift(d,r)if r<0 then return s(d,-r)end;return d*2^r%2^32 end;local function t(p,r)p=p%a;r=r%32;local u=n(p,2^r-1)return s(p,r)+lshift(u,32-r)end;local v={0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2}local function w(x)return string.gsub(x,".",function(l)return string.format("%02x",string.byte(l))end)end;local function y(z,A)local x=""for B=1,A do local C=z%256;x=string.char(C)..x;z=(z-C)/256 end;return x end;local function D(x,B)local A=0;for B=B,B+3 do A=A*256+string.byte(x,B)end;return A end;local function E(F,G)local H=64-(G+9)%64;G=y(8*G,8)F=F.."\128"..string.rep("\0",H)..G;assert(#F%64==0)return F end;local function I(J)J[1]=0x6a09e667;J[2]=0xbb67ae85;J[3]=0x3c6ef372;J[4]=0xa54ff53a;J[5]=0x510e527f;J[6]=0x9b05688c;J[7]=0x1f83d9ab;J[8]=0x5be0cd19;return J end;local function K(F,B,J)local L={}for M=1,16 do L[M]=D(F,B+(M-1)*4)end;for M=17,64 do local N=L[M-15]local O=k(t(N,7),t(N,18),s(N,3))N=L[M-2]L[M]=(L[M-16]+O+L[M-7]+k(t(N,17),t(N,19),s(N,10)))%a end;local d,e,l,P,Q,R,S,T=J[1],J[2],J[3],J[4],J[5],J[6],J[7],J[8]for B=1,64 do local O=k(t(d,2),t(d,13),t(d,22))local U=k(n(d,e),n(d,l),n(e,l))local V=(O+U)%a;local W=k(t(Q,6),t(Q,11),t(Q,25))local X=k(n(Q,R),n(o(Q),S))local Y=(T+W+X+v[B]+L[B])%a;T=S;S=R;R=Q;Q=(P+Y)%a;P=l;l=e;e=d;d=(Y+V)%a end;J[1]=(J[1]+d)%a;J[2]=(J[2]+e)%a;J[3]=(J[3]+l)%a;J[4]=(J[4]+P)%a;J[5]=(J[5]+Q)%a;J[6]=(J[6]+R)%a;J[7]=(J[7]+S)%a;J[8]=(J[8]+T)%a end;local function Z(F)F=E(F,#F)local J=I({})for B=1,#F,64 do K(F,B,J)end;return w(y(J[1],4)..y(J[2],4)..y(J[3],4)..y(J[4],4)..y(J[5],4)..y(J[6],4)..y(J[7],4)..y(J[8],4))end;local e;local l={["\\"]="\\",["\""]="\"",["\b"]="b",["\f"]="f",["\n"]="n",["\r"]="r",["\t"]="t"}local P={["/"]="/"}for Q,R in pairs(l)do P[R]=Q end;local S=function(T)return"\\"..(l[T]or string.format("u%04x",T:byte()))end;local B=function(M)return"null"end;local v=function(M,z)local _={}z=z or{}if z[M]then error("circular reference")end;z[M]=true;if rawget(M,1)~=nil or next(M)==nil then local A=0;for Q in pairs(M)do if type(Q)~="number"then error("invalid table: mixed or invalid key types")end;A=A+1 end;if A~=#M then error("invalid table: sparse array")end;for a0,R in ipairs(M)do table.insert(_,e(R,z))end;z[M]=nil;return"["..table.concat(_,",").."]"else for Q,R in pairs(M)do if type(Q)~="string"then error("invalid table: mixed or invalid key types")end;table.insert(_,e(Q,z)..":"..e(R,z))end;z[M]=nil;return"{"..table.concat(_,",").."}"end end;local g=function(M)return'"'..M:gsub('[%z\1-\31\\"]',S)..'"'end;local a1=function(M)if M~=M or M<=-math.huge or M>=math.huge then error("unexpected number value '"..tostring(M).."'")end;return string.format("%.14g",M)end;local j={["nil"]=B,["table"]=v,["string"]=g,["number"]=a1,["boolean"]=tostring}e=function(M,z)local x=type(M)local a2=j[x]if a2 then return a2(M,z)end;error("unexpected type '"..x.."'")end;local a3=function(M)return e(M)end;local a4;local N=function(...)local _={}for a0=1,select("#",...)do _[select(a0,...)]=true end;return _ end;local L=N(" ","\t","\r","\n")local p=N(" ","\t","\r","\n","]","}",",")local a5=N("\\","/",'"',"b","f","n","r","t","u")local m=N("true","false","null")local a6={["true"]=true,["false"]=false,["null"]=nil}local a7=function(a8,a9,aa,ab)for a0=a9,#a8 do if aa[a8:sub(a0,a0)]~=ab then return a0 end end;return#a8+1 end;local ac=function(a8,a9,J)local ad=1;local ae=1;for a0=1,a9-1 do ae=ae+1;if a8:sub(a0,a0)=="\n"then ad=ad+1;ae=1 end end;error(string.format("%s at line %d col %d",J,ad,ae))end;local af=function(A)local a2=math.floor;if A<=0x7f then return string.char(A)elseif A<=0x7ff then return string.char(a2(A/64)+192,A%64+128)elseif A<=0xffff then return string.char(a2(A/4096)+224,a2(A%4096/64)+128,A%64+128)elseif A<=0x10ffff then return string.char(a2(A/262144)+240,a2(A%262144/4096)+128,a2(A%4096/64)+128,A%64+128)end;error(string.format("invalid unicode codepoint '%x'",A))end;local ag=function(ah)local ai=tonumber(ah:sub(1,4),16)local aj=tonumber(ah:sub(7,10),16)if aj then return af((ai-0xd800)*0x400+aj-0xdc00+0x10000)else return af(ai)end end;local ak=function(a8,a0)local _=""local al=a0+1;local Q=al;while al<=#a8 do local am=a8:byte(al)if am<32 then ac(a8,al,"control character in string")elseif am==92 then _=_..a8:sub(Q,al-1)al=al+1;local T=a8:sub(al,al)if T=="u"then local an=a8:match("^[dD][89aAbB]%x%x\\u%x%x%x%x",al+1)or a8:match("^%x%x%x%x",al+1)or ac(a8,al-1,"invalid unicode escape in string")_=_..ag(an)al=al+#an else if not a5[T]then ac(a8,al-1,"invalid escape char '"..T.."' in string")end;_=_..P[T]end;Q=al+1 elseif am==34 then _=_..a8:sub(Q,al-1)return _,al+1 end;al=al+1 end;ac(a8,a0,"expected closing quote for string")end;local ao=function(a8,a0)local am=a7(a8,a0,p)local ah=a8:sub(a0,am-1)local A=tonumber(ah)if not A then ac(a8,a0,"invalid number '"..ah.."'")end;return A,am end;local ap=function(a8,a0)local am=a7(a8,a0,p)local aq=a8:sub(a0,am-1)if not m[aq]then ac(a8,a0,"invalid literal '"..aq.."'")end;return a6[aq],am end;local ar=function(a8,a0)local _={}local A=1;a0=a0+1;while 1 do local am;a0=a7(a8,a0,L,true)if a8:sub(a0,a0)=="]"then a0=a0+1;break end;am,a0=a4(a8,a0)_[A]=am;A=A+1;a0=a7(a8,a0,L,true)local as=a8:sub(a0,a0)a0=a0+1;if as=="]"then break end;if as~=","then ac(a8,a0,"expected ']' or ','")end end;return _,a0 end;local at=function(a8,a0)local _={}a0=a0+1;while 1 do local au,M;a0=a7(a8,a0,L,true)if a8:sub(a0,a0)=="}"then a0=a0+1;break end;if a8:sub(a0,a0)~='"'then ac(a8,a0,"expected string for key")end;au,a0=a4(a8,a0)a0=a7(a8,a0,L,true)if a8:sub(a0,a0)~=":"then ac(a8,a0,"expected ':' after key")end;a0=a7(a8,a0+1,L,true)M,a0=a4(a8,a0)_[au]=M;a0=a7(a8,a0,L,true)local as=a8:sub(a0,a0)a0=a0+1;if as=="}"then break end;if as~=","then ac(a8,a0,"expected '}' or ','")end end;return _,a0 end;local av={['"']=ak,["0"]=ao,["1"]=ao,["2"]=ao,["3"]=ao,["4"]=ao,["5"]=ao,["6"]=ao,["7"]=ao,["8"]=ao,["9"]=ao,["-"]=ao,["t"]=ap,["f"]=ap,["n"]=ap,["["]=ar,["{"]=at}a4=function(a8,a9)local as=a8:sub(a9,a9)local a2=av[as]if a2 then return a2(a8,a9)end;ac(a8,a9,"unexpected character '"..as.."'")end;local aw=function(a8)if type(a8)~="string"then error("expected argument of type string, got "..type(a8))end;local _,a9=a4(a8,a7(a8,1,L,true))a9=a7(a8,a9,L,true)if a9<=#a8 then ac(a8,a9,"trailing garbage")end;return _ end;
-local lEncode, lDecode, lDigest = a3, aw, Z;
-
---//==============================[ PLATOBOOST API CORE ]==============================//--
-local PB = {}
-PB.service = 28805           -- PlatoBoost Service ID
-PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"  -- PlatoBoost Secret
-PB.useNonce = true
-
--- Safe request function
-local function safeRequest(options)
-    local req = request or http_request or syn_request or (http and http.request)
-    if not req then return nil, "HTTP requests not supported" end
-    local success, response = pcall(function() return req(options) end)
-    if success and response then return response else return nil, "Connection Error" end
+--//==============================================================================
+--// 1. SINGLETON PATTERN + ANTI-AFK
+--//==============================================================================
+if getgenv().SlenderHubGameLoaded then
+    warn("[SlenderHub] Instance already active.")
+    return
 end
+getgenv().SlenderHubGameLoaded = true
 
-PB.fSetClipboard = setclipboard or toclipboard or function() end
-PB.fGetHwid = gethwid or function() return game:GetService("RbxAnalyticsService"):GetClientId() end
-
-PB.cachedLink = ""
-PB.cachedTime = 0
-PB.host = "https://api.platoboost.com"
-
--- Check connectivity
-local function checkConnectivity()
-    local response = safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
-    if not response or (response.StatusCode ~= 200 and response.StatusCode ~= 429) then
-        PB.host = "https://api.platoboost.net"
-    end
-end
-checkConnectivity()
-
-function PB.generateNonce()
-    local seed = os.time() * 1000 + math.floor(tick() * 1000)
-    for _ = 1, 5 do seed = seed + math.random(-9999, 9999) end
-    math.randomseed(seed % 2^31)
-    local str = ""
-    for _ = 1, 16 do str = str .. string.char(math.random(97, 122)) end
-    return str
-end
-
-function PB.cacheLink()
-    if PB.cachedTime + 600 < os.time() then
-        local response = safeRequest({
-            Url = PB.host .. "/public/start",
-            Method = "POST",
-            Body = lEncode({service = PB.service, identifier = lDigest(PB.fGetHwid())}),
-            Headers = {["Content-Type"] = "application/json"}
-        })
-        if response and response.StatusCode == 200 then
-            local decoded = lDecode(response.Body)
-            if decoded and decoded.success then
-                PB.cachedLink = decoded.data.url
-                PB.cachedTime = os.time()
-                return true, PB.cachedLink
-            end
-        end
-        return false, "Server Unreachable"
-    end
-    return true, PB.cachedLink
-end
-
-function PB.redeemKey(key)
-    -- 💎 BYPASS PREMIUM / DEV KEY (LIFETIME)
-    if key == "SlenderDevKey" then
-        return true, "Success (Premium Lifetime)"
-    end
-
-    local nonce = PB.generateNonce()
-    local body = {identifier = lDigest(PB.fGetHwid()), key = key}
-    if PB.useNonce then body.nonce = nonce end
-    
-    local response = safeRequest({
-        Url = PB.host .. "/public/redeem/" .. tostring(PB.service),
-        Method = "POST",
-        Body = lEncode(body),
-        Headers = {["Content-Type"] = "application/json"}
-    })
-    
-    if response and response.StatusCode == 200 then
-        local decoded = lDecode(response.Body)
-        if decoded and decoded.success and decoded.data.valid then
-            if PB.useNonce then
-                if decoded.data.hash == lDigest("true" .. "-" .. nonce .. "-" .. PB.secret) then
-                    return true, "Success"
-                end
-                return false, "Integrity Check Failed"
-            end
-            return true, "Success"
-        end
-        return false, decoded and decoded.message or "Invalid Key"
-    end
-    return false, "Server Error"
-end
-
---//==============================[ SERVICES ]==============================//--
+-- Anti-AFK imediato (antes de qualquer carregamento)
 local Players = game:GetService("Players")
-local StarterGui = game:GetService("StarterGui")
-local MarketService = game:GetService("MarketplaceService")
-local CoreGui = game:GetService("CoreGui")
-local RunService = game:GetService("RunService")
-
+local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
---//==============================[ CONFIG ]==============================//--
-local CONFIG = {
-    KeyFileName     = "SlenderHub_Key.txt",
-    OldGuiName      = "SlenderWind",
-    MainGuiName     = "SlenderHub_Main",
-    HubName         = "Slender Hub | PlatoBoost",
-    HubDescription  = "Universal Key System",
-    PremiumUrl      = "https://www.slenderhub.shop"
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+--//==============================================================================
+--// 2. ACCESS CONTROL
+--//==============================================================================
+local AccessLevel = getgenv().SlenderHubAccessLevel or "Free"
+local IsPremium = (AccessLevel == "Premium")
+
+--//==============================================================================
+--// 3. SERVICES (Declaração única, organizada)
+--//==============================================================================
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
+local Workspace = game:GetService("Workspace")
+
+--//==============================================================================
+--// 4. LOAD SLENDERWIND V10 (Internal Standard)
+--//==============================================================================
+local SlenderWind = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"
+))()
+
+--//==============================================================================
+--// 5. KNIT FRAMEWORK LOADER (Seguro + Cache)
+--//==============================================================================
+local KnitLoaded = false
+local Services = {}
+
+task.spawn(function()
+    -- Aguarda até 30s pelo Knit
+    local knitService
+    for _ = 1, 60 do
+        if ReplicatedStorage:FindFirstChild("Packages") then
+            local ok, result = pcall(function()
+                return ReplicatedStorage.Packages
+                    ._Index["sleitnick_knit@1.5.1"]
+                    .knit.Services
+            end)
+            if ok and result then
+                knitService = result
+                break
+            end
+        end
+        task.wait(0.5)
+    end
+
+    if not knitService then
+        warn("[SlenderHub] Knit failed to load after 30s.")
+        return
+    end
+
+    Services = knitService
+    KnitLoaded = true
+    print("[SlenderHub] Knit loaded successfully.")
+end)
+
+--//==============================================================================
+--// 6. GETREMOTE (Abstração segura de remotes)
+--//==============================================================================
+local function GetRemote(serviceName: string, remoteName: string, isFunction: boolean?)
+    if not KnitLoaded or not Services[serviceName] then
+        return nil
+    end
+    local folderName = if isFunction then "RF" else "RE"
+    local folder = Services[serviceName]:FindFirstChild(folderName)
+    if not folder then
+        return nil
+    end
+    return folder:FindFirstChild(remoteName)
+end
+
+--//==============================================================================
+--// 7. REMOTE GUARD (Rate Limiting + Safe Call)
+--//==============================================================================
+local lastCallTimestamps = {}
+
+local function SafeFire(remote: any, ...: any): boolean
+    if not remote or not remote:IsA("RemoteEvent") then
+        warn("[SlenderHub] Invalid RemoteEvent")
+        return false
+    end
+    local ok, err = pcall(function()
+        remote:FireServer(...)
+    end)
+    if not ok then
+        warn("[SlenderHub] FireServer failed:", err)
+    end
+    return ok
+end
+
+local function SafeInvoke(remote: any, ...: any): (boolean, any)
+    if not remote or not remote:IsA("RemoteFunction") then
+        warn("[SlenderHub] Invalid RemoteFunction")
+        return false, nil
+    end
+    local ok, result = pcall(function()
+        return remote:InvokeServer(...)
+    end)
+    if not ok then
+        warn("[SlenderHub] InvokeServer failed:", result)
+    end
+    return ok, result
+end
+
+-- Função de rate limiting integrada
+local function SafeFireRateLimited(remote: any, cooldown: number, ...: any): boolean
+    if not remote then
+        remote = nil -- Será re-buscado pelo loop
+        return false
+    end
+
+    local now = tick()
+    local key = tostring(remote)
+    local lastCall = lastCallTimestamps[key] or 0
+
+    if now - lastCall < cooldown then
+        return false -- Ainda em cooldown
+    end
+
+    lastCallTimestamps[key] = now
+    return SafeFire(remote, ...)
+end
+
+--//==============================================================================
+--// 8. LOOP GUARD (Previne loops concorrentes)
+--//==============================================================================
+local activeLoops = {}
+
+local function StartGuardedLoop(loopId: string, callback: (() -> ())?): boolean
+    if activeLoops[loopId] then
+        return false -- Já está rodando
+    end
+
+    activeLoops[loopId] = true
+
+    task.spawn(function()
+        while activeLoops[loopId] do
+            if callback then
+                local ok, err = pcall(callback)
+                if not ok then
+                    warn("[SlenderHub] Loop error (" .. loopId .. "):", err)
+                end
+            end
+            task.wait(0.1) -- Mínimo 100ms entre iterações
+        end
+    end)
+
+    return true
+end
+
+local function StopGuardedLoop(loopId: string)
+    activeLoops[loopId] = false
+end
+
+--//==============================================================================
+--// 9. VARIÁVEIS DE CONTROLE (Flags Unificadas)
+--//==============================================================================
+local Flags = {
+    -- Farm
+    AutoWin = false,
+    AutoWinOP = false,
+    AutoTrain = false,
+    TrainWorld = "1",
+    TrainMachine = "1",
+
+    -- Character
+    SpeedHack = false,
+    WalkSpeedVal = 100,
+    Noclip = false,
+    InfJump = false,
+
+    -- Eggs
+    SelectedEgg = "Egg_1_1",
+    AutoHatch = false,
+    EggToggles = {},
+
+    -- Shop
+    VendingItem = "WPN_101",
+    AutoBuy = false,
+
+    -- Premium
+    AutoClaimExclusive = false,
+    AutoCrate = false,
+    SelectedCrate = "Crate_1",
+
+    -- Teleport
+    SelectedArea = "Area_1",
+
+    -- Novas features (Horse Race.lua merge)
+    AutoRebirth = false,
+    AutoSuperRebirth = false,
+    InfMoney = false,
+    Diamonds = false,
+    AutoGifts = false,
+    AutoCrate1 = false,
+    AutoCrate2 = false,
+    EggGhost = false,
+    InfinitePotion = false,
+    AutoEquipBestPets = false,
+    AutoCraftPets = false,
+    FarmCandy = false,
+    EggChristmas = false,
+    AutoRandomPotion = false,
+    AutoUsePotion = false,
+    FruitToggles = {},
 }
 
---//==============================[ SUPPORTED GAMES ]==============================//--
-local GAMES_MAP = {
-    [82013336390273] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Pickaxe%20Simulator%20script",
-    [107807115409153] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Bee%20Tappers%20Script",
-    [109983668079237] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Steal%20a%20Brainrot(Free)",
-    [76558904092080] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/The%20Forge%20Script",
-    [75992362647444] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Tap%20simulator",
-    [4924922222] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Brookhaven%20script",
-    [93787311916283] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Horse%20Race",
-    [120405647949186] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Royal%20Hatchers%20Script",
-    [14236123211] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Punch_Simulator_SlenderHub"
-}
+--//==============================================================================
+--// 10. NOTIFICAÇÃO UNIFICADA
+--//==============================================================================
+local Window = nil -- Será atribuído após criar a UI
 
-local CurrentPlaceId = game.PlaceId
-local TARGET_SCRIPT_URL = GAMES_MAP[CurrentPlaceId]
-
---//==============================[ NOTIFICATION HELPER ]==============================//--
-local Window = nil  -- Será atribuído depois que a UI for carregada
-
-local function Notify(title, text, duration, nType)
+local function Notify(title: string, text: string, duration: number?, nType: string?)
     if Window and Window.Notify then
-        Window:Notify(title, text, duration or 5, nType or "Success")
+        pcall(function()
+            Window:Notify(title or "SlenderHub", text or "", duration or 4, nType or "Success")
+        end)
     else
         pcall(function()
             StarterGui:SetCore("SendNotification", {
-                Title = title,
-                Text = text,
-                Duration = duration or 5,
+                Title = title or "SlenderHub",
+                Text = text or "",
+                Duration = duration or 4,
             })
         end)
     end
 end
 
---//==============================[ SCRIPT EXECUTION ]==============================//--
-local function StartMainScript()
-    local pGui = LocalPlayer:WaitForChild("PlayerGui")
-    
-    -- Destroy old GUIs
-    if pGui:FindFirstChild(CONFIG.OldGuiName) then 
-        pGui[CONFIG.OldGuiName]:Destroy() 
-        task.wait(0.1)
-    end
-    pcall(function()
-        local coreSlender = CoreGui:FindFirstChild("SlenderWind")
-        if coreSlender then coreSlender:Destroy() end
-    end)
-    
-    -- Check if game is supported
-    if not TARGET_SCRIPT_URL then
-        Notify("Slender Hub", "Game Not Supported (ID: " .. CurrentPlaceId .. ")", 5, "Error")
-        return
-    end
-    
-    -- Execute main script
-    local success, err = pcall(function()
-        loadstring(game:HttpGet(TARGET_SCRIPT_URL))()
-    end)
-    if not success then
-        warn("[Slender Hub] Script Load Failed:", err)
-        Notify("Error", "Failed to load script! Check Console (F9)", 5, "Error")
-    end
-end
-
---//==============================[ SAVE/LOAD KEY ]==============================//--
-local function saveKey(key)
-    if writefile then
-        writefile(CONFIG.KeyFileName, key)
-    end
-end
-
-local function checkSavedKey()
-    if isfile and isfile(CONFIG.KeyFileName) then
-        local savedKey = readfile(CONFIG.KeyFileName)
-        if savedKey and savedKey ~= "" then
-            local success, msg = PB.redeemKey(savedKey)
-            if success then
-                Notify("Slender Hub", "Auto-Login Successful!", 3, "Success")
-                task.wait(0.5)
-                StartMainScript()
-                return true
-            end
-        end
-    end
-    return false
-end
-
---//==============================[ MAIN LOGIC ]==============================//--
-
--- If main script GUI already exists, skip key system
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-if playerGui:FindFirstChild(CONFIG.MainGuiName) then
-    StartMainScript()
-    return
-end
-
--- Try auto-login first
-if checkSavedKey() then return end
-
--- Carregar SlenderWind UI
-local SlenderWind = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"
-))()
-
+--//==============================================================================
+--// 11. UI CONSTRUCTION (SlenderWind V10)
+--//==============================================================================
 Window = SlenderWind.Window({
-    Name = "Slender Hub | PlatoBoost",
+    Name = "SlenderHub | Horse Race [" .. string.upper(AccessLevel) .. "]",
     KeySystem = false,
     Theme = {
-        Accent = Color3.fromRGB(0, 170, 255),
-        Success = Color3.fromRGB(0, 255, 100),
-        Error = Color3.fromRGB(255, 50, 50)
+        Accent = Color3.fromRGB(0, 255, 128),
+        Background = Color3.fromRGB(15, 15, 20),
+        Text = Color3.fromRGB(240, 240, 240)
     }
 })
 
-local Tab = Window:Tab("Key System")
+--//==============================================================================
+--// HELPERS DE CRIAÇÃO DE TABS E LOOP DE AUTO
+--//==============================================================================
 
--- 📊 Game Status
-local gameName = "Unknown Game"
-pcall(function() gameName = MarketService:GetProductInfo(CurrentPlaceId).Name end)
-local statusText = TARGET_SCRIPT_URL and "Supported: " .. gameName or "Unsupported Game"
-Tab:Paragraph("📊 Game Status", statusText .. " (ID: " .. CurrentPlaceId .. ")")
+-- Função genérica para criar um toggle de auto com loop
+local function CreateAutoToggle(tab: any, title: string, flagKey: string, remoteGetter: () -> any,
+                                fireFn: (remote: any) -> (), cooldown: number?, description: string?)
+    local cd = cooldown or 0.5
+    tab:Toggle(title, false, flagKey, description or "Toggle " .. title, function(value: boolean)
+        Flags[flagKey] = value
+        local loopId = "AutoToggle_" .. flagKey
 
--- 💎 PREMIUM ACCESS
-Tab:Paragraph("💎 PREMIUM ACCESS", 
-    "• Skip Key System forever\n" ..
-    "• Ad-free & Faster Execution\n" ..
-    "• Exclusive Premium Scripts & Features\n" ..
-    "• Priority 24/7 Support\n" ..
-    "• Buy at: " .. CONFIG.PremiumUrl
-)
+        if value then
+            if not StartGuardedLoop(loopId, function()
+                if KnitLoaded then
+                    local remote = remoteGetter()
+                    if remote then
+                        fireFn(remote)
+                    end
+                end
+                task.wait(cd)
+            end) then
+                Notify("Warning", "Loop '" .. title .. "' já está rodando.", 2, "Warning")
+            end
+        else
+            StopGuardedLoop(loopId)
+        end
+    end)
+end
 
-Tab:Button("💎 BUY PREMIUM • slenderhub.shop", "Copy Premium Store link to clipboard", function()
-    pcall(function() PB.fSetClipboard(CONFIG.PremiumUrl) end)
-    Notify("Premium Store", "Shop link copied to clipboard!\n" .. CONFIG.PremiumUrl, 4, "Success")
-end)
+--//==============================================================================
+//// TAB: PREMIUM OP
+////==============================================================================
+local TabOP = Window:Tab("Premium OP")
 
--- 🔑 KEY VALIDATION
-Tab:Input("PlatoBoost Key", "Paste your key here...", "PBKey", "Enter your PlatoBoost key", function() end)
-local StatusLabel = Tab:Label("Waiting for input...")
+if IsPremium then
+    TabOP:Label("--- Blatant Farming ---")
 
--- 🎯 ACTIONS
-Tab:Button("VERIFY KEY", "Check key with PlatoBoost", function()
-    -- Procurar o TextBox pelo PlaceholderText
-    local key = ""
-    pcall(function()
-        for _, v in pairs(CoreGui:GetDescendants()) do
-            if v:IsA("TextBox") and v.PlaceholderText:find("Paste your key") then
-                key = v.Text:gsub("%s+", "")
+    CreateAutoToggle(TabOP, "⚡ SUPER Auto Win (5x)", "AutoWinOP", function()
+        return GetRemote("FightService", "GetWinsEvent", false)
+    end, function(remote)
+        local vector = Vector3.new(1811.09, 782.79, -689544.81)
+        for i = 1, 5 do
+            SafeFire(remote, "WinGate_16", vector)
+        end
+    end, 0.1)
+
+    TabOP:Label("--- Character Exploits ---")
+
+    TabOP:Toggle("Speed Hack", false, "SpeedHack", "Bypasses loop checks", function(value)
+        Flags.SpeedHack = value
+        local loopId = "SpeedHack"
+
+        if value then
+            StartGuardedLoop(loopId, function()
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("Humanoid") then
+                    char.Humanoid.WalkSpeed = Flags.WalkSpeedVal
+                end
+                task.wait(0.1)
+            end)
+        else
+            StopGuardedLoop(loopId)
+            -- Restaura WalkSpeed do character atual (se existir)
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("Humanoid") then
+                    char.Humanoid.WalkSpeed = 16
+                end
+            end)
+        end
+    end)
+
+    TabOP:Slider("Speed Value", 16, 500, 100, "WalkSpeedVal", "Adjust movement speed", function(value)
+        Flags.WalkSpeedVal = value
+    end)
+
+    TabOP:Toggle("Noclip", false, "Noclip", "Walk through walls", function(value)
+        Flags.Noclip = value
+        local noclipLoopId = "Noclip"
+
+        if value then
+            -- Conecta no CharacterAdded para reaplicar após respawn
+            local connection
+            connection = LocalPlayer.CharacterAdded:Connect(function()
+                if Flags.Noclip then
+                    -- Já estamos no loop, ele vai pegar o novo character
+                end
+            end)
+
+            RunService:BindToRenderStep("SlenderNoclip", 1000, function()
+                local char = LocalPlayer.Character
+                if not char then return end
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end)
+        else
+            RunService:UnbindFromRenderStep("SlenderNoclip")
+            -- Restaura collision
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char then
+                    for _, part in pairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = true
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+
+    TabOP:Toggle("Infinite Jump", false, "InfJump", "Jump in mid-air", function(value)
+        Flags.InfJump = value
+    end)
+
+    -- Conexão única com cleanup
+    local infJumpConnection
+    infJumpConnection = UserInputService.JumpRequest:Connect(function()
+        if Flags.InfJump and LocalPlayer.Character then
+            local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
             end
         end
     end)
-    
-    if key == "" then
-        Notify("Input Required", "Please enter a key first.", 3, "Warning")
-        StatusLabel:Set("Enter a key!")
-        return
+
+    -- Auto-cleanup se o toggle for desligado (a conexão permanece, mas o check de flag evita ação)
+    -- Isso é intencional: a conexão fica sempre ativa, mas só age se a flag estiver true
+
+else
+    TabOP:Label("--- LOCKED ---")
+    TabOP:Button("🔒 Unlock OP Features", "Requires Premium Key", function()
+        Notify("Premium", "Visit SlenderHub.shop", 4, "Warning")
+    end)
+end
+
+--//==============================================================================
+--// TAB: FARM
+--//==============================================================================
+local TabFarm = Window:Tab("Farm")
+
+TabFarm:Label("--- Legit Farm ---")
+
+CreateAutoToggle(TabFarm, "Auto Win (Legit)", "AutoWin", function()
+    return GetRemote("FightService", "GetWinsEvent", false)
+end, function(remote)
+    local vector = Vector3.new(1811.09, 782.79, -689544.81)
+    SafeFire(remote, "WinGate_16", vector)
+end, 0.5)
+
+TabFarm:Label("--- Auto Train ---")
+
+TabFarm:Dropdown("World", {"1", "2", "3", "4"}, "1", "TrainWorld", "Select Training World", function(val)
+    Flags.TrainWorld = val
+end)
+
+TabFarm:Dropdown("Machine", {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"},
+    "1", "TrainMachine", "Select Machine Tier", function(val)
+    Flags.TrainMachine = val
+end)
+
+CreateAutoToggle(TabFarm, "Enable Auto Train", "AutoTrain", function()
+    return GetRemote("TrainService", "RunTrain", false)
+end, function(remote)
+    SafeFire(remote, "Treadmill_" .. Flags.TrainWorld .. "_" .. Flags.TrainMachine)
+end, 1.0)
+
+-- Novos recursos do Horse Race.lua: Rebirth
+TabFarm:Label("--- Rebirths ---")
+
+CreateAutoToggle(TabFarm, "Auto Rebirth", "AutoRebirth", function()
+    return GetRemote("RebirthService", "Rebirth", true)
+end, function(remote)
+    SafeInvoke(remote)
+end, 1.0)
+
+CreateAutoToggle(TabFarm, "Auto Super Rebirth", "AutoSuperRebirth", function()
+    return GetRemote("RebirthService", "SuperRebirth", true)
+end, function(remote)
+    SafeInvoke(remote)
+end, 1.0)
+
+TabFarm:Label("--- Infinite Resource ---")
+
+CreateAutoToggle(TabFarm, "Infinite Money", "InfMoney", function()
+    -- Caminho direto (esse remote é acessado diretamente, não via Knit Services)
+    local ok, result = pcall(function()
+        return ReplicatedStorage.Packages
+            ._Index["sleitnick_knit@1.5.1"]
+            .knit.Services.RandomPotionService.RE.BuyPotionEvent
+    end)
+    if ok then return result end
+    return nil
+end, function(remote)
+    SafeFire(remote, -70e+70, {}, true, "yippie!")
+end, 0.5)
+
+--//==============================================================================
+--// TAB: TELEPORT
+--//==============================================================================
+local TabTP = Window:Tab("Teleport")
+local Areas = {"Area_1", "Area_2", "Area_3", "Area_4", "Area_5", "Area_Christmas", "Area_Fruit"}
+
+TabTP:Label("--- Zone Teleport ---")
+
+TabTP:Dropdown("Select Area", Areas, "Area_1", "SelectedArea", "Destination", function(val)
+    Flags.SelectedArea = val
+end)
+
+TabTP:Button("Teleport Now", "Instant TP to selected area", function()
+    local targetArea = Flags.SelectedArea
+    local remote = GetRemote("AreaService", "UpdatePlayerCurrentArea", false)
+    if remote then
+        SafeFire(remote, targetArea)
+    else
+        Notify("Error", "AreaService not loaded yet.", 3, "Error")
     end
-    
-    Notify("Checking...", "Verifying with PlatoBoost...", 3)
-    StatusLabel:Set("Verifying...")
-    
-    local success, msg = PB.redeemKey(key)
-    if success then
-        saveKey(key)
-        StatusLabel:Set("Key Valid!")
-        Notify("Success!", "Key Validated! Loading...", 3, "Success")
-        task.wait(0.5)
-        pcall(function()
-            for _, ui in pairs(CoreGui:GetChildren()) do
-                if ui.Name == "SlenderWind" then ui:Destroy() end
+
+    -- Também tenta mover localmente (feedback visual)
+    pcall(function()
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            local targetObj = Workspace:FindFirstChild(targetArea)
+                or (Workspace:FindFirstChild("Spawns") and Workspace.Spawns:FindFirstChild(targetArea))
+                or (Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild(targetArea))
+            if targetObj then
+                local targetCFrame = if targetObj:IsA("Model") then targetObj:GetPivot() else targetObj.CFrame
+                root.CFrame = targetCFrame + Vector3.new(0, 5, 0)
             end
+        end
+    end)
+end)
+
+-- Teleport rápido para Worlds (do Horse Race.lua)
+TabTP:Label("--- Quick Teleport ---")
+TabTP:Button("World 2", "Teleport to Area 2", function()
+    local remote = GetRemote("AreaService", "UpdatePlayerCurrentArea", false)
+    if remote then SafeFire(remote, "Area_2") end
+end)
+TabTP:Button("World 3", "Teleport to Area 3", function()
+    local remote = GetRemote("AreaService", "UpdatePlayerCurrentArea", false)
+    if remote then SafeFire(remote, "Area_3") end
+end)
+TabTP:Button("World 4", "Teleport to Area 4", function()
+    local remote = GetRemote("AreaService", "UpdatePlayerCurrentArea", false)
+    if remote then SafeFire(remote, "Area_4") end
+end)
+TabTP:Button("Area Fruit", "Teleport to Fruit Area", function()
+    local remote = GetRemote("AreaService", "UpdatePlayerCurrentArea", false)
+    if remote then SafeFire(remote, "Area_Fruit") end
+end)
+
+--//==============================================================================
+--// TAB: EGGS
+--//==============================================================================
+local TabEggs = Window:Tab("Eggs")
+local EggIDs = {
+    "Egg_1_1", "Egg_1_2", "Egg_1_3", "Egg_1_4",
+    "Egg_2_1", "Egg_2_2", "Egg_2_3", "Egg_2_4",
+    "Egg_3_1", "Egg_3_2", "Egg_3_3", "Egg_3_4",
+    "Egg_4_1", "Egg_4_2", "Egg_4_3", "Egg_4_4",
+    "Egg_Tower_1", "Egg_Christmas"
+}
+
+TabEggs:Dropdown("Select Egg", EggIDs, "Egg_1_1", "SelectedEgg", "Egg to hatch", function(val)
+    Flags.SelectedEgg = val
+end)
+
+CreateAutoToggle(TabEggs, "Auto Hatch", "AutoHatch", function()
+    return GetRemote("EggHatchService", "Hatch", false)
+end, function(remote)
+    SafeFire(remote, Flags.SelectedEgg, 1)
+end, 1.0)
+
+-- Todos os ovos individuais (4 mundos x 4 ovos) - do Horse Race.lua
+TabEggs:Label("--- Individual Egg Hatching ---")
+
+local function CreateEggToggle(eggWorld: number, eggNum: number)
+    local eggName = "Egg_" .. eggWorld .. "_" .. eggNum
+    local flagKey = "Egg_" .. eggWorld .. "_" .. eggNum
+
+    Flags.EggToggles[flagKey] = false
+
+    TabEggs:Toggle("World " .. eggWorld .. " - Egg " .. eggNum, false, flagKey,
+        "Auto hatch Egg_" .. eggWorld .. "_" .. eggNum, function(value)
+        Flags.EggToggles[flagKey] = value
+        local loopId = "EggHatch_" .. flagKey
+
+        if value then
+            StartGuardedLoop(loopId, function()
+                -- Tenta via serviço Knit primeiro
+                local remote = GetRemote("EggHatchService", "Hatch", false)
+                if remote then
+                    SafeFire(remote, eggName, 1)
+                else
+                    -- Fallback: caminho direto
+                    pcall(function()
+                        ReplicatedStorage.Packages
+                            ._Index["sleitnick_knit@1.5.1"]
+                            .knit.Services.EggHatchService.RE.Hatch
+                            :FireServer(eggName, 1)
+                    end)
+                end
+                task.wait(1)
+            end)
+        else
+            StopGuardedLoop(loopId)
+        end
+    end)
+end
+
+for world = 1, 4 do
+    for egg = 1, 4 do
+        CreateEggToggle(world, egg)
+    end
+end
+
+-- Egg Christmas
+TabEggs:Toggle("Egg_Christmas", false, "EggChristmas", "Auto hatch Christmas egg", function(value)
+    Flags.EggChristmas = value
+    local loopId = "EggChristmas"
+
+    if value then
+        StartGuardedLoop(loopId, function()
+            local remote = GetRemote("EggHatchService", "Hatch", false)
+            if remote then
+                SafeFire(remote, "Egg_Christmas", 3)
+            else
+                pcall(function()
+                    ReplicatedStorage.Packages
+                        ._Index["sleitnick_knit@1.5.1"]
+                        .knit.Services.EggHatchService.RE.Hatch
+                        :FireServer("Egg_Christmas", 3)
+                end)
+            end
+            task.wait(1)
         end)
-        StartMainScript()
     else
-        StatusLabel:Set("Invalid: " .. msg)
-        Notify("Invalid Key", msg, 4, "Error")
+        StopGuardedLoop(loopId)
     end
 end)
 
-Tab:Button("GET FREE KEY", "Copy PlatoBoost link to clipboard", function()
-    Notify("Getting Link...", "Contacting PlatoBoost...", 2)
-    StatusLabel:Set("Getting link...")
-    local success, result = PB.cacheLink()
-    if success then
-        pcall(function() PB.fSetClipboard(result) end)
-        StatusLabel:Set("Link copied!")
-        Notify("Link Copied!", "Open in browser to get your key.", 3, "Success")
+TabEggs:Label("--- Premium Rewards ---")
+
+if IsPremium then
+    CreateAutoToggle(TabEggs, "Auto Claim Exclusive", "AutoClaimExclusive", function()
+        return GetRemote("OnlineRewardService", "ClaimOnlineQuestReward", true)
+    end, function(remote)
+        SafeInvoke(remote)
+    end, 5.0)
+else
+    TabEggs:Button("🔒 Auto Exclusive Egg", "Premium Only", function()
+        Notify("Premium", "This feature requires Premium key.", 3, "Warning")
+    end)
+end
+
+--//==============================================================================
+--// TAB: SHOP
+--//==============================================================================
+local TabShop = Window:Tab("Shop")
+local VendingItems = {"WPN_101", "WPN_102", "Potion_DoubleWins", "Potion_SuperLucky", "KingSlime"}
+
+TabShop:Label("--- Vending Machine ---")
+
+TabShop:Dropdown("Item", VendingItems, "WPN_101", "VendingItem", "Item to buy", function(val)
+    Flags.VendingItem = val
+end)
+
+CreateAutoToggle(TabShop, "Auto Buy Item", "AutoBuy", function()
+    return GetRemote("PurchaseService", "PromptPurchase", false)
+end, function(remote)
+    SafeFire(remote, Flags.VendingItem)
+end, 0.5)
+
+TabShop:Label("--- Crates ---")
+
+-- Crate 1
+CreateAutoToggle(TabShop, "Auto Crate 1", "AutoCrate1", function()
+    return GetRemote("ItemCrateService", "UnboxCrate", false)
+end, function(remote)
+    SafeFire(remote, "Crate_1")
+end, 1.0)
+
+-- Crate 2
+CreateAutoToggle(TabShop, "Auto Crate 2", "AutoCrate2", function()
+    return GetRemote("ItemCrateService", "UnboxCrate", false)
+end, function(remote)
+    SafeFire(remote, "Crate_2")
+end, 1.0)
+
+-- Premium Crate (original)
+if IsPremium then
+    TabShop:Dropdown("Select Crate", {"Crate_1", "Crate_2"}, "Crate_1", "SelectedCrate", "Crate type", function(val)
+        Flags.SelectedCrate = val
+    end)
+
+    CreateAutoToggle(TabShop, "Auto Open Crate (Premium)", "AutoCrate", function()
+        return GetRemote("ItemCrateService", "UnboxCrate", false)
+    end, function(remote)
+        SafeFire(remote, Flags.SelectedCrate)
+    end, 0.5)
+else
+    TabShop:Button("🔒 Auto Open Crate (Premium)", "Premium Only", function()
+        Notify("Premium", "This feature requires Premium key.", 3, "Warning")
+    end)
+end
+
+--//==============================================================================
+--// TAB: PETS
+--//==============================================================================
+local TabPets = Window:Tab("Pets")
+
+CreateAutoToggle(TabPets, "Auto Equip Best Pets", "AutoEquipBestPets", function()
+    return GetRemote("PetService", "EquipBestPets", false)
+end, function(remote)
+    SafeFire(remote)
+end, 2.0)
+
+CreateAutoToggle(TabPets, "Auto Craft Pets", "AutoCraftPets", function()
+    return GetRemote("PetService", "EnlargeAllPets", false)
+end, function(remote)
+    SafeFire(remote)
+end, 3.0)
+
+--//==============================================================================
+--// TAB: EVENT
+--//==============================================================================
+local TabEvent = Window:Tab("Event")
+
+-- Farm Candy (múltiplos WinGates)
+TabEvent:Toggle("Farm Candy/Gift", false, "FarmCandy", "Farm multiple WinGates for candy/gifts", function(value)
+    Flags.FarmCandy = value
+    local loopId = "FarmCandy"
+
+    if value then
+        StartGuardedLoop(loopId, function()
+            local remote = GetRemote("FightService", "GetWinsEvent", false)
+            if remote then
+                local gates = {
+                    {"WinGate_16", Vector3.new(1813, 780.8884, -689396.3125)},
+                    {"WinGate_12", Vector3.new(1813, 780.9491, -229395.1406)},
+                    {"WinGate_14", Vector3.new(1812, 780.8914, -373397.5)},
+                    {"WinGate_13", Vector3.new(1815, 780.9649, -289395.25)},
+                }
+                for _, gate in pairs(gates) do
+                    SafeFire(remote, gate[1], gate[2])
+                end
+            end
+            task.wait(0.5)
+        end)
     else
-        StatusLabel:Set("Error: " .. tostring(result))
-        Notify("Error", tostring(result), 4, "Error")
+        StopGuardedLoop(loopId)
     end
 end)
 
--- ⚡ QUICK ACTIONS
-Tab:Label("⚡ QUICK ACTIONS")
+-- Fruits
+TabEvent:Label("--- Fruits ---")
+for i = 1, 4 do
+    local fruitID = string.format("Fruit_00%d", i)
+    Flags.FruitToggles[fruitID] = false
 
-Tab:Button("RETRY SAVED KEY", "Try auto-login again", function()
-    if not checkSavedKey() then
-        StatusLabel:Set("No valid saved key")
-        Notify("No Saved Key", "No valid saved key found.", 3, "Warning")
-    end
+    TabEvent:Toggle("Auto " .. fruitID, false, fruitID, "Auto buy " .. fruitID, function(value)
+        Flags.FruitToggles[fruitID] = value
+        local loopId = "Fruit_" .. fruitID
+
+        if value then
+            StartGuardedLoop(loopId, function()
+                pcall(function()
+                    ReplicatedStorage.Packages
+                        ._Index["sleitnick_knit@1.5.1"]
+                        .knit.Services.FruitService.RE.BuyFruit
+                        :FireServer(fruitID)
+                end)
+                task.wait(1)
+            end)
+        else
+            StopGuardedLoop(loopId)
+        end
+    end)
+end
+
+--//==============================================================================
+--// TAB: MISC
+--//==============================================================================
+local TabMisc = Window:Tab("Misc")
+
+TabMisc:Button("Anti-AFK (Low Render)", "Prevents kick & lowers CPU", function()
+    RunService:Set3dRenderingEnabled(false)
+    Notify("Anti-AFK", "3D rendering disabled. Use 'Restore Rendering' to revert.", 3, "Success")
 end)
 
-Tab:Button("CLEAR SAVED KEY", "Delete saved key file", function()
-    if isfile and isfile(CONFIG.KeyFileName) then
-        delfile(CONFIG.KeyFileName)
-        StatusLabel:Set("Saved key deleted")
-        Notify("Cleared", "Saved key deleted.", 2, "Warning")
+TabMisc:Button("Restore Rendering", "Fixes graphics", function()
+    RunService:Set3dRenderingEnabled(true)
+    Notify("Rendering", "3D rendering restored.", 2, "Success")
+end)
+
+-- Diamonds Upgrade (do Horse Race.lua)
+CreateAutoToggle(TabMisc, "Diamonds Upgrade", "Diamonds", function()
+    return GetRemote("RebirthService", "SuperRebirthUpgrade", true)
+end, function(remote)
+    SafeInvoke(remote, "Diamonds")
+end, 1.0)
+
+-- Auto Gifts
+CreateAutoToggle(TabMisc, "Auto Claim Gifts", "AutoGifts", function()
+    return GetRemote("OnlineRewardService", "ClaimOnlineReward", false)
+end, function(remote)
+    for i = 1, 12 do
+        SafeFire(remote, i)
+        task.wait(0.5)
+    end
+end, 5.0)
+
+-- Auto Egg Ghost (Brainrot)
+CreateAutoToggle(TabMisc, "Auto Claim Egg Brainrot", "EggGhost", function()
+    return GetRemote("OnlineRewardService", "ClaimOnlineQuestReward", true)
+end, function(remote)
+    SafeInvoke(remote)
+end, 5.0)
+
+-- Infinite Potion (Claim Daily Chest)
+CreateAutoToggle(TabMisc, "Infinite Potion + King Slime", "InfinitePotion", function()
+    local ok, result = pcall(function()
+        return ReplicatedStorage.Packages
+            ._Index["sleitnick_knit@1.5.1"]
+            .knit.Services.ChestService.RF.ClaimDailyChest
+    end)
+    if ok then return result end
+    return nil
+end, function(remote)
+    SafeInvoke(remote)
+end, 0.5)
+
+-- Auto Random Potion
+CreateAutoToggle(TabMisc, "Auto Random Potion", "AutoRandomPotion", function()
+    return GetRemote("RandomPotionService", "BuyPotionEvent", false)
+end, function(remote)
+    SafeFire(remote, 3)
+end, 0.5)
+
+-- Auto Use Potion
+CreateAutoToggle(TabMisc, "Auto Use Potion (Double Strength)", "AutoUsePotion", function()
+    return GetRemote("PotionService", "UsePotion", false)
+end, function(remote)
+    SafeFire(remote, "Potion_DoubleStrength")
+end, 1.0)
+
+-- Holiday GUIs (Horse Race.lua)
+TabMisc:Label("--- Holiday GUIs ---")
+TabMisc:Button("Toggle Halloween GUI", "Show/hide Halloween rewards", function()
+    local gui = LocalPlayer.PlayerGui:FindFirstChild("HalloweenDailyRewardGui", true)
+    if gui then
+        gui.Enabled = not gui.Enabled
+        Notify("Halloween", "GUI " .. (if gui.Enabled then "shown" else "hidden"), 2)
     else
-        Notify("Nothing", "No saved key found.", 2)
+        Notify("Info", "Halloween GUI not found.", 2, "Warning")
+    end
+end)
+TabMisc:Button("Toggle Christmas GUI", "Show/hide Christmas rewards", function()
+    local gui = LocalPlayer.PlayerGui:FindFirstChild("ChristmasDailyRewardGui", true)
+    if gui then
+        gui.Enabled = not gui.Enabled
+        Notify("Christmas", "GUI " .. (if gui.Enabled then "shown" else "hidden"), 2)
+    else
+        Notify("Info", "Christmas GUI not found.", 2, "Warning")
     end
 end)
 
--- ℹ️ About
-Tab:Paragraph("ℹ️ About", 
-    "Key System: PlatoBoost\n" ..
-    "Keys are hardware-bound (HWID)\n" ..
-    "Official Shop: " .. CONFIG.PremiumUrl .. "\n" ..
-    "Copyright (c) 2026 OYB / SlenderYt. All rights reserved."
-)
-
--- Auto-check saved key notification
+-- Halloween/Christmas GUI visibility reset protection
+-- (they were set to ResetOnSpawn=false in the original, we do the same)
 task.spawn(function()
-    task.wait(1.5)
-    if isfile and isfile(CONFIG.KeyFileName) then
-        StatusLabel:Set("Saved key detected. Click RETRY to use.")
-        Notify("Saved Key Found", "Use 'Retry Saved Key' to auto-login.", 4, "Warning")
+    task.wait(5)
+    local halloweenGui = LocalPlayer.PlayerGui:FindFirstChild("HalloweenDailyRewardGui", true)
+    if halloweenGui then halloweenGui.ResetOnSpawn = false end
+    local christmasGui = LocalPlayer.PlayerGui:FindFirstChild("ChristmasDailyRewardGui", true)
+    if christmasGui then christmasGui.ResetOnSpawn = false end
+end)
+
+TabMisc:Label("--- Account ---")
+TabMisc:Button("Restaurar Key", "Remove a licença salva (Re-execute após clicar)", function()
+    local path = "SlenderHub_Universal/KeyData_" .. LocalPlayer.UserId .. ".json"
+    if isfile and isfile(path) then
+        pcall(function() delfile(path) end)
+        Notify("Key", "Key removida. Re-execute o script.", 3, "Warning")
     else
-        StatusLabel:Set("Enter a key or get one.")
+        Notify("Key", "Nenhuma chave salva encontrada.", 2, "Warning")
     end
 end)
 
-print("[Slender Hub | PlatoBoost] Loaded successfully!")
-print("[Slender Hub] Official Shop: " .. CONFIG.PremiumUrl)
+TabMisc:Button("Clear Saved Key", "Delete stored key file", function()
+    local path = "SlenderHub_Key.txt"
+    if isfile and isfile(path) then
+        pcall(function() delfile(path) end)
+        Notify("Key", "Saved key deleted.", 2, "Warning")
+    else
+        Notify("Info", "No saved key found.", 2)
+    end
+end)
+
+--//==============================================================================
+--// 12. FLOATING BUTTON (Corrigido - Horse Race.lua)
+--//==============================================================================
+task.spawn(function()
+    task.wait(1) -- Aguarda UI carregar
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "SlenderHub_FloatingButton"
+    screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+    local imageButton = Instance.new("ImageButton")
+    imageButton.Size = UDim2.new(0, 50, 0, 50)
+    imageButton.Position = UDim2.new(1, -110, 0, 10)
+    imageButton.BackgroundTransparency = 1
+    imageButton.Image = "rbxassetid://2875276601"
+    imageButton.Parent = screenGui
+
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Parent = imageButton
+    uiStroke.Thickness = 4
+    uiStroke.Color = Color3.fromRGB(0, 0, 255)
+    uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    uiStroke.Transparency = 0
+
+    local corner = Instance.new("UICorner")
+    corner.Parent = imageButton
+
+    local windowHidden = false
+
+    imageButton.MouseButton1Click:Connect(function()
+        windowHidden = not windowHidden
+        if windowHidden then
+            Window:Minimize()
+        else
+            -- SlenderWind normalmente não tem maximize, mas tentamos
+            pcall(function()
+                -- Se houver método Show/Maximize, usar
+                if Window.Show then
+                    Window:Show()
+                elseif Window.Maximize then
+                    Window:Maximize()
+                else
+                    -- Fallback: recriar? Não, apenas notificar
+                    windowHidden = not windowHidden -- Reverte
+                    Notify("Info", "Use o botão no canto para restaurar.", 2)
+                end
+            end)
+        end
+    end)
+
+    -- Dragging (corrigido - sem conexões aninhadas)
+    local dragging = false
+    local dragStart = nil
+    local buttonStartPos = nil
+
+    imageButton.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            buttonStartPos = imageButton.Position
+
+            -- Aguarda o release
+            local con
+            con = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    con:Disconnect()
+                end
+            end)
+        end
+    end)
+
+    imageButton.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement and dragging and dragStart and buttonStartPos then
+            local delta = input.Position - dragStart
+            imageButton.Position = UDim2.new(
+                buttonStartPos.X.Scale,
+                buttonStartPos.X.Offset + delta.X,
+                buttonStartPos.Y.Scale,
+                buttonStartPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end)
+
+--//==============================================================================
+--// 13. NOTIFICAÇÃO FINAL
+--//==============================================================================
+task.spawn(function()
+    task.wait(1)
+    Notify("SlenderHub", "V2 Merged loaded successfully! [" .. AccessLevel .. "]", 4, "Success")
+end)
+
+print("[SlenderHub] V2 Merged Loaded. Access: " .. AccessLevel)
