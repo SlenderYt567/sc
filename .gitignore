@@ -6,6 +6,7 @@
     Integration: PlatoBoost API (Inline)
     
     Copyright (c) 2026 OYB / SlenderYt. All rights reserved.
+    Official Shop: https://www.slenderhub.shop
 ]]
 
 --//==============================[ PLATOBOOST LIBS (SHA-256 + JSON + API) ]==============================//--
@@ -116,7 +117,8 @@ local CONFIG = {
     OldGuiName      = "SlenderWind",
     MainGuiName     = "SlenderHub_Main",
     HubName         = "Slender Hub | PlatoBoost",
-    HubDescription  = "Universal Key System"
+    HubDescription  = "Universal Key System",
+    PremiumUrl      = "https://www.slenderhub.shop"
 }
 
 --//==============================[ SUPPORTED GAMES ]==============================//--
@@ -234,19 +236,31 @@ Window = SlenderWind.Window({
 
 local Tab = Window:Tab("Key System")
 
--- Game status
+-- 📊 Game Status
 local gameName = "Unknown Game"
 pcall(function() gameName = MarketService:GetProductInfo(CurrentPlaceId).Name end)
 local statusText = TARGET_SCRIPT_URL and "Supported: " .. gameName or "Unsupported Game"
-Tab:Paragraph("Status", statusText .. " (ID: " .. CurrentPlaceId .. ")")
+Tab:Paragraph("📊 Game Status", statusText .. " (ID: " .. CurrentPlaceId .. ")")
 
--- Campo de input e labels
+-- 💎 PREMIUM ACCESS
+Tab:Paragraph("💎 PREMIUM ACCESS", 
+    "• Skip Key System forever\n" ..
+    "• Ad-free & Faster Execution\n" ..
+    "• Exclusive Premium Scripts & Features\n" ..
+    "• Priority 24/7 Support\n" ..
+    "• Buy at: " .. CONFIG.PremiumUrl
+)
+
+Tab:Button("💎 BUY PREMIUM • slenderhub.shop", "Copy Premium Store link to clipboard", function()
+    pcall(function() PB.fSetClipboard(CONFIG.PremiumUrl) end)
+    Notify("Premium Store", "Shop link copied to clipboard!\n" .. CONFIG.PremiumUrl, 4, "Success")
+end)
+
+-- 🔑 KEY VALIDATION
 Tab:Input("PlatoBoost Key", "Paste your key here...", "PBKey", "Enter your PlatoBoost key", function() end)
-
--- Label de status (será atualizado manualmente)
 local StatusLabel = Tab:Label("Waiting for input...")
 
--- Verify button
+-- 🎯 ACTIONS
 Tab:Button("VERIFY KEY", "Check key with PlatoBoost", function()
     -- Procurar o TextBox pelo PlaceholderText
     local key = ""
@@ -285,8 +299,7 @@ Tab:Button("VERIFY KEY", "Check key with PlatoBoost", function()
     end
 end)
 
--- Get Key button
-Tab:Button("GET KEY LINK", "Copy PlatoBoost link to clipboard", function()
+Tab:Button("GET FREE KEY", "Copy PlatoBoost link to clipboard", function()
     Notify("Getting Link...", "Contacting PlatoBoost...", 2)
     StatusLabel:Set("Getting link...")
     local success, result = PB.cacheLink()
@@ -300,8 +313,8 @@ Tab:Button("GET KEY LINK", "Copy PlatoBoost link to clipboard", function()
     end
 end)
 
--- Quick Actions
-Tab:Label("  Quick Actions")
+-- ⚡ QUICK ACTIONS
+Tab:Label("⚡ QUICK ACTIONS")
 
 Tab:Button("RETRY SAVED KEY", "Try auto-login again", function()
     if not checkSavedKey() then
@@ -320,11 +333,12 @@ Tab:Button("CLEAR SAVED KEY", "Delete saved key file", function()
     end
 end)
 
--- Info
-Tab:Paragraph("Information", 
+-- ℹ️ About
+Tab:Paragraph("ℹ️ About", 
     "Key System: PlatoBoost\n" ..
     "Keys are hardware-bound (HWID)\n" ..
-    "Saved keys auto-login on next launch"
+    "Official Shop: " .. CONFIG.PremiumUrl .. "\n" ..
+    "Copyright (c) 2026 OYB / SlenderYt. All rights reserved."
 )
 
 -- Auto-check saved key notification
@@ -339,3 +353,4 @@ task.spawn(function()
 end)
 
 print("[Slender Hub | PlatoBoost] Loaded successfully!")
+print("[Slender Hub] Official Shop: " .. CONFIG.PremiumUrl)
