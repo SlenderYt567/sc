@@ -18,16 +18,31 @@ PB.service = 28805           -- PlatoBoost Service ID
 PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"  -- PlatoBoost Secret (ofuscar antes de distribuir)
 PB.useNonce = true
 
--- Safe request function
+-- Safe request function (fixed: melhor deteccao de erros)
 local function safeRequest(options)
     local req = request or http_request or syn_request or (http and http.request)
-    if not req then return nil, "HTTP requests not supported" end
+    if not req then
+        warn("[Slender Hub] HTTP not supported - no request function found")
+        return nil, "HTTP requests not supported"
+    end
     local success, response = pcall(function() return req(options) end)
-    if success and response then return response else return nil, "Connection Error" end
+    if success and response then
+        return response
+    else
+        local errMsg = tostring(response)
+        warn("[Slender Hub] HTTP request failed:", errMsg)
+        return nil, "Connection Error: " .. errMsg
+    end
 end
 
-PB.fSetClipboard = setclipboard or toclipboard or function() end
-PB.fGetHwid = gethwid or function() return game:GetService("RbxAnalyticsService"):GetClientId() end
+PB.fSetClipboard = setclipboard or toclipboard or function() warn("[Slender Hub] Clipboard not available") end
+PB.fGetHwid = gethwid or function() 
+    local ok, id = pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end)
+    if ok and id then return id end
+    -- Ultimo fallback: usar Player.UserId
+    ok, id = pcall(function() return tostring(LocalPlayer and LocalPlayer.UserId or "unknown") end)
+    return id or "unknown"
+end
 
 PB.cachedLink = ""
 PB.cachedTime = 0
@@ -35,20 +50,48 @@ PB.host = "https://api.platoboost.com"
 
 -- Check connectivity (with FIXED logic)
 local function checkConnectivity()
-    local response = safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
-    if not response or (response.StatusCode ~= 200 and response.StatusCode ~= 429) then
+    local ok, result = pcall(function()
+        return safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
+    end)
+    if not ok or not result or (result.StatusCode ~= 200 and result.StatusCode ~= 429) then
+        warn("[Slender Hub] Primary host unreachable, trying fallback...")
         PB.host = "https://api.platoboost.net"
+        -- Test fallback
+        local ok2, result2 = pcall(function()
+            return safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
+        end)
+        if ok2 and result2 and (result2.StatusCode == 200 or result2.StatusCode == 429) then
+            warn("[Slender Hub] Using fallback host:", PB.host)
+        else
+            warn("[Slender Hub] Both hosts unreachable - will retry later")
+        end
     end
 end
-checkConnectivity()
+-- Chamar em task.spawn para nao bloquear inicializacao
+task.spawn(checkConnectivity)
 
 function PB.generateNonce()
-    -- Melhor entropia: seed com tempo + tick
+    -- Usa HttpService para gerar GUID aleatorio (mais seguro que math.random)
+    local success, guid = pcall(function()
+        return game:GetService("HttpService"):GenerateGUID(false)
+    end)
+    if success and guid then
+        -- GUID exemplo: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" -> remove tracos
+        return guid:gsub("-", ""):sub(1, 16)
+    end
+    
+    -- Fallback: seed com tempo + tick
     local seed = os.time() * 1000 + math.floor(tick() * 1000)
-    for _ = 1, 5 do seed = seed + math.random(-9999, 9999) end
+    math.randomseed(seed % 2^31)
+    -- Garbage collection pra ajudar entropia
+    collectgarbage()
+    collectgarbage()
+    seed = os.time() * 1000 + math.floor(tick() * 1000) + math.random(0, 999999)
     math.randomseed(seed % 2^31)
     local str = ""
-    for _ = 1, 16 do str = str .. string.char(math.random(97, 122)) end
+    for _ = 1, 16 do
+        str = str .. string.char(math.random(97, 122))
+    end
     return str
 end
 
@@ -106,9 +149,22 @@ local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 local MarketService = game:GetService("MarketplaceService")
 local CoreGui = game:GetService("CoreGui")
-local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
+
+-- Funcao auxiliar: aguarda PlayerGui com timeout
+local function waitForPlayerGui(timeout)
+    timeout = timeout or 10
+    local start = os.time()
+    while not LocalPlayer or not LocalPlayer:FindFirstChild("PlayerGui") do
+        if os.time() - start > timeout then
+            warn("[Slender Hub] Timeout waiting for PlayerGui")
+            return nil
+        end
+        task.wait(0.5)
+    end
+    return LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+end
 
 --//==============================[ CONFIG ]==============================//--
 local CONFIG = {
@@ -138,7 +194,7 @@ local TARGET_SCRIPT_URL = GAMES_MAP[CurrentPlaceId]
 --//==============================[ NOTIFICATION HELPER ]==============================//--
 local Window = nil  -- Será atribuído depois que a UI for carregada
 
--- Enhanced notification with fallback support
+-- Enhanced notification with fallback support (FIXED: sempre loga no console)
 local function Notify(title, text, duration, nType)
     -- Map types for visual consistency
     local iconMap = {
@@ -149,28 +205,43 @@ local function Notify(title, text, duration, nType)
     }
     local icon = iconMap[nType] or "ℹ️"
     
+    -- Sempre loga no console para debug
+    print(string.format("[Slender Hub] %s %s: %s", icon, title, text))
+    
     if Window and Window.Notify then
-        Window:Notify(icon .. " " .. title, text, duration or 5, nType or "Info")
-    else
-        pcall(function()
-            StarterGui:SetCore("SendNotification", {
-                Title = icon .. " " .. title,
-                Text = text,
-                Duration = duration or 5,
-            })
+        local ok = pcall(function()
+            Window:Notify(icon .. " " .. title, text, duration or 5, nType or "Info")
         end)
+        if ok then return end
+        -- Se Window:Notify falhou, cai no fallback
+        warn("[Slender Hub] Window:Notify failed, using fallback")
     end
+    
+    -- Fallback: notificacao do Roblox
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = icon .. " " .. title,
+            Text = text,
+            Duration = duration or 5,
+        })
+    end)
 end
 
 --//==============================[ SCRIPT EXECUTION ]==============================//--
 local function StartMainScript()
-    local pGui = LocalPlayer:WaitForChild("PlayerGui")
-    
-    -- Destroy old GUIs
-    if pGui:FindFirstChild(CONFIG.OldGuiName) then 
-        pGui[CONFIG.OldGuiName]:Destroy() 
-        task.wait(0.1)
+    -- Aguarda PlayerGui com timeout
+    local pGui = waitForPlayerGui()
+    if not pGui then
+        warn("[Slender Hub] Could not find PlayerGui, skipping GUI cleanup")
+        Notify("Slender Hub", "Warning: Could not access PlayerGui", 5, "Warning")
+    else
+        -- Destroy old GUIs
+        if pGui:FindFirstChild(CONFIG.OldGuiName) then 
+            pcall(function() pGui[CONFIG.OldGuiName]:Destroy() end)
+            task.wait(0.1)
+        end
     end
+    
     pcall(function()
         local coreSlender = CoreGui:FindFirstChild("SlenderWind")
         if coreSlender then coreSlender:Destroy() end
@@ -183,8 +254,18 @@ local function StartMainScript()
     end
     
     -- Execute main script
+    local fetchSuccess, scriptContent = pcall(function()
+        return game:HttpGet(TARGET_SCRIPT_URL)
+    end)
+    if not fetchSuccess or not scriptContent or scriptContent == "" then
+        local errMsg = tostring(scriptContent)
+        warn("[Slender Hub] Failed to fetch script:", errMsg)
+        Notify("Error", "Failed to download script! Check Console (F9)", 5, "Error")
+        return
+    end
+    
     local success, err = pcall(function()
-        loadstring(game:HttpGet(TARGET_SCRIPT_URL))()
+        loadstring(scriptContent)()
     end)
     if not success then
         warn("[Slender Hub] Script Load Failed:", err)
@@ -195,13 +276,17 @@ end
 --//==============================[ SAVE/LOAD KEY ]==============================//--
 local function saveKey(key)
     if writefile then
-        writefile(CONFIG.KeyFileName, key)
+        local ok = pcall(function() writefile(CONFIG.KeyFileName, key) end)
+        if not ok then
+            warn("[Slender Hub] Failed to save key to file")
+        end
     end
 end
 
 local function checkSavedKey()
+    local read = readfile or function() return "" end
     if isfile and isfile(CONFIG.KeyFileName) then
-        local savedKey = readfile(CONFIG.KeyFileName)
+        local savedKey = read(CONFIG.KeyFileName)
         if savedKey and savedKey ~= "" then
             local success, msg = PB.redeemKey(savedKey)
             if success then
@@ -217,9 +302,24 @@ end
 
 --//==============================[ MAIN LOGIC ]==============================//--
 
+-- Verifica se LocalPlayer existe
+if not LocalPlayer then
+    warn("[Slender Hub] LocalPlayer is nil, waiting...")
+    local timeout = 0
+    while not LocalPlayer and timeout < 30 do
+        task.wait(0.5)
+        timeout = timeout + 0.5
+        LocalPlayer = Players.LocalPlayer
+    end
+    if not LocalPlayer then
+        warn("[Slender Hub] Could not get LocalPlayer after 30 seconds - aborting")
+        return
+    end
+end
+
 -- If main script GUI already exists, skip key system
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-if playerGui:FindFirstChild(CONFIG.MainGuiName) then
+local playerGui = waitForPlayerGui()
+if playerGui and playerGui:FindFirstChild(CONFIG.MainGuiName) then
     StartMainScript()
     return
 end
@@ -227,10 +327,44 @@ end
 -- Try auto-login first
 if checkSavedKey() then return end
 
--- Carregar SlenderWind UI
-local SlenderWind = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"
-))()
+-- Pequena pausa para checkConnectivity assincrono terminar
+task.wait(0.5)
+
+-- Carregar SlenderWind UI (COM PROTECAO DE ERRO)
+local SlenderWind = nil
+local uiLoadSuccess, uiLoadError = pcall(function()
+    local swUrl = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"
+    local swCode = game:HttpGet(swUrl)
+    if not swCode or swCode == "" then
+        error("SlenderWind: empty response from " .. swUrl)
+    end
+    local swFunc = loadstring(swCode)
+    if not swFunc then
+        error("SlenderWind: loadstring failed (invalid Lua code)")
+    end
+    return swFunc()
+end)
+
+if not uiLoadSuccess then
+    warn("[Slender Hub] Failed to load SlenderWind UI:", uiLoadError)
+    Notify("Slender Hub", "UI Load Error: " .. tostring(uiLoadError), 8, "Error")
+    -- Tenta continuar sem a UI
+end
+
+-- Se a UI nao carregou, ainda tenta usar o sistema de chave via notificacoes
+if not SlenderWind or not uiLoadSuccess then
+    warn("[Slender Hub] Running without UI...")
+    Notify("Slender Hub", "UI failed to load. Use console for key entry.", 5, "Warning")
+    -- Loop simples aguardando input do console (fallback basico)
+    task.spawn(function()
+        task.wait(2)
+        Notify("Slender Hub", "Check F9 console for instructions.", 5, "Info")
+        print("=== Slender Hub Fallback Mode ===")
+        print("No UI available. Type a key in console or press Enter to skip.")
+    end)
+    -- Nao podemos fazer muito mais sem UI
+    return
+end
 
 Window = SlenderWind.Window({
     Name = "Slender Hub | PlatoBoost",
@@ -249,6 +383,9 @@ Window = SlenderWind.Window({
 
 local Tab = Window:Tab("Key System")
 
+-- Variavel global para armazenar a chave digitada (evita buscar na arvore)
+local userInputKey = ""
+
 -- Game status with better visuals
 local gameName = "Unknown Game"
 pcall(function() gameName = MarketService:GetProductInfo(CurrentPlaceId).Name end)
@@ -260,7 +397,10 @@ Tab:Paragraph("📊 Status", supportedIcon .. " " .. statusText .. " (ID: " .. C
 Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━")
 Tab:Label("🔑 KEY VALIDATION")
 
-Tab:Input("PlatoBoost Key", "Paste your key here...", "PBKey", "Enter your PlatoBoost key", function() end)
+-- Input agora salva na variavel userInputKey em tempo real
+Tab:Input("PlatoBoost Key", "Paste your key here...", "PBKey", "Enter your PlatoBoost key", function(value)
+    userInputKey = value or ""
+end)
 
 -- Status label (updated by functions)
 local StatusLabel = Tab:Label("⏳ Waiting for input...")
@@ -269,17 +409,9 @@ local StatusLabel = Tab:Label("⏳ Waiting for input...")
 Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━")
 Tab:Label("🎯 ACTIONS")
 
--- Verify Key button
+-- Verify Key button (FIXED: usa userInputKey em vez de buscar na arvore)
 Tab:Button("✅ VERIFY KEY", "Check key with PlatoBoost", function()
-    -- Find TextBox by PlaceholderText
-    local key = ""
-    pcall(function()
-        for _, v in pairs(CoreGui:GetDescendants()) do
-            if v:IsA("TextBox") and v.PlaceholderText:find("Paste your key") then
-                key = v.Text:gsub("%s+", "")
-            end
-        end
-    end)
+    local key = userInputKey:gsub("%s+", "")
     
     if key == "" then
         Notify("⚠️ Input Required", "Please enter a key first.", 3, "Warning")
@@ -303,12 +435,12 @@ Tab:Button("✅ VERIFY KEY", "Check key with PlatoBoost", function()
         end)
         StartMainScript()
     else
-        StatusLabel:Set("❌ Invalid: " .. msg)
-        Notify("❌ Invalid Key", msg, 4, "Error")
+        StatusLabel:Set("❌ Invalid: " .. tostring(msg))
+        Notify("❌ Invalid Key", tostring(msg), 4, "Error")
     end
 end)
 
--- Get Free Key button (renamed from GET KEY LINK)
+-- Get Free Key button
 Tab:Button("🎁 GET FREE KEY", "Copy free key link to clipboard", function()
     Notify("🔄 Getting Link...", "Contacting PlatoBoost...", 2)
     StatusLabel:Set("🔄 Getting free key link...")
@@ -323,7 +455,7 @@ Tab:Button("🎁 GET FREE KEY", "Copy free key link to clipboard", function()
     end
 end)
 
--- Get Premium button (NEW)
+-- Get Premium button
 Tab:Button("⭐ GET PREMIUM", "Visit SlenderHub Shop for premium access", function()
     local shopUrl = "https://www.slenderhub.shop/"
     pcall(function() PB.fSetClipboard(shopUrl) end)
@@ -345,10 +477,16 @@ Tab:Button("🔄 RETRY SAVED KEY", "Try auto-login with saved key", function()
 end)
 
 Tab:Button("🗑️ CLEAR SAVED KEY", "Delete saved key file from system", function()
+    local del = delfile or function() end
     if isfile and isfile(CONFIG.KeyFileName) then
-        delfile(CONFIG.KeyFileName)
-        StatusLabel:Set("🗑️ Saved key deleted")
-        Notify("🗑️ Cleared", "Saved key file has been deleted.", 2, "Warning")
+        local ok = pcall(function() del(CONFIG.KeyFileName) end)
+        if ok then
+            StatusLabel:Set("🗑️ Saved key deleted")
+            Notify("🗑️ Cleared", "Saved key file has been deleted.", 2, "Warning")
+        else
+            StatusLabel:Set("❌ Failed to delete file")
+            Notify("❌ Error", "Could not delete saved key file.", 3, "Error")
+        end
     else
         Notify("ℹ️ Nothing", "No saved key file was found.", 2)
     end
