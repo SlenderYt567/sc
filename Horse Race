@@ -1,87 +1,54 @@
 --!strict
 --[[
-    Slender Hub - PlatoBoost Edition (V4.0)
+    Slender Hub - PlatoBoost Edition (V3.1)
     Architecture: Universal Key System with PlatoBoost
-    UI Library: SlenderWind V11 (Premium Edition)
+    UI Library: SlenderWind V5 (Internal)
     Integration: PlatoBoost API (Inline)
     
     Copyright (c) 2026 OYB / SlenderYt. All rights reserved.
-    🛒 Premium Shop: https://www.slenderhub.shop
+    Official Shop: https://www.slenderhub.shop
 ]]
 
 --//==============================[ PLATOBOOST LIBS (SHA-256 + JSON + API) ]==============================//--
-local a=2^32;local b=a-1;local function c(d,e)local f,g=0,1;while d~=0 or e~=0 do local h,i=d%2,e%2;local j=(h+i)%2;f=f+j*g;d=math.floor(d/2)e=math.floor(e/2)g=g*2 end;return f%a end;local function k(d,e,l,...)local m;if e then d=d%a;e=e%a;m=c(d,e)if l then m=k(m,l,...)end;return m elseif d then return d%a else return 0 end end;local function n(d,e,l,...)local m;if e then d=d%a;e=e%a;m=(d+e-c(d,e))/2;if l then m=n(m,l,...)end;return m elseif d then return d%a else return b end end;local function o(p)return b-p end;local function q(d,r)if r<0 then return lshift(d,-r)end;return math.floor(d%2^32/2^r)end;local function s(p,r)if r>31 or r<-31 then return 0 end;return q(p%a,r)end;local function lshift(d,r)if r<0 then return s(d,-r)end;return d*2^r%2^32 end;local function t(p,r)p=p%a;r=r%32;local u=n(p,2^r-1)return s(p,r)+lshift(u,32-r)end;local v={0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2}local function w(x)return string.gsub(x,".",function(l)return string.format("%02x",string.byte(l))end)end;local function y(z,A)local x=""for B=1,A do local C=z%256;x=string.char(C)..x;z=(z-C)/256 end;return x end;local function D(x,B)local A=0;for B=B,B+3 do A=A*256+string.byte(x,B)end;return A end;local function E(F,G)local H=64-(G+9)%64;G=y(8*G,8)F=F.."\128"..string.rep("\0",H)..G;assert(#F%64==0)return F end;local function I(J)J[1]=0x6a09e667;J[2]=0xbb67ae85;J[3]=0x3c6ef372;J[4]=0xa54ff53a;J[5]=0x510e527f;J[6]=0x9b05688c;J[7]=0x1f83d9ab;J[8]=0x5be0cd19;return J end;local function K(F,B,J)local L={}for M=1,16 do L[M]=D(F,B+(M-1)*4)end;for M=17,64 do local N=L[M-15]local O=k(t(N,7),t(N,18),s(N,3))N=L[M-2]L[M]=(L[M-16]+O+L[M-7]+k(t(N,17),t(N,19),s(N,10)))%a end;local d,e,l,P,Q,R,S,T=J[1],J[2],J[3],J[4],J[5],J[6],J[7],J[8]for B=1,64 do local O=k(t(d,2),t(d,13),t(d,22))local U=k(n(d,e),n(d,l),n(e,l))local V=(O+U)%a;local W=k(t(Q,6),t(Q,11),t(Q,25))local X=k(n(Q,R),n(o(Q),S))local Y=(T+W+X+v[B]+L[B])%a;T=S;S=R;R=Q;Q=(P+Y)%a;P=l;l=e;e=d;d=(Y+V)%a end;J[1]=(J[1]+d)%a;J[2]=(J[2]+e)%a;J[3]=(J[3]+l)%a;J[4]=(J[4]+P)%a;J[5]=(J[5]+Q)%a;J[6]=(J[6]+R)%a;J[7]=(J[7]+S)%a;J[8]=(J[8]+T)%a end;local function Z(F)F=E(F,#F)local J=I({})for B=1,#F,64 do K(F,B,J)end;return w(y(J[1],4)..y(J[2],4)..y(J[3],4)..y(J[4],4)..y(J[5],4)..y(J[6],4)..y(J[7],4)..y(J[8],4))end;local e;local l={["\\"]="\\",["\""]="\"",["\b"]="b",["\f"]="f",["\n"]="n",["\r"]="r",["\t"]="t"}local P={["/"]="/"}for Q,R in pairs(l)do P[R]=Q end;local S=function(T)return"\\"..(l[T]or string.format("u%04x",T:byte()))end;local B=function(M)return"null"end;local v=function(M,z)local _={}z=z or{}if z[M]then error("circular reference")end;z[M]=true;if rawget(M,1)~=nil or next(M)==nil then local A=0;for Q in pairs(M)do if type(Q)~="number"then error("invalid table: mixed or invalid key types")end;A=A+1 end;if A~=#M then error("invalid table: sparse array")end;for a0,R in ipairs(M)do table.insert(_,e(R,z))end;z[M]=nil;return"["..table.concat(_,",").."]"else for Q,R in pairs(M)do if type(Q)~="string"then error("invalid table: mixed or invalid key types")end;table.insert(_,e(Q,z)..":"..e(R,z))end;z[M]=nil;return"{"..table.concat(_,",").."}"end end;local g=function(M)return'"'..M:gsub('[%z\1-\31\\"]',S)..'"'end;local a1=function(M)if M~=M or M<=-math.huge or M>=math.huge then error("unexpected number value '"..tostring(M).."'")end;return string.format("%.14g",M)end;local j={["nil"]=B,["table"]=v,["string"]=g,["number"]=a1,["boolean"]=tostring}e=function(M,z)local x=type(M)local a2=j[x]if a2 then return a2(M,z)end;error("unexpected type '"..x.."'")end;local a3=function(M)return e(M)end;local a4;local N=function(...)local _={}for a0=1,select("#",...)do _[select(a0,...)]=true end;return _ end;local L=N(" ","\t","\r","\n")local p=N(" ","\t","\r","\n","]","}",",")local a5=N("\\","/",'"',"b","f","n","r","t","u")local m=N("true","false","null")local a6={["true"]=true,["false"]=false,["null"]=nil}local a7=function(a8,a9,aa,ab)for a0=a9,#a8 do if aa[a8:sub(a0,a0)]~=ab then return a0 end end;return#a8+1 end;local ac=function(a8,a9,J)local ad=1;local ae=1;for a0=1,a9-1 do ae=ae+1;if a8:sub(a0,a0)=="\n"then ad=ad+1;ae=1 end;error(string.format("%s at line %d col %d",J,ad,ae))end;local af=function(A)local a2=math.floor;if A<=0x7f then return string.char(A)elseif A<=0x7ff then return string.char(a2(A/64)+192,A%64+128)elseif A<=0xffff then return string.char(a2(A/4096)+224,a2(A%4096/64)+128,A%64+128)elseif A<=0x10ffff then return string.char(a2(A/262144)+240,a2(A%262144/4096)+128,a2(A%4096/64)+128,A%64+128)end;error(string.format("invalid unicode codepoint '%x'",A))end;local ag=function(ah)local ai=tonumber(ah:sub(1,4),16)local aj=tonumber(ah:sub(7,10),16)if aj then return af((ai-0xd800)*0x400+aj-0xdc00+0x10000)else return af(ai)end end;local ak=function(a8,a0)local _=""local al=a0+1;local Q=al;while al<=#a8 do local am=a8:byte(al)if am<32 then ac(a8,al,"control character in string")elseif am==92 then _=_..a8:sub(Q,al-1)al=al+1;local T=a8:sub(al,al)if T=="u"then local an=a8:match("^[dD][89aAbB]%x%x\\u%x%x%x%x",al+1)or a8:match("^%x%x%x%x",al+1)or ac(a8,al-1,"invalid unicode escape in string")_=_..ag(an)al=al+#an else if not a5[T]then ac(a8,al-1,"invalid escape char '"..T.."' in string")end;_=_..P[T]end;Q=al+1 elseif am==34 then _=_..a8:sub(Q,al-1)return _,al+1 end;al=al+1 end;ac(a8,a0,"expected closing quote for string")end;local ao=function(a8,a0)local am=a7(a8,a0,p)local ah=a8:sub(a0,am-1)local A=tonumber(ah)if not A then ac(a8,a0,"invalid number '"..ah.."'")end;return A,am end;local ap=function(a8,a0)local am=a7(a8,a0,p)local aq=a8:sub(a0,am-1)if not m[aq]then ac(a8,a0,"invalid literal '"..aq.."'")end;return a6[aq],am end;local ar=function(a8,a0)local _={}local A=1;a0=a0+1;while 1 do local am;a0=a7(a8,a0,L,true)if a8:sub(a0,a0)=="]"then a0=a0+1;break end;am,a0=a4(a8,a0)_[A]=am;A=A+1;a0=a7(a8,a0,L,true)local as=a8:sub(a0,a0)a0=a0+1;if as=="]"then break end;if as~=","then ac(a8,a0,"expected ']' or ','")end end;return _,a0 end;local at=function(a8,a0)local _={}a0=a0+1;while 1 do local au,M;a0=a7(a8,a0,L,true)if a8:sub(a0,a0)=="}"then a0=a0+1;break end;if a8:sub(a0,a0)~='"'then ac(a8,a0,"expected string for key")end;au,a0=a4(a8,a0)a0=a7(a8,a0,L,true)if a8:sub(a0,a0)~=":"then ac(a8,a0,"expected ':' after key")end;a0=a7(a8,a0+1,L,true)M,a0=a4(a8,a0)_[au]=M;a0=a7(a8,a0,L,true)local as=a8:sub(a0,a0)a0=a0+1;if as=="}"then break end;if as~=","then ac(a8,a0,"expected '}' or ','")end end;return _,a0 end;local av={['"']=ak,["0"]=ao,["1"]=ao,["2"]=ao,["3"]=ao,["4"]=ao,["5"]=ao,["6"]=ao,["7"]=ao,["8"]=ao,["9"]=ao,["-"]=ao,["t"]=ap,["f"]=ap,["n"]=ap,["["]=ar,["{"]=at}a4=function(a8,a9)local as=a8:sub(a9,a9)local a2=av[as]if a2 then return a2(a8,a9)end;ac(a8,a9,"unexpected character '"..as.."'")end;local aw=function(a8)if type(a8)~="string"then error("expected argument of type string, got "..type(a8))end;local _,a9=a4(a8,a7(a8,1,L,true))a9=a7(a8,a9,L,true)if a9<=#a8 then ac(a8,a9,"trailing garbage")end;return _ end;
+local a=2^32;local b=a-1;local function c(d,e)local f,g=0,1;while d~=0 or e~=0 do local h,i=d%2,e%2;local j=(h+i)%2;f=f+j*g;d=math.floor(d/2)e=math.floor(e/2)g=g*2 end;return f%a end;local function k(d,e,l,...)local m;if e then d=d%a;e=e%a;m=c(d,e)if l then m=k(m,l,...)end;return m elseif d then return d%a else return 0 end end;local function n(d,e,l,...)local m;if e then d=d%a;e=e%a;m=(d+e-c(d,e))/2;if l then m=n(m,l,...)end;return m elseif d then return d%a else return b end end;local function o(p)return b-p end;local function q(d,r)if r<0 then return lshift(d,-r)end;return math.floor(d%2^32/2^r)end;local function s(p,r)if r>31 or r<-31 then return 0 end;return q(p%a,r)end;local function lshift(d,r)if r<0 then return s(d,-r)end;return d*2^r%2^32 end;local function t(p,r)p=p%a;r=r%32;local u=n(p,2^r-1)return s(p,r)+lshift(u,32-r)end;local v={0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2}local function w(x)return string.gsub(x,".",function(l)return string.format("%02x",string.byte(l))end)end;local function y(z,A)local x=""for B=1,A do local C=z%256;x=string.char(C)..x;z=(z-C)/256 end;return x end;local function D(x,B)local A=0;for B=B,B+3 do A=A*256+string.byte(x,B)end;return A end;local function E(F,G)local H=64-(G+9)%64;G=y(8*G,8)F=F.."\128"..string.rep("\0",H)..G;assert(#F%64==0)return F end;local function I(J)J[1]=0x6a09e667;J[2]=0xbb67ae85;J[3]=0x3c6ef372;J[4]=0xa54ff53a;J[5]=0x510e527f;J[6]=0x9b05688c;J[7]=0x1f83d9ab;J[8]=0x5be0cd19;return J end;local function K(F,B,J)local L={}for M=1,16 do L[M]=D(F,B+(M-1)*4)end;for M=17,64 do local N=L[M-15]local O=k(t(N,7),t(N,18),s(N,3))N=L[M-2]L[M]=(L[M-16]+O+L[M-7]+k(t(N,17),t(N,19),s(N,10)))%a end;local d,e,l,P,Q,R,S,T=J[1],J[2],J[3],J[4],J[5],J[6],J[7],J[8]for B=1,64 do local O=k(t(d,2),t(d,13),t(d,22))local U=k(n(d,e),n(d,l),n(e,l))local V=(O+U)%a;local W=k(t(Q,6),t(Q,11),t(Q,25))local X=k(n(Q,R),n(o(Q),S))local Y=(T+W+X+v[B]+L[B])%a;T=S;S=R;R=Q;Q=(P+Y)%a;P=l;l=e;e=d;d=(Y+V)%a end;J[1]=(J[1]+d)%a;J[2]=(J[2]+e)%a;J[3]=(J[3]+l)%a;J[4]=(J[4]+P)%a;J[5]=(J[5]+Q)%a;J[6]=(J[6]+R)%a;J[7]=(J[7]+S)%a;J[8]=(J[8]+T)%a end;local function Z(F)F=E(F,#F)local J=I({})for B=1,#F,64 do K(F,B,J)end;return w(y(J[1],4)..y(J[2],4)..y(J[3],4)..y(J[4],4)..y(J[5],4)..y(J[6],4)..y(J[7],4)..y(J[8],4))end;local e;local l={["\\"]="\\",["\""]="\"",["\b"]="b",["\f"]="f",["\n"]="n",["\r"]="r",["\t"]="t"}local P={["/"]="/"}for Q,R in pairs(l)do P[R]=Q end;local S=function(T)return"\\"..(l[T]or string.format("u%04x",T:byte()))end;local B=function(M)return"null"end;local v=function(M,z)local _={}z=z or{}if z[M]then error("circular reference")end;z[M]=true;if rawget(M,1)~=nil or next(M)==nil then local A=0;for Q in pairs(M)do if type(Q)~="number"then error("invalid table: mixed or invalid key types")end;A=A+1 end;if A~=#M then error("invalid table: sparse array")end;for a0,R in ipairs(M)do table.insert(_,e(R,z))end;z[M]=nil;return"["..table.concat(_,",").."]"else for Q,R in pairs(M)do if type(Q)~="string"then error("invalid table: mixed or invalid key types")end;table.insert(_,e(Q,z)..":"..e(R,z))end;z[M]=nil;return"{"..table.concat(_,",").."}"end end;local g=function(M)return'"'..M:gsub('[%z\1-\31\\"]',S)..'"'end;local a1=function(M)if M~=M or M<=-math.huge or M>=math.huge then error("unexpected number value '"..tostring(M).."'")end;return string.format("%.14g",M)end;local j={["nil"]=B,["table"]=v,["string"]=g,["number"]=a1,["boolean"]=tostring}e=function(M,z)local x=type(M)local a2=j[x]if a2 then return a2(M,z)end;error("unexpected type '"..x.."'")end;local a3=function(M)return e(M)end;local a4;local N=function(...)local _={}for a0=1,select("#",...)do _[select(a0,...)]=true end;return _ end;local L=N(" ","\t","\r","\n")local p=N(" ","\t","\r","\n","]","}",",")local a5=N("\\","/",'"',"b","f","n","r","t","u")local m=N("true","false","null")local a6={["true"]=true,["false"]=false,["null"]=nil}local a7=function(a8,a9,aa,ab)for a0=a9,#a8 do if aa[a8:sub(a0,a0)]~=ab then return a0 end end;return#a8+1 end;local ac=function(a8,a9,J)local ad=1;local ae=1;for a0=1,a9-1 do ae=ae+1;if a8:sub(a0,a0)=="\n"then ad=ad+1;ae=1 end end;error(string.format("%s at line %d col %d",J,ad,ae))end;local af=function(A)local a2=math.floor;if A<=0x7f then return string.char(A)elseif A<=0x7ff then return string.char(a2(A/64)+192,A%64+128)elseif A<=0xffff then return string.char(a2(A/4096)+224,a2(A%4096/64)+128,A%64+128)elseif A<=0x10ffff then return string.char(a2(A/262144)+240,a2(A%262144/4096)+128,a2(A%4096/64)+128,A%64+128)end;error(string.format("invalid unicode codepoint '%x'",A))end;local ag=function(ah)local ai=tonumber(ah:sub(1,4),16)local aj=tonumber(ah:sub(7,10),16)if aj then return af((ai-0xd800)*0x400+aj-0xdc00+0x10000)else return af(ai)end end;local ak=function(a8,a0)local _=""local al=a0+1;local Q=al;while al<=#a8 do local am=a8:byte(al)if am<32 then ac(a8,al,"control character in string")elseif am==92 then _=_..a8:sub(Q,al-1)al=al+1;local T=a8:sub(al,al)if T=="u"then local an=a8:match("^[dD][89aAbB]%x%x\\u%x%x%x%x",al+1)or a8:match("^%x%x%x%x",al+1)or ac(a8,al-1,"invalid unicode escape in string")_=_..ag(an)al=al+#an else if not a5[T]then ac(a8,al-1,"invalid escape char '"..T.."' in string")end;_=_..P[T]end;Q=al+1 elseif am==34 then _=_..a8:sub(Q,al-1)return _,al+1 end;al=al+1 end;ac(a8,a0,"expected closing quote for string")end;local ao=function(a8,a0)local am=a7(a8,a0,p)local ah=a8:sub(a0,am-1)local A=tonumber(ah)if not A then ac(a8,a0,"invalid number '"..ah.."'")end;return A,am end;local ap=function(a8,a0)local am=a7(a8,a0,p)local aq=a8:sub(a0,am-1)if not m[aq]then ac(a8,a0,"invalid literal '"..aq.."'")end;return a6[aq],am end;local ar=function(a8,a0)local _={}local A=1;a0=a0+1;while 1 do local am;a0=a7(a8,a0,L,true)if a8:sub(a0,a0)=="]"then a0=a0+1;break end;am,a0=a4(a8,a0)_[A]=am;A=A+1;a0=a7(a8,a0,L,true)local as=a8:sub(a0,a0)a0=a0+1;if as=="]"then break end;if as~=","then ac(a8,a0,"expected ']' or ','")end end;return _,a0 end;local at=function(a8,a0)local _={}a0=a0+1;while 1 do local au,M;a0=a7(a8,a0,L,true)if a8:sub(a0,a0)=="}"then a0=a0+1;break end;if a8:sub(a0,a0)~='"'then ac(a8,a0,"expected string for key")end;au,a0=a4(a8,a0)a0=a7(a8,a0,L,true)if a8:sub(a0,a0)~=":"then ac(a8,a0,"expected ':' after key")end;a0=a7(a8,a0+1,L,true)M,a0=a4(a8,a0)_[au]=M;a0=a7(a8,a0,L,true)local as=a8:sub(a0,a0)a0=a0+1;if as=="}"then break end;if as~=","then ac(a8,a0,"expected '}' or ','")end end;return _,a0 end;local av={['"']=ak,["0"]=ao,["1"]=ao,["2"]=ao,["3"]=ao,["4"]=ao,["5"]=ao,["6"]=ao,["7"]=ao,["8"]=ao,["9"]=ao,["-"]=ao,["t"]=ap,["f"]=ap,["n"]=ap,["["]=ar,["{"]=at}a4=function(a8,a9)local as=a8:sub(a9,a9)local a2=av[as]if a2 then return a2(a8,a9)end;ac(a8,a9,"unexpected character '"..as.."'")end;local aw=function(a8)if type(a8)~="string"then error("expected argument of type string, got "..type(a8))end;local _,a9=a4(a8,a7(a8,1,L,true))a9=a7(a8,a9,L,true)if a9<=#a8 then ac(a8,a9,"trailing garbage")end;return _ end;
 local lEncode, lDecode, lDigest = a3, aw, Z;
 
 --//==============================[ PLATOBOOST API CORE ]==============================//--
 local PB = {}
-PB.service = 28805
-PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"
+PB.service = 28805           -- PlatoBoost Service ID
+PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"  -- PlatoBoost Secret
 PB.useNonce = true
-PB.cachedLink = ""
-PB.cachedTime = 0
-PB.host = "https://api.platoboost.com"
 
 -- Safe request function
 local function safeRequest(options)
     local req = request or http_request or syn_request or (http and http.request)
-    if not req then
-        warn("[Slender Hub] HTTP not supported - no request function found")
-        return nil, "HTTP requests not supported"
-    end
+    if not req then return nil, "HTTP requests not supported" end
     local success, response = pcall(function() return req(options) end)
-    if success and response then
-        return response
-    else
-        warn("[Slender Hub] HTTP request failed:", tostring(response))
-        return nil, "Connection Error"
-    end
+    if success and response then return response else return nil, "Connection Error" end
 end
 
-PB.fSetClipboard = setclipboard or toclipboard or function() warn("[Slender Hub] Clipboard not available") end
-PB.fGetHwid = gethwid or function()
-    local ok, clientId = pcall(function()
-        return game:GetService("RbxAnalyticsService"):GetClientId()
-    end)
-    return (ok and clientId) or "unknown"
-end
+PB.fSetClipboard = setclipboard or toclipboard or function() end
+PB.fGetHwid = gethwid or function() return game:GetService("RbxAnalyticsService"):GetClientId() end
 
--- Check connectivity with fallback
+PB.cachedLink = ""
+PB.cachedTime = 0
+PB.host = "https://api.platoboost.com"
+
+-- Check connectivity
 local function checkConnectivity()
     local response = safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
     if not response or (response.StatusCode ~= 200 and response.StatusCode ~= 429) then
-        warn("[Slender Hub] Primary host unreachable, trying fallback...")
         PB.host = "https://api.platoboost.net"
-        local response2 = safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
-        if response2 and (response2.StatusCode == 200 or response2.StatusCode == 429) then
-            warn("[Slender Hub] Using fallback host:", PB.host)
-        else
-            warn("[Slender Hub] Both hosts unreachable - API calls may fail")
-        end
-    else
-        warn("[Slender Hub] Connected to:", PB.host)
     end
 end
 checkConnectivity()
 
 function PB.generateNonce()
-    local success, guid = pcall(function()
-        return game:GetService("HttpService"):GenerateGUID(false)
-    end)
-    if success and guid then
-        return guid:gsub("-", ""):sub(1, 16)
-    end
-    -- Fallback
     local seed = os.time() * 1000 + math.floor(tick() * 1000)
-    math.randomseed(seed % 2^31)
-    collectgarbage()
-    collectgarbage()
-    seed = os.time() * 1000 + math.floor(tick() * 1000) + math.random(0, 999999)
+    for _ = 1, 5 do seed = seed + math.random(-9999, 9999) end
     math.randomseed(seed % 2^31)
     local str = ""
-    for _ = 1, 16 do
-        str = str .. string.char(math.random(97, 122))
-    end
+    for _ = 1, 16 do str = str .. string.char(math.random(97, 122)) end
     return str
 end
 
@@ -110,14 +77,14 @@ function PB.redeemKey(key)
     local nonce = PB.generateNonce()
     local body = {identifier = lDigest(PB.fGetHwid()), key = key}
     if PB.useNonce then body.nonce = nonce end
-
+    
     local response = safeRequest({
         Url = PB.host .. "/public/redeem/" .. tostring(PB.service),
         Method = "POST",
         Body = lEncode(body),
         Headers = {["Content-Type"] = "application/json"}
     })
-
+    
     if response and response.StatusCode == 200 then
         local decoded = lDecode(response.Body)
         if decoded and decoded.success and decoded.data.valid then
@@ -139,21 +106,9 @@ local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 local MarketService = game:GetService("MarketplaceService")
 local CoreGui = game:GetService("CoreGui")
-local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
 
--- Funcao auxiliar: aguarda PlayerGui com timeout
-local function waitForPlayerGui(timeout)
-    timeout = timeout or 10
-    local start = os.time()
-    while not LocalPlayer or not LocalPlayer:FindFirstChild("PlayerGui") do
-        if os.time() - start > timeout then
-            warn("[Slender Hub] Timeout waiting for PlayerGui")
-            return nil
-        end
-        task.wait(0.5)
-    end
-    return LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
-end
+local LocalPlayer = Players.LocalPlayer
 
 --//==============================[ CONFIG ]==============================//--
 local CONFIG = {
@@ -162,89 +117,71 @@ local CONFIG = {
     MainGuiName     = "SlenderHub_Main",
     HubName         = "Slender Hub | PlatoBoost",
     HubDescription  = "Universal Key System",
-    ShopURL         = "https://www.slenderhub.shop"
+    PremiumUrl      = "https://www.slenderhub.shop"
 }
+
+-- Print store URL on execution
+print("==================================================")
+print("[Slender Hub] Initialized successfully!")
+print("[Slender Hub] Premium Shop: " .. CONFIG.PremiumUrl)
+print("==================================================")
 
 --//==============================[ SUPPORTED GAMES ]==============================//--
 local GAMES_MAP = {
-    [82013336390273] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Pickaxe%20Simulator%20script",
+    [82013336390273]  = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Pickaxe%20Simulator%20script",
     [107807115409153] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Bee%20Tappers%20Script",
     [109983668079237] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Steal%20a%20Brainrot(Free)",
-    [76558904092080] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/The%20Forge%20Script",
-    [75992362647444] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Tap%20simulator",
-    [4924922222] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Brookhaven%20script",
-    [93787311916283] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Horse%20Race",
+    [76558904092080]  = "https://raw.githubusercontent.com/SlenderYt567/sc/main/The%20Forge%20Script",
+    [75992362647444]  = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Tap%20simulator",
+    [4924922222]      = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Brookhaven%20script",
+    [93787311916283]  = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Horse%20Race",
     [120405647949186] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Royal%20Hatchers%20Script",
-    [14236123211] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Punch_Simulator_SlenderHub"
+    [14236123211]     = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Punch_Simulator_SlenderHub"
 }
 
 local CurrentPlaceId = game.PlaceId
 local TARGET_SCRIPT_URL = GAMES_MAP[CurrentPlaceId]
 
---//==============================[ PREMIUM SHOP THEME ]==============================//
--- Cores premium para destaque
-local PREMIUM = {
-    Gold    = Color3.fromRGB(255, 215, 0),
-    GoldDark = Color3.fromRGB(200, 170, 0),
-    Ambar   = Color3.fromRGB(255, 191, 0),
-    Sparkle = Color3.fromRGB(255, 220, 100)
-}
-
 --//==============================[ NOTIFICATION HELPER ]==============================//--
-local Window = nil
+local Window = nil  -- Serál atribuído após o carregamento da UI
 
 local function Notify(title, text, duration, nType)
-    local notifyType = nType or "Success"
-    print(string.format("[Slender Hub] [%s] %s: %s", notifyType, title, text))
-
     if Window and Window.Notify then
-        local ok = pcall(function()
-            Window:Notify(title, text, duration or 5, notifyType)
+        Window:Notify(title, text, duration or 5, nType or "Success")
+    else
+        pcall(function()
+            StarterGui:SetCore("SendNotification", {
+                Title = title,
+                Text = text,
+                Duration = duration or 5,
+            })
         end)
-        if ok then return end
     end
-
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Duration = duration or 5,
-        })
-    end)
 end
 
 --//==============================[ SCRIPT EXECUTION ]==============================//--
 local function StartMainScript()
-    local pGui = waitForPlayerGui()
-    if not pGui then
-        Notify("Slender Hub", "Warning: Could not access PlayerGui", 5, "Warning")
-    else
-        if pGui:FindFirstChild(CONFIG.OldGuiName) then
-            pcall(function() pGui[CONFIG.OldGuiName]:Destroy() end)
-            task.wait(0.1)
-        end
+    local pGui = LocalPlayer:WaitForChild("PlayerGui")
+    
+    -- Clean old GUIs
+    if pGui:FindFirstChild(CONFIG.OldGuiName) then 
+        pGui[CONFIG.OldGuiName]:Destroy() 
+        task.wait(0.1)
     end
-
     pcall(function()
         local coreSlender = CoreGui:FindFirstChild("SlenderWind")
         if coreSlender then coreSlender:Destroy() end
     end)
-
+    
+    -- Check support
     if not TARGET_SCRIPT_URL then
         Notify("Slender Hub", "Game Not Supported (ID: " .. CurrentPlaceId .. ")", 5, "Error")
         return
     end
-
-    local fetchSuccess, scriptContent = pcall(function()
-        return game:HttpGet(TARGET_SCRIPT_URL)
-    end)
-    if not fetchSuccess or not scriptContent or scriptContent == "" then
-        Notify("Error", "Failed to download script! Check Console (F9)", 5, "Error")
-        return
-    end
-
+    
+    -- Execute target script
     local success, err = pcall(function()
-        loadstring(scriptContent)()
+        loadstring(game:HttpGet(TARGET_SCRIPT_URL))()
     end)
     if not success then
         warn("[Slender Hub] Script Load Failed:", err)
@@ -255,15 +192,13 @@ end
 --//==============================[ SAVE/LOAD KEY ]==============================//--
 local function saveKey(key)
     if writefile then
-        local ok = pcall(function() writefile(CONFIG.KeyFileName, key) end)
-        if not ok then warn("[Slender Hub] Failed to save key to file") end
+        writefile(CONFIG.KeyFileName, key)
     end
 end
 
 local function checkSavedKey()
-    local read = readfile or function() return "" end
     if isfile and isfile(CONFIG.KeyFileName) then
-        local savedKey = read(CONFIG.KeyFileName)
+        local savedKey = readfile(CONFIG.KeyFileName)
         if savedKey and savedKey ~= "" then
             local success, msg = PB.redeemKey(savedKey)
             if success then
@@ -277,65 +212,24 @@ local function checkSavedKey()
     return false
 end
 
---//==============================[ UI HELPERS ]==============================//
--- Funcao para criar efeito de "brilho" em botoes premium
-local function flashButton(btn, color)
-    if not btn then return end
-    pcall(function()
-        -- Pisca rapidamente para dar feedback visual premium
-        local orig = btn.BackgroundColor3
-        for i = 1, 3 do
-            task.wait(0.08)
-            btn.BackgroundColor3 = color or PREMIUM.Ambar
-            task.wait(0.08)
-            btn.BackgroundColor3 = orig
-        end
-    end)
-end
-
 --//==============================[ MAIN LOGIC ]==============================//--
 
-if not LocalPlayer then
-    local timeout = 0
-    while not LocalPlayer and timeout < 30 do
-        task.wait(0.5)
-        timeout = timeout + 0.5
-        LocalPlayer = Players.LocalPlayer
-    end
-    if not LocalPlayer then return end
-end
-
-local playerGui = waitForPlayerGui()
-if playerGui and playerGui:FindFirstChild(CONFIG.MainGuiName) then
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+if playerGui:FindFirstChild(CONFIG.MainGuiName) then
     StartMainScript()
     return
 end
 
+-- Attempt auto-login
 if checkSavedKey() then return end
 
-task.wait(0.5)
+-- Load UI Library
+local SlenderWind = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"
+))()
 
--- Carregar SlenderWind UI com protecao
-local uiLoadSuccess, SlenderWind = pcall(function()
-    local swUrl = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"
-    local swCode = game:HttpGet(swUrl)
-    if not swCode or swCode == "" then error("SlenderWind: empty response") end
-    local swFunc = loadstring(swCode)
-    if not swFunc then error("SlenderWind: loadstring failed") end
-    return swFunc()
-end)
-
-if not uiLoadSuccess then
-    warn("[Slender Hub] Failed to load SlenderWind UI:", tostring(SlenderWind))
-    Notify("Slender Hub", "UI Load Error: " .. tostring(SlenderWind), 8, "Error")
-    return
-end
-
--- ============================================================
---  CRIACAO DA JANELA PRINCIPAL (SlenderWind UI)
--- ============================================================
 Window = SlenderWind.Window({
-    Name = "✦ Slender Hub | PlatoBoost",
+    Name = CONFIG.HubName,
     KeySystem = false,
     Theme = {
         Accent = Color3.fromRGB(0, 170, 255),
@@ -344,95 +238,58 @@ Window = SlenderWind.Window({
     }
 })
 
--- Ativar Watermark HUD
-Window:Watermark({
-    Enabled = true,
-    Title = "✦ SlenderHub | PlatoBoost Premium"
-})
+local Tab = Window:Tab("Key System")
 
--- ============================================================
---  ABA PRINCIPAL: KEY SYSTEM
--- ============================================================
-local Tab = Window:Tab("✦ Key System")
-
--- Variavel para armazenar a chave
-local userInputKey = ""
-
--- ─── GAME STATUS ───
+--// ------------------------------ [ 📊 Game Status ] ------------------------------ //--
 local gameName = "Unknown Game"
 pcall(function() gameName = MarketService:GetProductInfo(CurrentPlaceId).Name end)
-local supportedIcon = TARGET_SCRIPT_URL and "✅" or "❌"
-local statusText = TARGET_SCRIPT_URL and "Supported: " .. gameName or "⚠️ Unsupported Game"
+local statusText = TARGET_SCRIPT_URL and "Supported: " .. gameName or "Unsupported Game"
 
-Tab:Paragraph("📊 Game Status",
-    supportedIcon .. " " .. statusText .. "\n" ..
-    "🆔 Place ID: " .. CurrentPlaceId
+Tab:Paragraph("📊 Game Status", statusText .. "\nPlace ID: " .. tostring(CurrentPlaceId))
+
+--// ------------------------------ [ 💎 PREMIUM ACCESS ] ------------------------------ //--
+Tab:Paragraph("💎 PREMIUM ACCESS", 
+    "• Direct Access without Key System\n" ..
+    "• Fast & Exclusive Script Updates\n" ..
+    "• Priority Support & Exclusive Features\n" ..
+    "• Official Link: " .. CONFIG.PremiumUrl
 )
 
--- ═══════════════════════════════════════════════
---  💎 SECAO PREMIUM (DESTAQUE)
--- ═══════════════════════════════════════════════
-Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-Tab:Label("💎 PREMIUM ACCESS")
-
--- Paragrafo de destaque premium
-Tab:Paragraph("🌟 SlenderHub Premium",
-    "🔗 Shop: slenderhub.shop\n" ..
-    "⚡ Instant Access | Lifetime Keys\n" ..
-    "🎮 All Supported Games Unlocked\n" ..
-    "🛡️ Priority Support & Early Updates"
-)
-
--- Botao PREMIUM com destaque (copiar link)
-Tab:Button("💎 BUY PREMIUM • slenderhub.shop", "Copy premium shop link to clipboard", function()
-    local shopUrl = CONFIG.ShopURL
-    pcall(function() PB.fSetClipboard(shopUrl) end)
-    StatusLabel:Set("💎 Premium link copied!")
-    Notify("💎 PREMIUM LINK COPIED!",
-        "Link: " .. shopUrl .. "\nOpen in your browser!",
-        6, "Success")
-    -- Feedback visual extra
-    print("[Slender Hub] 🛒 Premium shop link copied:", shopUrl)
+Tab:Button("💎 BUY PREMIUM • slenderhub.shop", "Copy premium store link to clipboard", function()
+    pcall(function() PB.fSetClipboard(CONFIG.PremiumUrl) end)
+    Notify("Premium Store", "Link copied to clipboard!\n" .. CONFIG.PremiumUrl, 4, "Success")
 end)
 
--- ═══════════════════════════════════════════════
---  🔑 SECAO DE KEY
--- ═══════════════════════════════════════════════
-Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-Tab:Label("🔑 KEY VALIDATION")
+--// ------------------------------ [ 🔑 KEY VALIDATION ] ------------------------------ //--
+Tab:Input("PlatoBoost Key", "Paste your key here...", "PBKey", "Enter your PlatoBoost key", function() end)
 
--- Input da key
-Tab:Input("PlatoBoost Key", "Paste your key here...", "PBKey", "Enter your PlatoBoost key", function(value)
-    userInputKey = value or ""
-end)
+local StatusLabel = Tab:Label("Status: Waiting for input...")
 
--- Status label
-local StatusLabel = Tab:Label("⏳ Waiting for input...")
-
--- ═══════════════════════════════════════════════
---  🎯 SECAO DE ACOES
--- ═══════════════════════════════════════════════
-Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-Tab:Label("🎯 ACTIONS")
-
--- Botao VERIFY KEY
-Tab:Button("✅ VERIFY KEY", "Check your key with PlatoBoost servers", function()
-    local key = userInputKey:gsub("%s+", "")
-
+--// ------------------------------ [ 🎯 ACTIONS ] ------------------------------ //--
+Tab:Button("VERIFY KEY", "Check key with PlatoBoost", function()
+    local key = ""
+    pcall(function()
+        for _, v in pairs(CoreGui:GetDescendants()) do
+            if v:IsA("TextBox") and v.PlaceholderText:find("Paste your key") then
+                key = v.Text:gsub("%s+", "")
+            end
+        end
+    end)
+    
     if key == "" then
-        Notify("⚠️ Input Required", "Please enter a key first.", 3, "Warning")
-        StatusLabel:Set("❌ Enter a key first!")
+        Notify("Input Required", "Please enter a key first.", 3, "Warning")
+        StatusLabel:Set("Status: Enter a key!")
         return
     end
-
-    Notify("🔄 Verifying...", "Contacting PlatoBoost servers...", 3)
-    StatusLabel:Set("🔄 Verifying key...")
-
+    
+    Notify("Checking...", "Verifying with PlatoBoost...", 3)
+    StatusLabel:Set("Status: Verifying...")
+    
     local success, msg = PB.redeemKey(key)
     if success then
         saveKey(key)
-        StatusLabel:Set("✅ Key Valid! Loading...")
-        Notify("✅ SUCCESS!", "Key validated! Loading main script...", 3, "Success")
+        StatusLabel:Set("Status: Key Valid!")
+        Notify("Success!", "Key Validated! Loading...", 3, "Success")
         task.wait(0.5)
         pcall(function()
             for _, ui in pairs(CoreGui:GetChildren()) do
@@ -441,82 +298,58 @@ Tab:Button("✅ VERIFY KEY", "Check your key with PlatoBoost servers", function(
         end)
         StartMainScript()
     else
-        StatusLabel:Set("❌ Invalid: " .. tostring(msg))
-        Notify("❌ Invalid Key", tostring(msg), 4, "Error")
+        StatusLabel:Set("Status: Invalid (" .. msg .. ")")
+        Notify("Invalid Key", msg, 4, "Error")
     end
 end)
 
--- Botao GET FREE KEY
-Tab:Button("🎁 GET FREE KEY", "Copy a free key link to clipboard", function()
-    Notify("🔄 Getting Link...", "Contacting PlatoBoost...", 2)
-    StatusLabel:Set("🔄 Fetching free key link...")
+Tab:Button("GET FREE KEY", "Copy PlatoBoost link to clipboard", function()
+    Notify("Getting Link...", "Contacting PlatoBoost...", 2)
+    StatusLabel:Set("Status: Getting link...")
     local success, result = PB.cacheLink()
     if success then
         pcall(function() PB.fSetClipboard(result) end)
-        StatusLabel:Set("✅ Free key link copied!")
-        Notify("✅ LINK COPIED!", "Open in browser to get your FREE key.", 3, "Success")
+        StatusLabel:Set("Status: Link copied!")
+        Notify("Link Copied!", "Open in browser to get your free key.", 3, "Success")
     else
-        StatusLabel:Set("❌ Error: " .. tostring(result))
-        Notify("❌ Error", tostring(result), 4, "Error")
+        StatusLabel:Set("Status: Error (" .. tostring(result) .. ")")
+        Notify("Error", tostring(result), 4, "Error")
     end
 end)
 
--- ═══════════════════════════════════════════════
---  ⚡ SECAO RAPIDA
--- ═══════════════════════════════════════════════
-Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-Tab:Label("⚡ QUICK ACTIONS")
-
--- Retry saved key
-Tab:Button("🔄 RETRY SAVED KEY", "Try auto-login with your saved key", function()
+--// ------------------------------ [ ⚡ QUICK ACTIONS ] ------------------------------ //--
+Tab:Button("RETRY SAVED KEY", "Try auto-login again", function()
     if not checkSavedKey() then
-        StatusLabel:Set("❌ No valid saved key found")
-        Notify("⚠️ No Saved Key", "No valid saved key was found.", 3, "Warning")
+        StatusLabel:Set("Status: No valid saved key")
+        Notify("No Saved Key", "No valid saved key found.", 3, "Warning")
     end
 end)
 
--- Clear saved key
-Tab:Button("🗑️ CLEAR SAVED KEY", "Delete saved key from your system", function()
-    local del = delfile or function() end
+Tab:Button("CLEAR SAVED KEY", "Delete saved key file", function()
     if isfile and isfile(CONFIG.KeyFileName) then
-        local ok = pcall(function() del(CONFIG.KeyFileName) end)
-        if ok then
-            StatusLabel:Set("🗑️ Saved key deleted")
-            Notify("🗑️ Cleared", "Saved key has been deleted.", 2, "Warning")
-        else
-            StatusLabel:Set("❌ Failed to delete")
-            Notify("❌ Error", "Could not delete saved key file.", 3, "Error")
-        end
+        delfile(CONFIG.KeyFileName)
+        StatusLabel:Set("Status: Saved key deleted")
+        Notify("Cleared", "Saved key deleted.", 2, "Warning")
     else
-        Notify("ℹ️ Nothing", "No saved key file found.", 2)
+        Notify("Nothing", "No saved key found.", 2)
     end
 end)
 
--- ═══════════════════════════════════════════════
---  ℹ️ INFORMACOES
--- ═══════════════════════════════════════════════
-Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-Tab:Paragraph("ℹ️ About",
-    "🔐 Key System: PlatoBoost\n" ..
-    "🖥️ HWID-Locked Security\n" ..
-    "💾 Auto-Login on next launch\n" ..
-    "━━━━━━━━━━━━━━━━━━━━━━━━\n" ..
-    "💎 Premium: slenderhub.shop\n" ..
-    "🎁 Free Key: via PlatoBoost API"
+--// ------------------------------ [ ℹ️ About ] ------------------------------ //--
+Tab:Paragraph("ℹ️ About", 
+    "System: PlatoBoost Universal Key\n" ..
+    "Hardware Binding: HWID Protected\n" ..
+    "Official Store: " .. CONFIG.PremiumUrl .. "\n" ..
+    "Copyright (c) 2026 OYB / SlenderYt"
 )
 
--- ═══════════════════════════════════════════════
---  AUTO-CHECK SAVED KEY
--- ═══════════════════════════════════════════════
+-- Check saved key notification loop
 task.spawn(function()
     task.wait(1.5)
     if isfile and isfile(CONFIG.KeyFileName) then
-        StatusLabel:Set("💾 Saved key detected. Click 🔄 RETRY to use.")
-        Notify("💾 Saved Key Found", "Use 'Retry Saved Key' to auto-login.", 4, "Warning")
+        StatusLabel:Set("Status: Saved key detected.")
+        Notify("Saved Key Found", "Use 'RETRY SAVED KEY' to auto-login.", 4, "Warning")
     else
-        StatusLabel:Set("🔑 Enter a key below or get a FREE one.")
+        StatusLabel:Set("Status: Waiting for input...")
     end
 end)
-
-print("[Slender Hub | PlatoBoost V4.0] Loaded successfully!")
-print("🛒 Premium Shop: " .. CONFIG.ShopURL)
