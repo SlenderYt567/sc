@@ -1,517 +1,866 @@
---!strict
---[[
-    Slender Hub - PlatoBoost Edition (V3.1)
-    Architecture: Universal Key System with PlatoBoost
-    UI Library: SlenderWind V5 (Internal)
-    Integration: PlatoBoost API (Inline)
-    
-    Copyright (c) 2026 OYB / SlenderYt. All rights reserved.
-]]
-
---//==============================[ PLATOBOOST LIBS (SHA-256 + JSON + API) ]==============================//--
-local a=2^32;local b=a-1;local function c(d,e)local f,g=0,1;while d~=0 or e~=0 do local h,i=d%2,e%2;local j=(h+i)%2;f=f+j*g;d=math.floor(d/2)e=math.floor(e/2)g=g*2 end;return f%a end;local function k(d,e,l,...)local m;if e then d=d%a;e=e%a;m=c(d,e)if l then m=k(m,l,...)end;return m elseif d then return d%a else return 0 end end;local function n(d,e,l,...)local m;if e then d=d%a;e=e%a;m=(d+e-c(d,e))/2;if l then m=n(m,l,...)end;return m elseif d then return d%a else return b end end;local function o(p)return b-p end;local function q(d,r)if r<0 then return lshift(d,-r)end;return math.floor(d%2^32/2^r)end;local function s(p,r)if r>31 or r<-31 then return 0 end;return q(p%a,r)end;local function lshift(d,r)if r<0 then return s(d,-r)end;return d*2^r%2^32 end;local function t(p,r)p=p%a;r=r%32;local u=n(p,2^r-1)return s(p,r)+lshift(u,32-r)end;local v={0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2}local function w(x)return string.gsub(x,".",function(l)return string.format("%02x",string.byte(l))end)end;local function y(z,A)local x=""for B=1,A do local C=z%256;x=string.char(C)..x;z=(z-C)/256 end;return x end;local function D(x,B)local A=0;for B=B,B+3 do A=A*256+string.byte(x,B)end;return A end;local function E(F,G)local H=64-(G+9)%64;G=y(8*G,8)F=F.."\128"..string.rep("\0",H)..G;assert(#F%64==0)return F end;local function I(J)J[1]=0x6a09e667;J[2]=0xbb67ae85;J[3]=0x3c6ef372;J[4]=0xa54ff53a;J[5]=0x510e527f;J[6]=0x9b05688c;J[7]=0x1f83d9ab;J[8]=0x5be0cd19;return J end;local function K(F,B,J)local L={}for M=1,16 do L[M]=D(F,B+(M-1)*4)end;for M=17,64 do local N=L[M-15]local O=k(t(N,7),t(N,18),s(N,3))N=L[M-2]L[M]=(L[M-16]+O+L[M-7]+k(t(N,17),t(N,19),s(N,10)))%a end;local d,e,l,P,Q,R,S,T=J[1],J[2],J[3],J[4],J[5],J[6],J[7],J[8]for B=1,64 do local O=k(t(d,2),t(d,13),t(d,22))local U=k(n(d,e),n(d,l),n(e,l))local V=(O+U)%a;local W=k(t(Q,6),t(Q,11),t(Q,25))local X=k(n(Q,R),n(o(Q),S))local Y=(T+W+X+v[B]+L[B])%a;T=S;S=R;R=Q;Q=(P+Y)%a;P=l;l=e;e=d;d=(Y+V)%a end;J[1]=(J[1]+d)%a;J[2]=(J[2]+e)%a;J[3]=(J[3]+l)%a;J[4]=(J[4]+P)%a;J[5]=(J[5]+Q)%a;J[6]=(J[6]+R)%a;J[7]=(J[7]+S)%a;J[8]=(J[8]+T)%a end;local function Z(F)F=E(F,#F)local J=I({})for B=1,#F,64 do K(F,B,J)end;return w(y(J[1],4)..y(J[2],4)..y(J[3],4)..y(J[4],4)..y(J[5],4)..y(J[6],4)..y(J[7],4)..y(J[8],4))end;local e;local l={["\\"]="\\",["\""]="\"",["\b"]="b",["\f"]="f",["\n"]="n",["\r"]="r",["\t"]="t"}local P={["/"]="/"}for Q,R in pairs(l)do P[R]=Q end;local S=function(T)return"\\"..(l[T]or string.format("u%04x",T:byte()))end;local B=function(M)return"null"end;local v=function(M,z)local _={}z=z or{}if z[M]then error("circular reference")end;z[M]=true;if rawget(M,1)~=nil or next(M)==nil then local A=0;for Q in pairs(M)do if type(Q)~="number"then error("invalid table: mixed or invalid key types")end;A=A+1 end;if A~=#M then error("invalid table: sparse array")end;for a0,R in ipairs(M)do table.insert(_,e(R,z))end;z[M]=nil;return"["..table.concat(_,",").."]"else for Q,R in pairs(M)do if type(Q)~="string"then error("invalid table: mixed or invalid key types")end;table.insert(_,e(Q,z)..":"..e(R,z))end;z[M]=nil;return"{"..table.concat(_,",").."}"end end;local g=function(M)return'"'..M:gsub('[%z\1-\31\\"]',S)..'"'end;local a1=function(M)if M~=M or M<=-math.huge or M>=math.huge then error("unexpected number value '"..tostring(M).."'")end;return string.format("%.14g",M)end;local j={["nil"]=B,["table"]=v,["string"]=g,["number"]=a1,["boolean"]=tostring}e=function(M,z)local x=type(M)local a2=j[x]if a2 then return a2(M,z)end;error("unexpected type '"..x.."'")end;local a3=function(M)return e(M)end;local a4;local N=function(...)local _={}for a0=1,select("#",...)do _[select(a0,...)]=true end;return _ end;local L=N(" ","\t","\r","\n")local p=N(" ","\t","\r","\n","]","}",",")local a5=N("\\","/",'"',"b","f","n","r","t","u")local m=N("true","false","null")local a6={["true"]=true,["false"]=false,["null"]=nil}local a7=function(a8,a9,aa,ab)for a0=a9,#a8 do if aa[a8:sub(a0,a0)]~=ab then return a0 end end;return#a8+1 end;local ac=function(a8,a9,J)local ad=1;local ae=1;for a0=1,a9-1 do ae=ae+1;if a8:sub(a0,a0)=="\n"then ad=ad+1;ae=1 end end;error(string.format("%s at line %d col %d",J,ad,ae))end;local af=function(A)local a2=math.floor;if A<=0x7f then return string.char(A)elseif A<=0x7ff then return string.char(a2(A/64)+192,A%64+128)elseif A<=0xffff then return string.char(a2(A/4096)+224,a2(A%4096/64)+128,A%64+128)elseif A<=0x10ffff then return string.char(a2(A/262144)+240,a2(A%262144/4096)+128,a2(A%4096/64)+128,A%64+128)end;error(string.format("invalid unicode codepoint '%x'",A))end;local ag=function(ah)local ai=tonumber(ah:sub(1,4),16)local aj=tonumber(ah:sub(7,10),16)if aj then return af((ai-0xd800)*0x400+aj-0xdc00+0x10000)else return af(ai)end end;local ak=function(a8,a0)local _=""local al=a0+1;local Q=al;while al<=#a8 do local am=a8:byte(al)if am<32 then ac(a8,al,"control character in string")elseif am==92 then _=_..a8:sub(Q,al-1)al=al+1;local T=a8:sub(al,al)if T=="u"then local an=a8:match("^[dD][89aAbB]%x%x\\u%x%x%x%x",al+1)or a8:match("^%x%x%x%x",al+1)or ac(a8,al-1,"invalid unicode escape in string")_=_..ag(an)al=al+#an else if not a5[T]then ac(a8,al-1,"invalid escape char '"..T.."' in string")end;_=_..P[T]end;Q=al+1 elseif am==34 then _=_..a8:sub(Q,al-1)return _,al+1 end;al=al+1 end;ac(a8,a0,"expected closing quote for string")end;local ao=function(a8,a0)local am=a7(a8,a0,p)local ah=a8:sub(a0,am-1)local A=tonumber(ah)if not A then ac(a8,a0,"invalid number '"..ah.."'")end;return A,am end;local ap=function(a8,a0)local am=a7(a8,a0,p)local aq=a8:sub(a0,am-1)if not m[aq]then ac(a8,a0,"invalid literal '"..aq.."'")end;return a6[aq],am end;local ar=function(a8,a0)local _={}local A=1;a0=a0+1;while 1 do local am;a0=a7(a8,a0,L,true)if a8:sub(a0,a0)=="]"then a0=a0+1;break end;am,a0=a4(a8,a0)_[A]=am;A=A+1;a0=a7(a8,a0,L,true)local as=a8:sub(a0,a0)a0=a0+1;if as=="]"then break end;if as~=","then ac(a8,a0,"expected ']' or ','")end end;return _,a0 end;local at=function(a8,a0)local _={}a0=a0+1;while 1 do local au,M;a0=a7(a8,a0,L,true)if a8:sub(a0,a0)=="}"then a0=a0+1;break end;if a8:sub(a0,a0)~='"'then ac(a8,a0,"expected string for key")end;au,a0=a4(a8,a0)a0=a7(a8,a0,L,true)if a8:sub(a0,a0)~=":"then ac(a8,a0,"expected ':' after key")end;a0=a7(a8,a0+1,L,true)M,a0=a4(a8,a0)_[au]=M;a0=a7(a8,a0,L,true)local as=a8:sub(a0,a0)a0=a0+1;if as=="}"then break end;if as~=","then ac(a8,a0,"expected '}' or ','")end end;return _,a0 end;local av={['"']=ak,["0"]=ao,["1"]=ao,["2"]=ao,["3"]=ao,["4"]=ao,["5"]=ao,["6"]=ao,["7"]=ao,["8"]=ao,["9"]=ao,["-"]=ao,["t"]=ap,["f"]=ap,["n"]=ap,["["]=ar,["{"]=at}a4=function(a8,a9)local as=a8:sub(a9,a9)local a2=av[as]if a2 then return a2(a8,a9)end;ac(a8,a9,"unexpected character '"..as.."'")end;local aw=function(a8)if type(a8)~="string"then error("expected argument of type string, got "..type(a8))end;local _,a9=a4(a8,a7(a8,1,L,true))a9=a7(a8,a9,L,true)if a9<=#a8 then ac(a8,a9,"trailing garbage")end;return _ end;
-local lEncode, lDecode, lDigest = a3, aw, Z;
-
---//==============================[ PLATOBOOST API CORE ]==============================//--
-local PB = {}
-PB.service = 28805           -- PlatoBoost Service ID
-PB.secret = "9c548b2c-467f-4a25-a642-b3c6e9ddc407"  -- PlatoBoost Secret (ofuscar antes de distribuir)
-PB.useNonce = true
-
--- Safe request function (fixed: melhor deteccao de erros)
-local function safeRequest(options)
-    local req = request or http_request or syn_request or (http and http.request)
-    if not req then
-        warn("[Slender Hub] HTTP not supported - no request function found")
-        return nil, "HTTP requests not supported"
-    end
-    local success, response = pcall(function() return req(options) end)
-    if success and response then
-        return response
-    else
-        local errMsg = tostring(response)
-        warn("[Slender Hub] HTTP request failed:", errMsg)
-        return nil, "Connection Error: " .. errMsg
-    end
-end
-
-PB.fSetClipboard = setclipboard or toclipboard or function() warn("[Slender Hub] Clipboard not available") end
-PB.fGetHwid = gethwid or function() 
-    local ok, id = pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end)
-    if ok and id then return id end
-    -- Ultimo fallback: usar Player.UserId
-    ok, id = pcall(function() return tostring(LocalPlayer and LocalPlayer.UserId or "unknown") end)
-    return id or "unknown"
-end
-
-PB.cachedLink = ""
-PB.cachedTime = 0
-PB.host = "https://api.platoboost.com"
-
--- Check connectivity (with FIXED logic)
-local function checkConnectivity()
-    local ok, result = pcall(function()
-        return safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
-    end)
-    if not ok or not result or (result.StatusCode ~= 200 and result.StatusCode ~= 429) then
-        warn("[Slender Hub] Primary host unreachable, trying fallback...")
-        PB.host = "https://api.platoboost.net"
-        -- Test fallback
-        local ok2, result2 = pcall(function()
-            return safeRequest({Url = PB.host .. "/public/connectivity", Method = "GET"})
-        end)
-        if ok2 and result2 and (result2.StatusCode == 200 or result2.StatusCode == 429) then
-            warn("[Slender Hub] Using fallback host:", PB.host)
-        else
-            warn("[Slender Hub] Both hosts unreachable - will retry later")
-        end
-    end
-end
--- Chamar em task.spawn para nao bloquear inicializacao
-task.spawn(checkConnectivity)
-
-function PB.generateNonce()
-    -- Usa HttpService para gerar GUID aleatorio (mais seguro que math.random)
-    local success, guid = pcall(function()
-        return game:GetService("HttpService"):GenerateGUID(false)
-    end)
-    if success and guid then
-        -- GUID exemplo: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" -> remove tracos
-        return guid:gsub("-", ""):sub(1, 16)
-    end
-    
-    -- Fallback: seed com tempo + tick
-    local seed = os.time() * 1000 + math.floor(tick() * 1000)
-    math.randomseed(seed % 2^31)
-    -- Garbage collection pra ajudar entropia
-    collectgarbage()
-    collectgarbage()
-    seed = os.time() * 1000 + math.floor(tick() * 1000) + math.random(0, 999999)
-    math.randomseed(seed % 2^31)
-    local str = ""
-    for _ = 1, 16 do
-        str = str .. string.char(math.random(97, 122))
-    end
-    return str
-end
-
-function PB.cacheLink()
-    if PB.cachedTime + 600 < os.time() then
-        local response = safeRequest({
-            Url = PB.host .. "/public/start",
-            Method = "POST",
-            Body = lEncode({service = PB.service, identifier = lDigest(PB.fGetHwid())}),
-            Headers = {["Content-Type"] = "application/json"}
-        })
-        if response and response.StatusCode == 200 then
-            local decoded = lDecode(response.Body)
-            if decoded and decoded.success then
-                PB.cachedLink = decoded.data.url
-                PB.cachedTime = os.time()
-                return true, PB.cachedLink
-            end
-        end
-        return false, "Server Unreachable"
-    end
-    return true, PB.cachedLink
-end
-
-function PB.redeemKey(key)
-    local nonce = PB.generateNonce()
-    local body = {identifier = lDigest(PB.fGetHwid()), key = key}
-    if PB.useNonce then body.nonce = nonce end
-    
-    local response = safeRequest({
-        Url = PB.host .. "/public/redeem/" .. tostring(PB.service),
-        Method = "POST",
-        Body = lEncode(body),
-        Headers = {["Content-Type"] = "application/json"}
-    })
-    
-    if response and response.StatusCode == 200 then
-        local decoded = lDecode(response.Body)
-        if decoded and decoded.success and decoded.data.valid then
-            if PB.useNonce then
-                if decoded.data.hash == lDigest("true" .. "-" .. nonce .. "-" .. PB.secret) then
-                    return true, "Success"
-                end
-                return false, "Integrity Check Failed"
-            end
-            return true, "Success"
-        end
-        return false, decoded and decoded.message or "Invalid Key"
-    end
-    return false, "Server Error"
-end
-
---//==============================[ SERVICES ]==============================//--
+-- SERVICES BÁSICOS
 local Players = game:GetService("Players")
-local StarterGui = game:GetService("StarterGui")
-local MarketService = game:GetService("MarketplaceService")
-local CoreGui = game:GetService("CoreGui")
-
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
--- Funcao auxiliar: aguarda PlayerGui com timeout
-local function waitForPlayerGui(timeout)
-    timeout = timeout or 10
-    local start = os.time()
-    while not LocalPlayer or not LocalPlayer:FindFirstChild("PlayerGui") do
-        if os.time() - start > timeout then
-            warn("[Slender Hub] Timeout waiting for PlayerGui")
-            return nil
-        end
-        task.wait(0.5)
-    end
-    return LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
-end
-
---//==============================[ CONFIG ]==============================//--
-local CONFIG = {
-    KeyFileName     = "SlenderHub_Key.txt",
-    OldGuiName      = "SlenderWind",
-    MainGuiName     = "SlenderHub_Main",
-    HubName         = "Slender Hub | PlatoBoost",
-    HubDescription  = "Universal Key System"
-}
-
---//==============================[ SUPPORTED GAMES ]==============================//--
-local GAMES_MAP = {
-    [82013336390273] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Pickaxe%20Simulator%20script",
-    [107807115409153] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Bee%20Tappers%20Script",
-    [109983668079237] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Steal%20a%20Brainrot(Free)",
-    [76558904092080] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/The%20Forge%20Script",
-    [75992362647444] = "https://raw.githubusercontent.com/SlenderYt567/sc/main/Tap%20simulator",
-    [4924922222] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Brookhaven%20script",
-    [93787311916283] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Horse%20Race",
-    [120405647949186] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Royal%20Hatchers%20Script",
-    [14236123211] = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/Punch_Simulator_SlenderHub"
-}
-
-local CurrentPlaceId = game.PlaceId
-local TARGET_SCRIPT_URL = GAMES_MAP[CurrentPlaceId]
-
---//==============================[ NOTIFICATION HELPER ]==============================//--
-local Window = nil  -- Será atribuído depois que a UI for carregada
-
--- Enhanced notification with fallback support (FIXED: sempre loga no console)
-local function Notify(title, text, duration, nType)
-    -- Map types for visual consistency
-    local iconMap = {
-        Success = "✅",
-        Error   = "❌", 
-        Warning = "⚠️",
-        Info    = "ℹ️"
-    }
-    local icon = iconMap[nType] or "ℹ️"
-    
-    -- Sempre loga no console para debug
-    print(string.format("[Slender Hub] %s %s: %s", icon, title, text))
-    
-    if Window and Window.Notify then
-        local ok = pcall(function()
-            Window:Notify(icon .. " " .. title, text, duration or 5, nType or "Info")
-        end)
-        if ok then return end
-        -- Se Window:Notify falhou, cai no fallback
-        warn("[Slender Hub] Window:Notify failed, using fallback")
-    end
-    
-    -- Fallback: notificacao do Roblox
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = icon .. " " .. title,
-            Text = text,
-            Duration = duration or 5,
-        })
-    end)
-end
-
---//==============================[ SCRIPT EXECUTION ]==============================//--
-local function StartMainScript()
-    -- Aguarda PlayerGui com timeout
-    local pGui = waitForPlayerGui()
-    if not pGui then
-        warn("[Slender Hub] Could not find PlayerGui, skipping GUI cleanup")
-        Notify("Slender Hub", "Warning: Could not access PlayerGui", 5, "Warning")
-    else
-        -- Destroy old GUIs
-        if pGui:FindFirstChild(CONFIG.OldGuiName) then 
-            pcall(function() pGui[CONFIG.OldGuiName]:Destroy() end)
-            task.wait(0.1)
-        end
-    end
-    
-    pcall(function()
-        local coreSlender = CoreGui:FindFirstChild("SlenderWind")
-        if coreSlender then coreSlender:Destroy() end
-    end)
-    
-    -- Check if game is supported
-    if not TARGET_SCRIPT_URL then
-        Notify("Slender Hub", "Game Not Supported (ID: " .. CurrentPlaceId .. ")", 5, "Error")
-        return
-    end
-    
-    -- Execute main script
-    local fetchSuccess, scriptContent = pcall(function()
-        return game:HttpGet(TARGET_SCRIPT_URL)
-    end)
-    if not fetchSuccess or not scriptContent or scriptContent == "" then
-        local errMsg = tostring(scriptContent)
-        warn("[Slender Hub] Failed to fetch script:", errMsg)
-        Notify("Error", "Failed to download script! Check Console (F9)", 5, "Error")
-        return
-    end
-    
-    local success, err = pcall(function()
-        loadstring(scriptContent)()
-    end)
-    if not success then
-        warn("[Slender Hub] Script Load Failed:", err)
-        Notify("Error", "Failed to load script! Check Console (F9)", 5, "Error")
-    end
-end
-
---//==============================[ SAVE/LOAD KEY ]==============================//--
-local function saveKey(key)
-    if writefile then
-        local ok = pcall(function() writefile(CONFIG.KeyFileName, key) end)
-        if not ok then
-            warn("[Slender Hub] Failed to save key to file")
-        end
-    end
-end
-
-local function checkSavedKey()
-    local read = readfile or function() return "" end
-    if isfile and isfile(CONFIG.KeyFileName) then
-        local savedKey = read(CONFIG.KeyFileName)
-        if savedKey and savedKey ~= "" then
-            local success, msg = PB.redeemKey(savedKey)
-            if success then
-                Notify("Slender Hub", "Auto-Login Successful!", 3, "Success")
-                task.wait(0.5)
-                StartMainScript()
-                return true
-            end
-        end
-    end
-    return false
-end
-
---//==============================[ MAIN LOGIC ]==============================//--
-
--- Verifica se LocalPlayer existe
-if not LocalPlayer then
-    warn("[Slender Hub] LocalPlayer is nil, waiting...")
-    local timeout = 0
-    while not LocalPlayer and timeout < 30 do
-        task.wait(0.5)
-        timeout = timeout + 0.5
-        LocalPlayer = Players.LocalPlayer
-    end
-    if not LocalPlayer then
-        warn("[Slender Hub] Could not get LocalPlayer after 30 seconds - aborting")
-        return
-    end
-end
-
--- If main script GUI already exists, skip key system
-local playerGui = waitForPlayerGui()
-if playerGui and playerGui:FindFirstChild(CONFIG.MainGuiName) then
-    StartMainScript()
-    return
-end
-
--- Try auto-login first
-if checkSavedKey() then return end
-
--- Pequena pausa para checkConnectivity assincrono terminar
-task.wait(0.5)
-
--- Carregar SlenderWind UI (COM PROTECAO DE ERRO)
-local SlenderWind = nil
-local uiLoadSuccess, uiLoadError = pcall(function()
-    local swUrl = "https://raw.githubusercontent.com/SlenderYt567/sc/refs/heads/main/SlenderWind.lua"
-    local swCode = game:HttpGet(swUrl)
-    if not swCode or swCode == "" then
-        error("SlenderWind: empty response from " .. swUrl)
-    end
-    local swFunc = loadstring(swCode)
-    if not swFunc then
-        error("SlenderWind: loadstring failed (invalid Lua code)")
-    end
-    return swFunc()
+-- =====================================
+-- ANTI AFK
+-- =====================================
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
 end)
 
-if not uiLoadSuccess then
-    warn("[Slender Hub] Failed to load SlenderWind UI:", uiLoadError)
-    Notify("Slender Hub", "UI Load Error: " .. tostring(uiLoadError), 8, "Error")
-    -- Tenta continuar sem a UI
-end
+-- =====================================
+-- LOAD FLUENT (PRIMEIRO!)
+-- =====================================
+local Fluent = loadstring(game:HttpGet(
+    "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"
+))()
 
--- Se a UI nao carregou, ainda tenta usar o sistema de chave via notificacoes
-if not SlenderWind or not uiLoadSuccess then
-    warn("[Slender Hub] Running without UI...")
-    Notify("Slender Hub", "UI failed to load. Use console for key entry.", 5, "Warning")
-    -- Loop simples aguardando input do console (fallback basico)
-    task.spawn(function()
-        task.wait(2)
-        Notify("Slender Hub", "Check F9 console for instructions.", 5, "Info")
-        print("=== Slender Hub Fallback Mode ===")
-        print("No UI available. Type a key in console or press Enter to skip.")
-    end)
-    -- Nao podemos fazer muito mais sem UI
-    return
-end
+local SaveManager = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"
+))()
 
-Window = SlenderWind.Window({
-    Name = "Slender Hub | PlatoBoost",
-    KeySystem = false,
-    Theme = {
-        Accent = Color3.fromRGB(255, 170, 0),       -- Gold accent for premium feel
-        Success = Color3.fromRGB(0, 255, 100),
-        Error = Color3.fromRGB(255, 50, 50),
-        Warning = Color3.fromRGB(255, 170, 0),
-        Background = Color3.fromRGB(15, 15, 20),
-        Topbar = Color3.fromRGB(25, 25, 35),
-        Text = Color3.fromRGB(255, 255, 255),
-        SubText = Color3.fromRGB(180, 180, 180)
-    }
+local InterfaceManager = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"
+))()
+
+-- =====================================
+-- WINDOW
+-- =====================================
+local Window = Fluent:CreateWindow({
+    Title = "SlenderHub",
+    SubTitle = "By Slender",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Theme = "Aqua",
+    MinimizeKey = Enum.KeyCode.LeftControl
 })
 
-local Tab = Window:Tab("Key System")
+-- =====================================
+-- TABS
+-- =====================================
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main", Icon = "home" }),
+    Train = Window:AddTab({ Title = "Train", Icon = "power" }),
+    Misc = Window:AddTab({ Title = "Misc", Icon = "box" }),
+    Teleport = Window:AddTab({ Title = "Teleport", Icon = "map" }),
+    Pet = Window:AddTab({ Title = "Pet", Icon = "paw-print" }),
+    Egg = Window:AddTab({ Title = "Egg", Icon = "egg" })
+}
 
--- Variavel global para armazenar a chave digitada (evita buscar na arvore)
-local userInputKey = ""
+-- Aba Event criada **depois da Egg**, mas antes da Settings
+Tabs.Event = Window:AddTab({ Title = "Event", Icon = "sparkles" })
 
--- Game status with better visuals
-local gameName = "Unknown Game"
-pcall(function() gameName = MarketService:GetProductInfo(CurrentPlaceId).Name end)
-local supportedIcon = TARGET_SCRIPT_URL and "✅" or "❌"
-local statusText = TARGET_SCRIPT_URL and "Supported: " .. gameName or "Unsupported Game"
-Tab:Paragraph("📊 Status", supportedIcon .. " " .. statusText .. " (ID: " .. CurrentPlaceId .. ")")
+-- Agora cria a aba Settings por último
+Tabs.Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 
--- ─── KEY INPUT SECTION ───
-Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━")
-Tab:Label("🔑 KEY VALIDATION")
+-- =====================================
+-- FLAGS
+-- =====================================
+local Flags = {
+    AutoTrain = false,
+    AutoWin = false,
+    AutoRebirth = false,
+    AutoSuper = false,
+    InfMoney = false,
+    Diamonds = false,
+    AutoGifts = false,
+    AutoCrate1 = false,
+    AutoCrate2 = false,
+    EggGhost = false,
+    InfinitePotion = false,
+    AutoEquipBestPets = false,
+    AutoCraftPets = false
+}
+-- =====================================
+-- KNIT (CARREGAMENTO SEGURO)
+-- =====================================
+local KnitLoaded = false
+local Services = {}
 
--- Input agora salva na variavel userInputKey em tempo real
-Tab:Input("PlatoBoost Key", "Paste your key here...", "PBKey", "Enter your PlatoBoost key", function(value)
-    userInputKey = value or ""
-end)
+task.spawn(function()
+    repeat task.wait() until ReplicatedStorage:FindFirstChild("Packages")
 
--- Status label (updated by functions)
-local StatusLabel = Tab:Label("⏳ Waiting for input...")
+    local ok, knit = pcall(function()
+        return ReplicatedStorage.Packages
+            ._Index["sleitnick_knit@1.5.1"]
+            .knit.Services
+    end)
 
--- ─── ACTION BUTTONS ───
-Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━")
-Tab:Label("🎯 ACTIONS")
-
--- Verify Key button (FIXED: usa userInputKey em vez de buscar na arvore)
-Tab:Button("✅ VERIFY KEY", "Check key with PlatoBoost", function()
-    local key = userInputKey:gsub("%s+", "")
-    
-    if key == "" then
-        Notify("⚠️ Input Required", "Please enter a key first.", 3, "Warning")
-        StatusLabel:Set("❌ Enter a key!")
+    if not ok then
+        warn("Knit não carregou")
         return
     end
-    
-    Notify("🔄 Checking...", "Verifying with PlatoBoost...", 3)
-    StatusLabel:Set("🔄 Verifying...")
-    
-    local success, msg = PB.redeemKey(key)
-    if success then
-        saveKey(key)
-        StatusLabel:Set("✅ Key Valid!")
-        Notify("✅ Success!", "Key Validated! Loading main script...", 3, "Success")
-        task.wait(0.5)
+
+    Services = knit
+    KnitLoaded = true
+
+    Fluent:Notify({
+        Title = "Knit",
+        Content = "Knit carregado com sucesso!",
+        Duration = 4
+    })
+end)
+
+--==================================================
+--==================================================
+-- SERVICES
+--==================================================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+--==================================================
+-- TRAIN TAB (FLUENT VERSION)
+--==================================================
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Knit = ReplicatedStorage.Packages._Index["sleitnick_knit@1.5.1"].knit
+local TrainRE = Knit.Services.TrainService.RE.RunTrain
+
+--==================================================
+-- FLAGS
+--==================================================
+
+local Flags = {
+    TrainWorld = "1",
+    TrainMachine = "1",
+    AutoTrain = false
+}
+
+local AutoTrainRunning = false
+
+--==================================================
+-- UI (TRAIN TAB)
+--==================================================
+
+Tabs.Train:AddSection("Auto Train")
+
+-- WORLD DROPDOWN
+Tabs.Train:AddDropdown("TrainWorld", {
+    Title = "World",
+    Values = {"1","2","3","4"},
+    Default = "1",
+    Callback = function(value)
+        Flags.TrainWorld = value
+    end
+})
+
+-- MACHINE DROPDOWN
+Tabs.Train:AddDropdown("TrainMachine", {
+    Title = "Treadmill",
+    Values = {
+        "1","2","3","4","5","6",
+        "7","8","9","10","11","12"
+    },
+    Default = "1",
+    Callback = function(value)
+        Flags.TrainMachine = value
+    end
+})
+
+--==================================================
+-- AUTO TRAIN LOOP
+--==================================================
+
+local function AutoTrainLoop()
+    if AutoTrainRunning then return end
+    AutoTrainRunning = true
+
+    while Flags.AutoTrain do
         pcall(function()
-            for _, ui in pairs(CoreGui:GetChildren()) do
-                if ui.Name == "SlenderWind" then ui:Destroy() end
+            TrainRE:FireServer(
+                "Treadmill_" .. Flags.TrainWorld .. "_" .. Flags.TrainMachine
+            )
+        end)
+
+        -- delay seguro (principalmente World 4)
+        task.wait(1)
+    end
+
+    AutoTrainRunning = false
+end
+
+-- TOGGLE
+Tabs.Train:AddToggle("AutoTrainToggle", {
+    Title = "Auto Train",
+    Default = false,
+    Callback = function(state)
+        Flags.AutoTrain = state
+        if state then
+            AutoTrainLoop()
+        end
+    end
+})
+-- =====================================
+-- AUTO WIN
+-- =====================================
+Tabs.Main:AddToggle("AutoWin", {
+    Title = "Auto Win Contest",
+    Callback = function(v)
+        Flags.AutoWin = v
+        task.spawn(function()
+            while Flags.AutoWin do
+                if KnitLoaded and Services.FightService then
+                    for _, area in pairs(Workspace.Areas:GetChildren()) do
+                        pcall(function()
+                            Services.FightService.RE.JoinContest:FireServer(area.Name)
+                            task.wait(0.1)
+                            for i, gate in pairs(area.WinGates:GetChildren()) do
+                                Services.FightService.RE.GetWinsEvent:FireServer(
+                                    "WinGate_" .. i,
+                                    gate.gate.Position
+                                )
+                            end
+                            Services.FightService.RE.QuitContestEvent:FireServer(area.Name)
+                        end)
+                    end
+                end
+                task.wait(1)
             end
         end)
-        StartMainScript()
-    else
-        StatusLabel:Set("❌ Invalid: " .. tostring(msg))
-        Notify("❌ Invalid Key", tostring(msg), 4, "Error")
     end
-end)
+})
 
--- Get Free Key button
-Tab:Button("🎁 GET FREE KEY", "Copy free key link to clipboard", function()
-    Notify("🔄 Getting Link...", "Contacting PlatoBoost...", 2)
-    StatusLabel:Set("🔄 Getting free key link...")
-    local success, result = PB.cacheLink()
-    if success then
-        pcall(function() PB.fSetClipboard(result) end)
-        StatusLabel:Set("✅ Free key link copied!")
-        Notify("✅ Link Copied!", "Open in your browser to get your FREE key.", 3, "Success")
-    else
-        StatusLabel:Set("❌ Error: " .. tostring(result))
-        Notify("❌ Error", tostring(result), 4, "Error")
+-- =====================================
+-- REBIRTHS
+-- =====================================
+Tabs.Main:AddToggle("AutoRebirth", {
+    Title = "Auto Rebirth",
+    Callback = function(v)
+        Flags.AutoRebirth = v
+        task.spawn(function()
+            while Flags.AutoRebirth do
+                if KnitLoaded and Services.RebirthService then
+                    Services.RebirthService.RF.Rebirth:InvokeServer()
+                end
+                task.wait(0.1)
+            end
+        end)
     end
-end)
+})
 
--- Get Premium button
-Tab:Button("⭐ GET PREMIUM", "Visit SlenderHub Shop for premium access", function()
-    local shopUrl = "https://www.slenderhub.shop/"
-    pcall(function() PB.fSetClipboard(shopUrl) end)
-    StatusLabel:Set("✅ Premium link copied!")
-    Notify("💎 Premium Link Copied!", 
-        "Open your browser to get premium:\n" .. shopUrl, 
-        6, "Success")
-end)
-
--- ─── QUICK ACTIONS ───
-Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━")
-Tab:Label("⚡ QUICK ACTIONS")
-
-Tab:Button("🔄 RETRY SAVED KEY", "Try auto-login with saved key", function()
-    if not checkSavedKey() then
-        StatusLabel:Set("❌ No valid saved key found")
-        Notify("⚠️ No Saved Key", "No valid saved key was found.", 3, "Warning")
+Tabs.Main:AddToggle("AutoSuper", {
+    Title = "Auto Super Rebirth",
+    Callback = function(v)
+        Flags.AutoSuper = v
+        task.spawn(function()
+            while Flags.AutoSuper do
+                if KnitLoaded and Services.RebirthService then
+                    Services.RebirthService.RF.SuperRebirth:InvokeServer()
+                end
+                task.wait(0.3)
+            end
+        end)
     end
-end)
+})
 
-Tab:Button("🗑️ CLEAR SAVED KEY", "Delete saved key file from system", function()
-    local del = delfile or function() end
-    if isfile and isfile(CONFIG.KeyFileName) then
-        local ok = pcall(function() del(CONFIG.KeyFileName) end)
-        if ok then
-            StatusLabel:Set("🗑️ Saved key deleted")
-            Notify("🗑️ Cleared", "Saved key file has been deleted.", 2, "Warning")
-        else
-            StatusLabel:Set("❌ Failed to delete file")
-            Notify("❌ Error", "Could not delete saved key file.", 3, "Error")
+-- =====================================
+-- INFINITE MONEY / POWER
+-- =====================================
+Tabs.Main:AddToggle("InfMoney", {
+    Title = "Infinite Money",
+    Callback = function(v)
+        Flags.InfMoney = v
+
+        task.spawn(function()
+            while Flags.InfMoney do
+                local args = {
+                    [1] = -70e+70,
+                    [2] = {},
+                    [3] = true,
+                    [4] = "yippie!"
+                }
+
+                game:GetService("ReplicatedStorage")
+                    :WaitForChild("Packages", 9e9)
+                    :WaitForChild("_Index", 9e9)
+                    :WaitForChild("sleitnick_knit@1.5.1", 9e9)
+                    :WaitForChild("knit", 9e9)
+                    :WaitForChild("Services", 9e9)
+                    :WaitForChild("RandomPotionService", 9e9)
+                    :WaitForChild("RE", 9e9)
+                    :WaitForChild("BuyPotionEvent", 9e9)
+                    :FireServer(unpack(args))
+
+                task.wait(0.1)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- MISC
+-- =====================================
+Tabs.Misc:AddToggle("Diamonds", {
+    Title = "Diamonds Upgrade",
+    Callback = function(v)
+        Flags.Diamonds = v
+        task.spawn(function()
+            while Flags.Diamonds do
+                if KnitLoaded and Services.RebirthService then
+                    Services.RebirthService.RF.SuperRebirthUpgrade
+                        :InvokeServer("Diamonds")
+                end
+                task.wait(1)
+            end
+        end)
+    end
+})
+
+Tabs.Misc:AddToggle("Halloween", {
+    Title = "Open Halloween GUI",
+    Callback = function(v)
+        local gui = LocalPlayer.PlayerGui
+            :FindFirstChild("HalloweenDailyRewardGui", true)
+        if gui then
+            gui.Enabled = v
+            gui.ResetOnSpawn = false
         end
-    else
-        Notify("ℹ️ Nothing", "No saved key file was found.", 2)
     end
+})
+
+Tabs.Misc:AddToggle("Halloween", {
+    Title = "Open Chirstmas GUI",
+    Callback = function(v)
+        local gui = LocalPlayer.PlayerGui
+            :FindFirstChild("ChristmasDailyRewardGui", true)
+        if gui then
+            gui.Enabled = v
+            gui.ResetOnSpawn = false
+        end
+    end
+})
+
+Tabs.Misc:AddToggle("AutoGifts", {
+    Title = "Auto Claim Gifts",
+    Callback = function(v)
+        Flags.AutoGifts = v
+        task.spawn(function()
+            while Flags.AutoGifts do
+                if KnitLoaded and Services.OnlineRewardService then
+                    for i = 1, 12 do
+                        Services.OnlineRewardService.RE.ClaimOnlineReward
+                            :FireServer(i)
+                        task.wait(0.5)
+                    end
+                end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- INFINITE POTION + KING SLIME
+-- =====================================
+Tabs.Misc:AddToggle("InfinitePotion", {
+    Title = "Infinite Potion + King Slime",
+    Default = false,
+    Callback = function(v)
+        Flags.InfinitePotion = v
+
+        task.spawn(function()
+            while Flags.InfinitePotion do
+                pcall(function()
+                    game:GetService("ReplicatedStorage")
+                        .Packages._Index["sleitnick_knit@1.5.1"]
+                        .knit.Services.ChestService
+                        .RF.ClaimDailyChest:InvokeServer()
+                end)
+
+                task.wait(0.5)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- AUTO CRATE 1
+-- =====================================
+Tabs.Misc:AddToggle("AutoCrate1", {
+    Title = "Auto Crate 1",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoCrate1 = v
+
+        task.spawn(function()
+            while Flags.AutoCrate1 do
+                pcall(function()
+                    Services.ItemCrateService.RE.UnboxCrate:FireServer("Crate_1")
+                end)
+
+                task.wait(1)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- AUTO CRATE 2
+-- =====================================
+Tabs.Misc:AddToggle("AutoCrate2", {
+    Title = "Auto Crate 2",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoCrate2 = v
+
+        task.spawn(function()
+            while Flags.AutoCrate2 do
+                pcall(function()
+                    Services.ItemCrateService.RE.UnboxCrate:FireServer("Crate_2")
+                end)
+
+                task.wait(1)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- AUTO CLAIM EGG GHOST
+-- =====================================
+Tabs.Misc:AddToggle("AutoEggBrainrot", {
+    Title = "Auto Claim Egg Brainrot",
+    Default = false,
+    Callback = function(v)
+        Flags.EggGhost = v
+
+        task.spawn(function()
+            while Flags.EggGhost do
+                pcall(function()
+                    Services.OnlineRewardService
+                        .RF.ClaimOnlineQuestReward
+                        :InvokeServer()
+                end)
+
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- TELEPORT
+-- =====================================
+
+Tabs.Teleport:AddParagraph({
+    Title = "Info",
+    Content = "click in button and rejoin"
+})
+
+for i = 2, 4 do
+    Tabs.Teleport:AddButton({
+        Title = "World " .. i,
+        Callback = function()
+            if KnitLoaded and Services.AreaService then
+                Services.AreaService.RE.UpdatePlayerCurrentArea
+                    :FireServer("Area_" .. i)
+            end
+        end
+    })
+end
+
+-- Novo botão: Area Fruit
+Tabs.Teleport:AddButton({
+    Title = "Area Fruit",
+    Callback = function()
+        if KnitLoaded and Services.AreaService then
+            Services.AreaService.RE.UpdatePlayerCurrentArea
+                :FireServer("Area_Fruit")
+        end
+    end
+})
+
+-- =====================================
+-- PET
+-- =====================================
+Tabs.Pet:AddToggle("AutoEquipBestPets", {
+    Title = "Auto Equip Best Pets",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoEquipBestPets = v
+
+        task.spawn(function()
+            while Flags.AutoEquipBestPets do
+                if KnitLoaded and Services.PetService then
+                    pcall(function()
+                        Services.PetService.RE.EquipBestPets:FireServer()
+                    end)
+                end
+
+                task.wait(2) -- delay seguro
+            end
+        end)
+    end
+})
+
+Tabs.Pet:AddToggle("AutoCraftPets", {
+    Title = "Auto Craft Pets",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoCraftPets = v
+
+        task.spawn(function()
+            while Flags.AutoCraftPets do
+                if KnitLoaded and Services.PetService then
+                    pcall(function()
+                        Services.PetService.RE.EnlargeAllPets:FireServer()
+                    end)
+                end
+
+                task.wait(3) -- delay seguro
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- EGG TAB (FUNCIONAL)
+-- =====================================
+local EggTab = Tabs.Egg
+
+Flags.EggToggles = {}
+
+-- Função para criar toggle e auto hatch
+local function CreateEggToggle(world, egg)
+    local eggName = "Egg_" .. world .. "_" .. egg
+    Flags.EggToggles[eggName] = false
+
+    EggTab:AddToggle(eggName, {
+        Title = "World " .. world .. " - Egg " .. egg,
+        Default = false,
+        Callback = function(v)
+            Flags.EggToggles[eggName] = v
+
+            task.spawn(function()
+                while Flags.EggToggles[eggName] do
+                    pcall(function()
+                        local args = {eggName, 1}
+
+                        game:GetService("ReplicatedStorage")
+                            :WaitForChild("Packages")
+                            :WaitForChild("_Index")
+                            :WaitForChild("sleitnick_knit@1.5.1")
+                            :WaitForChild("knit")
+                            :WaitForChild("Services")
+                            :WaitForChild("EggHatchService")
+                            :WaitForChild("RE")
+                            :WaitForChild("Hatch")
+                            :FireServer(unpack(args))
+                    end)
+                    task.wait(1) -- delay entre hatches
+                end
+            end)
+        end
+    })
+end
+
+-- Cria toggles para todos os ovos (4 mundos x 4 ovos)
+for world = 1, 4 do
+    for egg = 1, 4 do
+        CreateEggToggle(world, egg)
+    end
+end
+
+-- =====================================
+-- ABA EVENT
+-- =====================================
+-- Função genérica pra comprar fruit
+local function BuyFruit(fruitID)
+    if not KnitLoaded then return end
+    local success, err = pcall(function()
+        local args = {fruitID}
+        local fruitRE = ReplicatedStorage:WaitForChild("Packages")
+            :WaitForChild("_Index")
+            :WaitForChild("sleitnick_knit@1.5.1")
+            :WaitForChild("knit")
+            :WaitForChild("Services")
+            :WaitForChild("FruitService")
+            :WaitForChild("RE")
+            :WaitForChild("BuyFruit")
+        fruitRE:FireServer(unpack(args))
+    end)
+    if not success then
+        warn("Erro ao comprar fruit "..fruitID..": "..tostring(err))
+    end
+end
+
+-- Flags para ativar/desativar
+Flags.FruitToggles = {}
+
+for i=1,4 do
+    local fruitID = string.format("Fruit_00%d",i)
+    Flags.FruitToggles[fruitID] = false
+
+    Tabs.Event:AddToggle(fruitID,{
+        Title="Auto "..fruitID,
+        Callback=function(v)
+            Flags.FruitToggles[fruitID] = v
+            task.spawn(function()
+                while Flags.FruitToggles[fruitID] do
+                    BuyFruit(fruitID)
+                    task.wait(1) -- delay seguro entre compras
+                end
+            end)
+        end
+    })
+end
+
+-- =====================================
+-- ABA EVENT - FARM CANDY/GIFT (4 WinGates)
+-- =====================================
+Flags.FarmCandy = false
+
+Tabs.Event:AddToggle("FarmCandy", {
+    Title = "Farm Candy/Gift",
+    Callback = function(v)
+        Flags.FarmCandy = v
+        task.spawn(function()
+            while Flags.FarmCandy do
+                if KnitLoaded and Services.FightService then
+                    local success, remote = pcall(function()
+                        return Services.FightService:FindFirstChild("RE"):FindFirstChild("GetWinsEvent")
+                    end)
+
+                    if success and remote then
+                        pcall(function()
+                            -- WinGate 16
+                            remote:FireServer(unpack({
+                                "WinGate_16",
+                                Vector3.new(1813, 780.8884, -689396.3125)
+                            }))
+                            -- WinGate 12
+                            remote:FireServer(unpack({
+                                "WinGate_12",
+                                Vector3.new(1813, 780.9491, -229395.1406)
+                            }))
+                            -- WinGate 14
+                            remote:FireServer(unpack({
+                                "WinGate_14",
+                                Vector3.new(1812, 780.8914, -373397.5)
+                            }))
+                            -- WinGate 13
+                            remote:FireServer(unpack({
+                                "WinGate_13",
+                                Vector3.new(1815, 780.9649, -289395.25)
+                            }))
+                        end)
+                    end
+                end
+                task.wait(0.5) -- delay seguro entre cada loop
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- ABA MAIN - AUTO WIN (WinGates múltiplos)
+-- =====================================
+Flags.AutoWin = false
+
+Tabs.Main:AddToggle("AutoWin", {
+    Title = "Auto Win",
+    Callback = function(v)
+        Flags.AutoWin = v
+        task.spawn(function()
+            while Flags.AutoWin do
+                if KnitLoaded and Services.FightService then
+                    local success, remote = pcall(function()
+                        return Services.FightService:FindFirstChild("RE"):FindFirstChild("GetWinsEvent")
+                    end)
+
+                    if success and remote then
+                        pcall(function()
+                            -- WinGate 16
+                            remote:FireServer(unpack({
+                                "WinGate_16",
+                                Vector3.new(1813, 780.8884, -689396.3125)
+                            }))
+                            -- WinGate 12
+                            remote:FireServer(unpack({
+                                "WinGate_12",
+                                Vector3.new(1813, 780.9491, -229395.1406)
+                            }))
+                            -- WinGate 14
+                            remote:FireServer(unpack({
+                                "WinGate_14",
+                                Vector3.new(1812, 780.8914, -373397.5)
+                            }))
+                            -- WinGate 13
+                            remote:FireServer(unpack({
+                                "WinGate_13",
+                                Vector3.new(1815, 780.9649, -289395.25)
+                            }))
+                        end)
+                    end
+                end
+                task.wait(0.5) -- delay seguro
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- ABA EVENT - EGG CHRISTMAS
+-- =====================================
+Flags.EggChristmas = false
+
+Tabs.Event:AddToggle("EggChristmas", {
+    Title = "Egg_Christmas",
+    Callback = function(v)
+        Flags.EggChristmas = v
+        task.spawn(function()
+            while Flags.EggChristmas do
+                if KnitLoaded and Services.EggHatchService then
+                    local success, remote = pcall(function()
+                        return Services.EggHatchService:FindFirstChild("RE"):FindFirstChild("Hatch")
+                    end)
+
+                    if success and remote then
+                        pcall(function()
+                            local args = {"Egg_Christmas", 3}
+                            remote:FireServer(unpack(args))
+                        end)
+                    end
+                end
+                task.wait(1) -- delay entre cada hatch
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- MISC | AUTO RANDOM POTION
+-- =====================================
+Flags.AutoRandomPotion = false
+
+Tabs.Misc:AddToggle("AutoRandomPotion", {
+    Title = "Auto Random Potion",
+    Default = false
+}):OnChanged(function(v)
+    Flags.AutoRandomPotion = v
+
+    task.spawn(function()
+        while Flags.AutoRandomPotion do
+            if KnitLoaded and Services.RandomPotionService then
+                pcall(function()
+                    Services.RandomPotionService.RE.BuyPotionEvent
+                        :FireServer(3)
+                end)
+            end
+            task.wait(0.5) -- delay seguro
+        end
+    end)
 end)
 
--- ─── INFORMATION ───
-Tab:Label("━━━━━━━━━━━━━━━━━━━━━━━━")
-Tab:Paragraph("ℹ️ Information", 
-    "Key System: PlatoBoost\n" ..
-    "Keys are hardware-bound (HWID)\n" ..
-    "Saved keys auto-login on next launch\n" ..
-    "━━━━━━━━━━━━━━━━━━━━━━━━\n" ..
-    "💎 Premium:  slenderhub.shop\n" ..
-    "🎁 Free Key: PlatoBoost API"
-)
+-- =====================================
+-- MISC | AUTO USE POTION
+-- =====================================
+Flags.AutoUsePotion = false
 
--- ─── AUTO-CHECK SAVED KEY ───
-task.spawn(function()
-    task.wait(1.5)
-    if isfile and isfile(CONFIG.KeyFileName) then
-        StatusLabel:Set("💾 Saved key detected. Click 🔄 RETRY to use.")
-        Notify("💾 Saved Key Found", "Click 'Retry Saved Key' to auto-login.", 4, "Warning")
-    else
-        StatusLabel:Set("🔑 Enter a key below or get one FREE.")
-    end
+Tabs.Misc:AddToggle("AutoUsePotion", {
+    Title = "Auto Use Potion (Double Strength)",
+    Default = false
+}):OnChanged(function(v)
+    Flags.AutoUsePotion = v
+
+    task.spawn(function()
+        while Flags.AutoUsePotion do
+            if KnitLoaded and Services.PotionService then
+                pcall(function()
+                    Services.PotionService.RE.UsePotion
+                        :FireServer("Potion_DoubleStrength")
+                end)
+            end
+            task.wait(1) -- delay maior pra evitar spam
+        end
+    end)
 end)
 
-print("[Slender Hub | PlatoBoost] Loaded successfully!")
+-- =====================================
+-- BUTTON FLOATING 
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+local imageButton = Instance.new("ImageButton")
+imageButton.Size = UDim2.new(0, 50, 0, 50)  -- Set size to 100x100 pixels
+imageButton.Position = UDim2.new(1, -110, 0, 10)  -- Set position
+imageButton.BackgroundTransparency = 1  -- Make the background transparent
+imageButton.Image = "rbxassetid://2875276601"  -- Your image ID
+imageButton.Parent = screenGui
+local uiStroke = Instance.new("UIStroke")
+uiStroke.Parent = imageButton
+uiStroke.Thickness = 4  -- Adjust the thickness of the border
+uiStroke.Color = Color3.fromRGB(0, 0, 255) -- Pure blue
+uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+uiStroke.Transparency = 0
+    
+    local corner = Instance.new("UICorner")
+    corner.Parent = imageButton
+    
+    imageButton.MouseButton1Click:Connect(function()
+        if WindowHidden == false then
+            Window:Minimize()
+            WindowHidden = true
+        else
+Window:Minimize()
+            WindowHidden = false
+        end
+    end)
+    
+    local dragging = false
+    local dragInput
+    local startPos
+    local startSize
+    
+    imageButton.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            startPos = input.Position
+            startSize = imageButton.Position
+    
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    
+    imageButton.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+            local delta = input.Position - startPos
+            imageButton.Position = UDim2.new(startSize.X.Scale, startSize.X.Offset + delta.X, startSize.Y.Scale, startSize.Y.Offset + delta.Y)
+        end
+    end)
+    
+-- =====================================
+-- SAVE MANAGER
+-- =====================================
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+
+InterfaceManager:SetFolder("HorseRaceHub")
+SaveManager:SetFolder("HorseRaceHub/saves")
+
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+
+-- =====================================
+-- FINAL
+-- =====================================
+Fluent:Notify({
+    Title = "Legend Hub",
+    Content = "UI carregada com sucesso!",
+    Duration = 6
+})
+
+SaveManager:LoadAutoloadConfig()
