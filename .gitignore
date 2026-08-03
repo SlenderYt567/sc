@@ -1,27 +1,37 @@
 --!strict
 --[[
-    Zaphub Extractor v2 - Captura o payload final (Luraph/Luarmor) no Delta
-    Plataforma: Delta (hookfunction + hookmetamethod + getgc)
+    Zaphub Extractor v3 - Captura o payload final (Luraph/Luarmor) no Delta
+    Plataforma: Delta (hookmetamethod/__namecall + request hook - CONFIRMADO FUNCIONANDO)
 
-    POR QUE O v1 FALHOU:
-      Reatribuir _G.loadstring nao intercepta nada: o Luarmor captura a closure
-      ORIGINAL de loadstring/load como upvalue (ou usa API interna) e ignora a
-      global. Prova: nem o loader Luarmor (1420 bytes) foi pego no v1.
+    DIAGNOSTICO v2 (TESTE do usuario):
+      - Hook loadstring: NENHUM (hookfunction bloqueado em loadstring/load + globals read-only)
+      - Hook HTTP: OK (hookmetamethod __namecall)
+      - Hook request: OK
 
-    SOLUCAO v2 - 3 FRENTES DE CAPTURA:
-      [1] hookfunction: patcheia a closure REAL de loadstring/load (in-place).
-          Mesmo que o ofuscador tenha a referencia original capturada, a chamada
-          passa pelo nosso hook (e captura o bytecode Luraph final).
-      [2] hookmetamethod __namecall + request: captura TODOS os HttpGet/request
-          (URLs + respostas). Isso pega o init do CDN (v4_init_marbeg.lua) que
-          contem o runtime criptografado - decripto offline com a script_key.
-      [3] getgc() scan pos-carga: varre o heap em busca de closures grandes
-          (Luraph) e salva o bytecode via dumpstring.
+    POR QUE o hook de loadstring e inutil neste Delta:
+      O executor protege loadstring/load contra hookfunction e reatribuicao
+      (anti-dumper). Tentar de novo = perder tempo.
+
+    SOLUCAO v3 - APOSTA TOTAL NO HTTP + INJECAO NO LOADER:
+      [1] Captura PASSIVA via hookmetamethod __namecall + request:
+          - Loga TODAS as URLs (diagnostico)
+          - Salva TODO body >= 300 bytes (loader + init do CDN + o que mais vier)
+          - Envia via webhook os relevantes (>= 500 bytes ou URL luarmor/cdn)
+      [2] INJECAO NO LOADER (a tecnica forte):
+          - Quando o HTTP hook ve o loader api.luarmor.net/.../loaders/*.lua,
+            REESCREVE o body injetando um wrapper de loadstring no topo.
+          - Resultado: quando o loader fizer loadstring(init) e o init fizer
+            loadstring(bytecode_final), o wrapper CAPTURA (salva local + envia)
+            e ainda executa normalmente (nao quebra o Zaphub).
+          - O init + bytecode ficam em ZaphubExtract/inj_*.bin -> eu decripto
+            offline com a script_key se necessario.
+      [3] Poll de injetados: envia os inj_*.bin para o webhook (thread dedicada).
+      [4] Scan getgc periodico: closures Luraph residuais (bônus se disponivel).
 
     SEGURANCA ANTI-TRAVA (padrao da casa):
       - I/O de rede so em task.spawn dedicada
       - Salva local PRIMEIRO (writefile) - envio falhou, arquivo fica
-      - Hooks retornam o resultado original SEM bloquear o thread do jogo
+      - Hooks retornam o resultado original (nao interferem no Zaphub)
 ]]
 
 --//==============================[ CONFIG ]==============================//--
@@ -37,16 +47,16 @@ _G.script_key = script_key
 local ZAPHUB_SNIPPET = "script_key=%q; loadstring(game:HttpGet('https://zaphub.xyz/Exec'))()"
 local ZAPHUB_KEY = "nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw"
 
--- tamanho minimo para considerar "payload real"
-local MIN_CAPTURE = 500
--- limite de chunks de loadstring
-local MAX_CAPTURES = 25
--- limite de respostas HTTP salvas
-local MAX_HTTP = 15
--- limite de closures do getgc
-local MAX_GC = 10
+-- Captura passiva: salva TODO body >= MIN_HTTP_SAVE
+local MIN_HTTP_SAVE = 300
+-- Envia via webhook se body >= MIN_HTTP_SEND OU URL relevante
+local MIN_HTTP_SEND = 500
+-- Injetar wrapper de loadstring no loader do Luarmor (true = recomendado)
+local INJECT_LOADER = true
 -- tempo de monitoramento (segundos)
-local MONITOR_TIME = 90
+local MONITOR_TIME = 120
+-- limite de arquivos injetados enviados
+local MAX_INJECTED_SEND = 25
 
 --//==============================[ API COMPAT ]==============================//--
 local getExecutorName = (function()
@@ -58,19 +68,11 @@ local getExecutorName = (function()
     return "unknown"
 end)()
 
-local hf = hookfunction
-local cf = clonefunction
 local hmm = hookmetamethod
 local gnmc = getnamecallmethod
+local hf = hookfunction
 local gcFn = getgc
 local dumpFn = dumpstring or decompile
-
-local copy = (function()
-    if setclipboard then return setclipboard end
-    if toclipboard then return toclipboard end
-    if set_clipboard then return set_clipboard end
-    return function() end
-end)()
 
 local reqFn = (function()
     if syn and syn.request then return syn.request end
@@ -83,6 +85,7 @@ local writefileFn = writefile
 local makefolderFn = makefolder or function() end
 local isfileFn = isfile or function() return false end
 local readfileFn = readfile
+local listfilesFn = listfiles or function() return {} end
 
 local function logMsg(msg)
     pcall(print, "[ZaphubExtract] " .. tostring(msg))
@@ -159,18 +162,17 @@ local function sendFileMulti(msg, files)
     if ok and res then return tonumber(res.StatusCode) or 0 else return -1 end
 end
 
---//==============================[ ESTADO DA CAPTURA ]==============================//--
-local captured = 0
-local captures = {}
+--//==============================[ ESTADO ]==============================//--
 local httpCaptured = 0
+local injectedCaptured = 0
 local gcCaptured = 0
 local manifest = {}
+local injectedSent = {}
 
 local function logManifest(line)
     table.insert(manifest, tostring(line))
 end
 
--- Salva local (PRIMEIRO - garantia)
 local function saveLocal(fname, content)
     if not writefileFn then return false end
     return pcall(function()
@@ -179,12 +181,12 @@ local function saveLocal(fname, content)
     end)
 end
 
--- Envia captura de forma ASSINCRONA
+-- Envia captura de forma ASSINCRONA (nunca no thread do jogo)
 local function sendCaptureAsync(tag, title, chunk, fname)
     task.spawn(function()
         task.wait(0.1)
         local b64 = b64encode(chunk)
-        local msg = "**Zaphub Extractor - " .. title .. "**\n"
+        local msg = "**Zaphub Extractor v3 - " .. title .. "**\n"
             .. "Tamanho: " .. tostring(#chunk) .. " bytes | Base64: " .. tostring(#b64) .. " chars\n"
             .. "Executor: " .. getExecutorName
         local ok = false
@@ -193,111 +195,95 @@ local function sendCaptureAsync(tag, title, chunk, fname)
             ok = c >= 200 and c < 300
         end
         if not ok then
-            sendSimple("**Zaphub Extractor** - falha ao enviar " .. tag
+            sendSimple("**Zaphub Extractor v3** - falha ao enviar " .. tag
                 .. " (b64 " .. tostring(#b64) .. " chars). Salvo local.", WEBHOOK_NAME .. " [AVISO]")
         end
     end)
 end
 
---//==============================[ HOOK [1]: LOADSTRING/LOAD via hookfunction ]==============================//--
-local hooked = false
-local hookMethod = "nenhum"
-
--- Hooka UMA closure patcheando a closure real (pega referencia capturada).
--- Se clonefunction/hookfunction nao existir, cai na reatribuicao de global.
-local function installLoadstringHook()
-    local ls = _G.loadstring
-    local ld = _G.load
-
-    local function makeCb(original)
-        return function(s, chunkname)
-            local f, err = original(s, chunkname)
-            if f and type(s) == "string" and #s >= MIN_CAPTURE and captured < MAX_CAPTURES then
-                captured = captured + 1
-                local idx = captured
-                captures[idx] = s
-                logMsg("CAPTURADO chunk #" .. tostring(idx) .. " (" .. tostring(#s) .. " bytes)")
-                logManifest("loadstring chunk #" .. tostring(idx) .. " | " .. tostring(#s) .. " bytes")
-                pcall(saveLocal, "bytecode_" .. tostring(idx) .. ".bin", s)
-                pcall(saveLocal, "bytecode_" .. tostring(idx) .. ".b64.txt", b64encode(s))
-                sendCaptureAsync("chunk", "BYTECODE " .. tostring(idx), s, "bytecode_" .. tostring(idx) .. ".b64.txt")
-            end
-            return f, err
+--//==============================[ INJECAO NO LOADER ]==============================//--
+-- Código injetado no topo do loader Luarmor. Captura init + bytecode final
+-- via wrapper de loadstring e devolve o resultado original (nao quebra nada).
+local INJECTION_CODE = [[
+do
+    local function _cap(s)
+        if type(s) == "string" and #s > 200 then
+            local ok = pcall(function()
+                pcall(makefolder, "ZaphubExtract")
+                writefile("ZaphubExtract/inj_" .. tostring(#s) .. "_" .. tostring(os.clock()):gsub("%.", "") .. ".bin", s)
+            end)
+            if ok then print("[ZaphubExtract] INJ capturado " .. tostring(#s) .. " bytes") end
         end
     end
-
-    local okPatch = false
-
-    -- caminho A: hookfunction na closure real
-    if type(hf) == "function" and type(ls) == "function" then
-        local okCl, origLs = pcall(function() return cf and cf(ls) or nil end)
-        local originalLs = (type(okCl) == "boolean" and okCl and type(origLs) == "function") and origLs or nil
-        local okH = pcall(hf, ls, makeCb(originalLs))
-        if okH then
-            okPatch = true
-            hookMethod = "hookfunction"
+    local _orig = loadstring or _G.loadstring
+    if type(_orig) == "function" then
+        local _wrap = function(s, n)
+            _cap(s)
+            return _orig(s, n)
         end
-    end
-    if not okPatch and type(hf) == "function" and type(ld) == "function" then
-        local okCl, origLd = pcall(function() return cf and cf(ld) or nil end)
-        local originalLd = (type(okCl) == "boolean" and okCl and type(origLd) == "function") and origLd or nil
-        local okH = pcall(hf, ld, makeCb(originalLd))
-        if okH then
-            okPatch = true
-            hookMethod = "hookfunction"
+        pcall(function() loadstring = _wrap end)
+        pcall(function() _G.loadstring = _wrap end)
+        pcall(function() _G.load = _wrap end)
+        if _G.getgenv then
+            pcall(function() _G.getgenv().loadstring = _wrap end)
         end
+        print("[ZaphubExtract] INJ loadstring wrapper ativo")
+    else
+        print("[ZaphubExtract] INJ loadstring nao encontrado")
     end
+end
+]]
 
-    -- caminho B: fallback reatribuicao de global (se hookfunction falhou)
-    if not okPatch then
-        local oldGlobal = _G.loadstring or _G.load
-        if oldGlobal then
-            local hookFn = function(s, chunkname)
-                local f, err = oldGlobal(s, chunkname)
-                if f and type(s) == "string" and #s >= MIN_CAPTURE and captured < MAX_CAPTURES then
-                    captured = captured + 1
-                    local idx = captured
-                    captures[idx] = s
-                    logMsg("CAPTURADO chunk #" .. tostring(idx) .. " (" .. tostring(#s) .. " bytes) [fallback global]")
-                    logManifest("loadstring chunk #" .. tostring(idx) .. " (fallback global) | " .. tostring(#s) .. " bytes")
-                    pcall(saveLocal, "bytecode_" .. tostring(idx) .. ".bin", s)
-                    pcall(saveLocal, "bytecode_" .. tostring(idx) .. ".b64.txt", b64encode(s))
-                    sendCaptureAsync("chunk", "BYTECODE " .. tostring(idx), s, "bytecode_" .. tostring(idx) .. ".b64.txt")
-                end
-                return f, err
-            end
-            local okA = pcall(function() _G.loadstring = hookFn end)
-            local okB = pcall(function() _G.load = hookFn end)
-            if okA or okB then
-                okPatch = true
-                hookMethod = "global-reassign"
-            end
-        end
+-- Verifica se o body parece um loader Luarmor (Lua + contem loadstring/_bsdata0)
+local function looksLikeLoader(url, body)
+    local low = string.lower(tostring(url))
+    if not (low:find("luarmor") or low:find("loaders")) then return false end
+    if type(body) ~= "string" then return false end
+    if body:find("loadstring") or body:find("_bsdata0") or body:find("HttpGet") then
+        return true
     end
-
-    hooked = okPatch
-    logMsg("Hook loadstring: " .. hookMethod .. (okPatch and " OK" or " FALHOU"))
-    return okPatch
+    return false
 end
 
---//==============================[ HOOK [2]: HTTP (__namecall + request) ]==============================//--
+--//==============================[ HOOK HTTP (passivo + injecao) ]==============================//--
 local httpHookOk = false
 local requestHookOk = false
+local lastUrls = {}
 
 local function captureHttpResponse(url, body)
-    if type(body) ~= "string" or #body < MIN_CAPTURE then return end
-    if httpCaptured >= MAX_HTTP then return end
-    -- filtra URLs relevantes (Luarmor/CDN/Zaphub)
     local low = string.lower(tostring(url))
-    if not (low:find("luarmor") or low:find("cdn") or low:find("zaphub") or low:find("_ca920af6193")) then return end
+    -- loga URL sempre (diagnostico)
+    if not lastUrls[low] then
+        lastUrls[low] = true
+        logMsg("[HTTP] " .. tostring(url) .. " -> " .. tostring(type(body) == "string" and #body or "?"))
+    end
+    if type(body) ~= "string" or #body < MIN_HTTP_SAVE then return body end
+
+    -- injecao no loader
+    if INJECT_LOADER and looksLikeLoader(url, body) then
+        local okW, wrapped = pcall(function()
+            return INJECTION_CODE .. "\n" .. body
+        end)
+        if okW and type(wrapped) == "string" then
+            logMsg("[HTTP] INJETADO wrapper no loader (" .. tostring(#wrapped) .. " bytes, era " .. tostring(#body) .. ")")
+            logManifest("injecao no loader | " .. tostring(url))
+            return wrapped -- retorna o body modificado -> loader roda com wrapper
+        end
+    end
+
     httpCaptured = httpCaptured + 1
     local idx = httpCaptured
-    logMsg("HTTP CAPTURADO #" .. tostring(idx) .. ": " .. tostring(url) .. " (" .. tostring(#body) .. " bytes)")
+    logMsg("[HTTP] CAPTURADO #" .. tostring(idx) .. " (" .. tostring(#body) .. " bytes): " .. tostring(url))
     logManifest("http #" .. tostring(idx) .. " | " .. tostring(url) .. " | " .. tostring(#body) .. " bytes")
     pcall(saveLocal, "http_" .. tostring(idx) .. "_url.txt", tostring(url))
     pcall(saveLocal, "http_" .. tostring(idx) .. ".lua", body)
-    -- envia o runtime (texto Lua) como anexo
-    sendCaptureAsync("http", "RUNTIME HTTP " .. tostring(idx), body, "http_" .. tostring(idx) .. ".lua.b64.txt")
+
+    -- envia se grande OU relevante
+    local relevant = low:find("luarmor") or low:find("cdn") or low:find("zaphub") or low:find("_ca920af6193")
+    if #body >= MIN_HTTP_SEND or relevant then
+        sendCaptureAsync("http", "HTTP " .. tostring(idx), body, "http_" .. tostring(idx) .. ".lua.b64.txt")
+    end
+    return body
 end
 
 local function installHttpGetHook()
@@ -315,7 +301,7 @@ local function installHttpGetHook()
                     end)
                     if okGet then
                         if type(body) == "string" then
-                            captureHttpResponse(url, body)
+                            return captureHttpResponse(url, body)
                         end
                         return body
                     end
@@ -339,7 +325,7 @@ local function installHttpGetHook()
             end)
             if okGet then
                 if type(body) == "string" then
-                    captureHttpResponse(tostring(packed[1]), body)
+                    return captureHttpResponse(tostring(packed[1]), body)
                 end
                 return body
             end
@@ -369,11 +355,12 @@ local function installRequestHook()
     end
     local done = false
     for i = 1, #targets do
-        local okCl, orig = pcall(function() return cf and cf(targets[i]) or nil end)
+        local okCl, orig = pcall(function() return (clonefunction or (function() end)) and clonefunction and clonefunction(targets[i]) end)
         local original = (type(okCl) == "boolean" and okCl and type(orig) == "function") and orig or nil
         local okH = pcall(hf, targets[i], function(options)
             local res = original and original(options) or targets[i](options)
             if type(res) == "table" and type(res.Body) == "string" and type(options) == "table" and type(options.Url) == "string" then
+                -- nota: request nao permite reescrever o body de forma util aqui
                 captureHttpResponse(options.Url, res.Body)
             end
             return res
@@ -389,10 +376,31 @@ local function installRequestHook()
     return done
 end
 
---//==============================[ HOOK [3]: getgc scan ]==============================//--
+--//==============================[ POLL DE INJETADOS ]==============================//--
+local function pollInjected()
+    local sent = 0
+    local okL, files = pcall(listfilesFn, SAVE_DIR)
+    if not okL or type(files) ~= "table" then return end
+    for _, path in ipairs(files) do
+        if sent >= MAX_INJECTED_SEND then break end
+        local name = tostring(path):match("([^/\\]+)$") or tostring(path)
+        if name:match("^inj_.+%.bin$") and not injectedSent[name] then
+            injectedSent[name] = true
+            local okR, data = pcall(readfileFn, path)
+            if okR and type(data) == "string" and #data > 0 then
+                injectedCaptured = injectedCaptured + 1
+                logMsg("Poll: enviando injetado " .. name .. " (" .. tostring(#data) .. " bytes)")
+                sendCaptureAsync("inj", "INJETADO " .. name, data, name .. ".b64.txt")
+                sent = sent + 1
+            end
+        end
+    end
+end
+
+--//==============================[ SCAN GETGC ]==============================//--
 local function scanGCForLuraph()
-    if type(gcFn) ~= "function" then
-        logMsg("getgc indisponivel")
+    if type(gcFn) ~= "function" or type(dumpFn) ~= "function" then
+        logMsg("getgc/dumpstring indisponivel")
         return 0
     end
     local found = 0
@@ -400,15 +408,12 @@ local function scanGCForLuraph()
     local okG, g = pcall(gcFn)
     if not okG or type(g) ~= "table" then return 0 end
     for _, v in ipairs(g) do
-        if found >= MAX_GC then break end
-        if type(v) == "function" and type(dumpFn) == "function" then
-            -- pre-filtro: funcao de script (nao nativa)
+        if found >= 6 then break end
+        if type(v) == "function" then
             local okI, info = pcall(debug.getinfo, v, "S")
             if not okI or type(info) ~= "table" then continue end
             local src = tostring(info.source or "")
-            if src:sub(1, 1) == "[" and src:sub(1, 2) == "[C" then
-                continue -- closure nativa
-            end
+            if src:sub(1, 2) == "[C" then continue end
             local okD, dump = pcall(dumpFn, v)
             if okD and type(dump) == "string" and #dump >= 2000 then
                 local key = dump:sub(1, 64)
@@ -416,7 +421,7 @@ local function scanGCForLuraph()
                     seen[key] = true
                     gcCaptured = gcCaptured + 1
                     local idx = gcCaptured
-                    logMsg("GC CLOSURE #" .. tostring(idx) .. " dump " .. tostring(#dump) .. " bytes (src=" .. src .. ")")
+                    logMsg("GC closure #" .. tostring(idx) .. " dump " .. tostring(#dump) .. " bytes (src=" .. src .. ")")
                     logManifest("gc closure #" .. tostring(idx) .. " | " .. tostring(#dump) .. " bytes | src=" .. src)
                     pcall(saveLocal, "gc_" .. tostring(idx) .. ".bin", dump)
                     pcall(saveLocal, "gc_" .. tostring(idx) .. ".b64.txt", b64encode(dump))
@@ -426,7 +431,7 @@ local function scanGCForLuraph()
             end
         end
     end
-    logMsg("Scan getgc: " .. tostring(found) .. " closure(s) Luraph")
+    if found > 0 then logMsg("Scan getgc: " .. tostring(found) .. " closure(s)") end
     return found
 end
 
@@ -474,7 +479,7 @@ local function makeUI()
     title.Position = UDim2.new(0, 0, 0, 10)
     title.Size = UDim2.new(1, 0, 0, 34)
     title.Font = Enum.Font.GothamBold
-    title.Text = "ZAPHUB EXTRACTOR v2"
+    title.Text = "ZAPHUB EXTRACTOR v3"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.TextSize = 18
     title.Parent = bg
@@ -507,14 +512,13 @@ end)()
 
 --//==============================[ MAIN ]==============================//--
 local function mainFlow()
-    ui.setStatus("Instalando hooks (3 frentes)...", Color3.fromRGB(255, 200, 80))
+    ui.setStatus("Instalando hooks HTTP...", Color3.fromRGB(255, 200, 80))
 
-    local okHookLs = installLoadstringHook()
     local okHookHttp = installHttpGetHook()
     local okHookReq = installRequestHook()
 
-    ui.setStatus("Hooks: loadstring [" .. tostring(okHookLs and "OK" or "FAIL") .. "]\n"
-        .. "HTTP [" .. tostring(okHookHttp and "OK" or "FAIL") .. "] request [" .. tostring(okHookReq and "OK" or "FAIL") .. "]",
+    ui.setStatus("Hooks: HTTP [" .. tostring(okHookHttp and "OK" or "FAIL") .. "] request [" .. tostring(okHookReq and "OK" or "FAIL") .. "]\n"
+        .. "Injecao no loader: " .. tostring(INJECT_LOADER),
         Color3.fromRGB(255, 200, 80))
 
     -- ping de teste
@@ -522,10 +526,10 @@ local function mainFlow()
         task.spawn(function()
             task.wait(0.2)
             local code = sendSimple(
-                "**Zaphub Extractor v2 - TESTE**\nExecutor: " .. getExecutorName
-                    .. "\nHook loadstring: " .. tostring(hookMethod)
+                "**Zaphub Extractor v3 - TESTE**\nExecutor: " .. getExecutorName
                     .. "\nHook HTTP: " .. tostring(okHookHttp)
-                    .. "\nHook request: " .. tostring(okHookReq),
+                    .. "\nHook request: " .. tostring(okHookReq)
+                    .. "\nInjecao loader: " .. tostring(INJECT_LOADER),
                 WEBHOOK_NAME .. " [TESTE]"
             )
             logMsg("Ping: codigo " .. tostring(code))
@@ -539,35 +543,37 @@ local function mainFlow()
         return
     end
 
-    -- monitora por MONITOR_TIME segundos
+    -- monitora + poll de injetados + scan gc periodico
     local waited = 0
     while waited < MONITOR_TIME do
         task.wait(1)
         waited = waited + 1
+        if waited % 5 == 0 then
+            task.spawn(pollInjected)
+        end
+        if waited % 15 == 0 then
+            task.spawn(scanGCForLuraph)
+        end
         if waited % 10 == 0 then
             ui.setStatus("Aguardando captura... " .. tostring(waited) .. "s\n"
-                .. "chunks: " .. tostring(captured) .. " | http: " .. tostring(httpCaptured) .. " | gc: " .. tostring(gcCaptured),
+                .. "http: " .. tostring(httpCaptured) .. " | inj: " .. tostring(injectedCaptured) .. " | gc: " .. tostring(gcCaptured),
                 Color3.fromRGB(255, 200, 80))
         end
-        if captured >= MAX_CAPTURES and httpCaptured >= MAX_HTTP then break end
     end
 
-    -- scan final no heap
-    ui.setStatus("Scan final no heap (getgc)...", Color3.fromRGB(255, 200, 80))
+    -- scan final
     local gcFound = scanGCForLuraph()
 
-    -- escreve manifest
     pcall(saveLocal, "manifest.txt", table.concat(manifest, "\n"))
 
-    ui.setStatus("RESULTADO: chunks " .. tostring(captured) .. " | http " .. tostring(httpCaptured)
+    ui.setStatus("RESULTADO: http " .. tostring(httpCaptured) .. " | inj " .. tostring(injectedCaptured)
         .. " | gc " .. tostring(gcFound) .. "\nSalvos em: " .. SAVE_DIR .. "/",
         Color3.fromRGB(80, 230, 120))
 
-    sendSimple("**Zaphub Extractor v2 - RESUMO**\n"
+    sendSimple("**Zaphub Extractor v3 - RESUMO**\n"
         .. "Executor: " .. getExecutorName
-        .. "\nHook loadstring: " .. tostring(hookMethod)
-        .. "\nChunks loadstring: " .. tostring(captured)
-        .. "\nHTTP (luarmor/cdn): " .. tostring(httpCaptured)
+        .. "\nHTTP capturas: " .. tostring(httpCaptured)
+        .. "\nInjetados: " .. tostring(injectedCaptured)
         .. "\nGC closures: " .. tostring(gcFound),
         WEBHOOK_NAME .. " [RESUMO]")
 end
@@ -579,7 +585,7 @@ task.spawn(function()
         ui.setStatus("ERRO: " .. tostring(err), Color3.fromRGB(255, 80, 80))
         if reqFn then
             task.spawn(function()
-                sendSimple("**Zaphub Extractor v2 - ERRO**\n```\n" .. tostring(err) .. "\n```", WEBHOOK_NAME .. " [ERRO]")
+                sendSimple("**Zaphub Extractor v3 - ERRO**\n```\n" .. tostring(err) .. "\n```", WEBHOOK_NAME .. " [ERRO]")
             end)
         end
         return nil
