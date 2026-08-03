@@ -196,66 +196,64 @@ end
 --//==============================[ HOOK DE READFILE (captura o runtime do cache) ]==============================//--
 -- O loader Luarmor le o runtime de static_content_130525/init-*.lua via readfile.
 -- Hookando readfile capturamos o runtime SEM precisar baixar o CDN.
+--
+-- ATENCAO ANTI-CRASH: hookfunction patcheia a closure IN-PLACE. Para chamar o
+-- original, usamos clonefunction ANTES (padrao que funcionou no hook de request).
+-- Se clonefunction nao existir, NAO instala (evita recursao infinita -> crash).
+-- O hook so CAPTURA em memoria; envio via poll async (zero I/O no thread do hook).
 local readfileHookOk = false
 local readfileCaptured = 0
+local runtimeQueue = {}
+
+local function pollRuntimes()
+    while #runtimeQueue > 0 do
+        local item = table.remove(runtimeQueue, 1)
+        if item and item.data and #item.data > 0 then
+            readfileCaptured = readfileCaptured + 1
+            local idx = readfileCaptured
+            logMsg("[READFILE] runtime #" .. tostring(idx) .. " (" .. tostring(#item.data) .. " bytes): " .. tostring(item.path))
+            logManifest("readfile #" .. tostring(idx) .. " | " .. tostring(item.path) .. " | " .. tostring(#item.data) .. " bytes")
+            pcall(saveLocal, "runtime_" .. tostring(idx) .. ".lua", item.data)
+            pcall(saveLocal, "runtime_" .. tostring(idx) .. "_path.txt", tostring(item.path))
+            sendCaptureAsync("runtime", "RUNTIME " .. tostring(idx), item.data, "runtime_" .. tostring(idx) .. ".lua.b64.txt")
+        end
+        task.wait(0.05)
+    end
+end
 
 local function installReadfileHook()
-    local oldRF = readfileFn
-    if not oldRF then
+    local target = readfileFn
+    if not target then
         logMsg("readfile nao encontrado")
         return false
     end
-    -- caminho A: hookfunction (patcheia a closure real)
-    local okH = false
-    if type(hf) == "function" then
-        okH = pcall(hf, oldRF, function(path, ...)
-            local res = oldRF(path, ...)
-            if type(res) == "string" and #res >= 200 then
-                local p = tostring(path)
-                if p:find("static_content") or p:find("init%-") or p:find("luarmor") or p:find("marbeg") then
-                    readfileCaptured = readfileCaptured + 1
-                    local idx = readfileCaptured
-                    logMsg("[READFILE] CAPTURADO runtime #" .. tostring(idx) .. " (" .. tostring(#res) .. " bytes): " .. p)
-                    logManifest("readfile #" .. tostring(idx) .. " | " .. p .. " | " .. tostring(#res) .. " bytes")
-                    pcall(saveLocal, "runtime_" .. tostring(idx) .. ".lua", res)
-                    pcall(saveLocal, "runtime_" .. tostring(idx) .. "_path.txt", p)
-                    sendCaptureAsync("runtime", "RUNTIME " .. tostring(idx), res, "runtime_" .. tostring(idx) .. ".lua.b64.txt")
-                end
-            end
-            return res
-        end)
-        if okH then
-            readfileHookOk = true
-            logMsg("Hook readfile: hookfunction OK")
-            return true
-        end
+    if type(hf) ~= "function" or type(cf) ~= "function" then
+        logMsg("Hook readfile: hookfunction/clonefunction indisponivel - SKIP (anti-crash)")
+        return false
     end
-    -- caminho B: reatribuicao de global
-    local okA = pcall(function()
-        _G.readfile = function(path, ...)
-            local res = oldRF(path, ...)
-            if type(res) == "string" and #res >= 200 then
-                local p = tostring(path)
-                if p:find("static_content") or p:find("init%-") or p:find("luarmor") or p:find("marbeg") then
-                    readfileCaptured = readfileCaptured + 1
-                    local idx = readfileCaptured
-                    logMsg("[READFILE] CAPTURADO runtime #" .. tostring(idx) .. " (" .. tostring(#res) .. " bytes): " .. p)
-                    logManifest("readfile #" .. tostring(idx) .. " | " .. p .. " | " .. tostring(#res) .. " bytes")
-                    pcall(saveLocal, "runtime_" .. tostring(idx) .. ".lua", res)
-                    pcall(saveLocal, "runtime_" .. tostring(idx) .. "_path.txt", p)
-                    sendCaptureAsync("runtime", "RUNTIME " .. tostring(idx), res, "runtime_" .. tostring(idx) .. ".lua.b64.txt")
-                end
+    -- captura o ORIGINAL via clonefunction ANTES de patchear
+    local okCl, original = pcall(cf, target)
+    if not okCl or type(original) ~= "function" then
+        logMsg("Hook readfile: clonefunction falhou - SKIP (anti-crash)")
+        return false
+    end
+    local okH = pcall(hf, target, function(path, ...)
+        local res = original(path, ...)
+        if type(res) == "string" and #res >= 200 then
+            local p = tostring(path)
+            if p:find("static_content") or p:find("init%-") or p:find("luarmor") or p:find("marbeg") then
+                table.insert(runtimeQueue, { path = p, data = res })
             end
-            return res
         end
+        return res
     end)
-    if okA then
+    if okH then
         readfileHookOk = true
-        logMsg("Hook readfile: global-reassign OK")
-        return true
+        logMsg("Hook readfile: hookfunction OK (original clonado)")
+    else
+        logMsg("Hook readfile: hookfunction falhou")
     end
-    logMsg("Hook readfile: FALHOU")
-    return false
+    return readfileHookOk
 end
 
 --//==============================[ INJECAO NO LOADER ]==============================//--
@@ -387,25 +385,28 @@ local function installHttpGetHook()
             end
         end
     end
-    -- caminho B: hookfunction em game.HttpGet
-    if type(hf) == "function" then
-        local okH = pcall(hf, game.HttpGet, function(self, ...)
-            local packed = { ... }
-            local okGet, body = pcall(function()
-                return game.HttpGet(self, table.unpack(packed))
-            end)
-            if okGet then
-                if type(body) == "string" then
-                    return captureHttpResponse(tostring(packed[1]), body)
+    -- caminho B: hookfunction em game.HttpGet (original clonado - anti-recursao)
+    if type(hf) == "function" and type(cf) == "function" then
+        local okCl, origGet = pcall(cf, game.HttpGet)
+        if okCl and type(origGet) == "function" then
+            local okH = pcall(hf, game.HttpGet, function(self, ...)
+                local packed = { ... }
+                local okGet, body = pcall(function()
+                    return origGet(self, table.unpack(packed))
+                end)
+                if okGet then
+                    if type(body) == "string" then
+                        return captureHttpResponse(tostring(packed[1]), body)
+                    end
+                    return body
                 end
-                return body
+                error(tostring(body), 0)
+            end)
+            if okH then
+                httpHookOk = true
+                logMsg("Hook HTTP: hookfunction game.HttpGet OK (original clonado)")
+                return true
             end
-            error(tostring(body), 0)
-        end)
-        if okH then
-            httpHookOk = true
-            logMsg("Hook HTTP: hookfunction game.HttpGet OK")
-            return true
         end
     end
     logMsg("Hook HTTP: FALHOU")
@@ -426,12 +427,16 @@ local function installRequestHook()
     end
     local done = false
     for i = 1, #targets do
-        local okCl, orig = pcall(function() return (clonefunction or (function() end)) and clonefunction and clonefunction(targets[i]) end)
+        -- SEMPRE clonar o original; se clonefunction falhar, NAO hooka (anti-recursao)
+        local okCl, orig = pcall(function() return cf and cf(targets[i]) or nil end)
         local original = (type(okCl) == "boolean" and okCl and type(orig) == "function") and orig or nil
+        if type(original) ~= "function" then
+            logMsg("Hook request: clonefunction falhou para alvo " .. tostring(i) .. " - SKIP (anti-crash)")
+            continue
+        end
         local okH = pcall(hf, targets[i], function(options)
-            local res = original and original(options) or targets[i](options)
+            local res = original(options)
             if type(res) == "table" and type(res.Body) == "string" and type(options) == "table" and type(options.Url) == "string" then
-                -- nota: request nao permite reescrever o body de forma util aqui
                 captureHttpResponse(options.Url, res.Body)
             end
             return res
@@ -623,6 +628,7 @@ local function mainFlow()
         waited = waited + 1
         if waited % 5 == 0 then
             task.spawn(pollInjected)
+            task.spawn(pollRuntimes)
         end
         if waited % 15 == 0 then
             task.spawn(scanGCForLuraph)
@@ -635,7 +641,8 @@ local function mainFlow()
         end
     end
 
-    -- scan final
+    -- scan final + drena fila de runtimes
+    task.spawn(pollRuntimes)
     local gcFound = scanGCForLuraph()
 
     pcall(saveLocal, "manifest.txt", table.concat(manifest, "\n"))
