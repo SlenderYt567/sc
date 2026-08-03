@@ -252,25 +252,33 @@ local function getPath(inst)
 end
 
 local function registerRemote(inst)
-    local name = tostring(inst.Name)
+    local name = tostring(inst.Name or "?")
     local entry = remotes[name]
     if not entry then
         entry = { paths = {}, classes = {} }
         remotes[name] = entry
     end
     table.insert(entry.paths, getPath(inst))
-    entry.classes[inst.ClassName] = (entry.classes[inst.ClassName] or 0) + 1
+    -- CAUSA RAIZ DO ERRO: alguns executores (Delta) devolvem ClassName nil
+    -- para certas instancias. Antes isso gravava classes[nil] = ... e o pcall
+    -- engolia o erro, deixando a entry com classes={} vazia -> crash no format.
+    local cls = tostring(inst.ClassName or "Unknown")
+    entry.classes[cls] = (entry.classes[cls] or 0) + 1
 end
 
 local function processList(list, onProgress)
     local total = #list
     for i = 1, total do
         local inst = list[i]
-        pcall(function()
+        local okProc, errProc = pcall(function()
             if RemoteClasses[inst.ClassName] then
                 registerRemote(inst)
             end
         end)
+        if not okProc then
+            addWarning("Falha ao processar instancia " .. tostring(i)
+                .. " (" .. tostring(inst and inst.ClassName or "?") .. "): " .. tostring(errProc))
+        end
         processed = processed + 1
         if processed % 2000 == 0 then
             if os.clock() - scanStart > SCAN_TIMEOUT then
@@ -353,17 +361,25 @@ local function formatRemotesByName()
     table.sort(names)
     for _, name in ipairs(names) do
         local entry = remotes[name]
+        if not entry or not entry.classes or next(entry.classes) == nil then
+            addWarning("Entry corrompida para " .. tostring(name) .. " - pulada")
+            remotes[name] = nil
+            continue
+        end
         local classSummary = {}
         for cls, qtd in pairs(entry.classes) do
-            table.insert(classSummary, cls .. "x" .. tostring(qtd))
+            table.insert(classSummary, tostring(cls) .. "x" .. tostring(qtd))
         end
         table.sort(classSummary)
         table.insert(lines, "")
         table.insert(lines, string.format("[%s] %s (%d instancia(s)) [%s]",
-            next(entry.classes), name, #entry.paths, table.concat(classSummary, ", ")))
+            tostring(next(entry.classes) or "Unknown"),
+            tostring(name),
+            #entry.paths,
+            table.concat(classSummary, ", ")))
         table.sort(entry.paths)
         for _, p in ipairs(entry.paths) do
-            table.insert(lines, "    - " .. p)
+            table.insert(lines, "    - " .. tostring(p))
         end
     end
     return table.concat(lines, "\n")
@@ -375,9 +391,12 @@ local function formatDexByName()
     table.insert(lines, "== DEX STYLE - ARVORE POR NOME ==")
     local all = {}
     for name, entry in pairs(remotes) do
+        if not entry or not entry.classes or not entry.paths then
+            continue
+        end
         for _, p in ipairs(entry.paths) do
             for cls in pairs(entry.classes) do
-                table.insert(all, { cls = cls, name = name, path = p })
+                table.insert(all, { cls = tostring(cls), name = tostring(name), path = tostring(p) })
             end
         end
     end
@@ -404,10 +423,11 @@ local function formatSuspicious()
     local patterns = { "kick", "ban", "log", "anticheat", "anti_cheat", "punish", "report", "exploit", "cheat", "detect", "admin" }
     local lines = { "-- Nomes suspeitos (possiveis honeypots, requer validacao no servidor) --" }
     for name, entry in pairs(remotes) do
-        local lower = name:lower()
+        if not entry then continue end
+        local lower = tostring(name):lower()
         for _, pat in ipairs(patterns) do
             if lower:find(pat, 1, true) then
-                table.insert(lines, "  [!!] " .. name .. "  (" .. #entry.paths .. "x)")
+                table.insert(lines, "  [!!] " .. tostring(name) .. "  (" .. #entry.paths .. "x)")
                 break
             end
         end
@@ -670,7 +690,7 @@ local function rootErrorHandler(err)
         ui.setTexts(rt, dt, formatSuspicious())
         ui.preview.Text = rt
     end)
-    return "handled"
+    return nil
 end
 
 local function mainFlow()
@@ -725,15 +745,21 @@ local function mainFlow()
 end
 
 -- spawn seguro: erros dentro de task.spawn nao escapam mais em silencio.
+-- O handler reporta UMA vez e retorna nil (nao relanca) - evita o bug de
+-- "handled" virar segundo erro (o xpcall propaga o retorno do handler).
 local function safeSpawn(fn)
-    if task and task.spawn then
-        task.spawn(function()
-            local ok, err = xpcall(fn, rootErrorHandler)
-            if not ok then rootErrorHandler(err) end
+    local run = function()
+        xpcall(fn, function(err)
+            rootErrorHandler(err)
+            return nil
         end)
+        -- NADA mais aqui: o handler ja reportou. Se rootErrorHandler
+        -- retornasse um valor, o xpcall o propagaria como falso erro.
+    end
+    if task and task.spawn then
+        task.spawn(run)
     else
-        local ok, err = xpcall(fn, rootErrorHandler)
-        if not ok then rootErrorHandler(err) end
+        run()
     end
 end
 
