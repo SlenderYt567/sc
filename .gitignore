@@ -223,9 +223,14 @@ local scanError = nil
 local scanStart = os.clock()
 local SCAN_TIMEOUT = 25
 local scanWarnings = {}
+local scanWarningCount = 0
+local MAX_WARNINGS = 10   -- evita spam de milhares de avisos identicos no header
 
 local function addWarning(msg)
-    table.insert(scanWarnings, msg)
+    scanWarningCount = scanWarningCount + 1
+    if #scanWarnings < MAX_WARNINGS then
+        table.insert(scanWarnings, msg)
+    end
     print("[PS99Dump] WARN: " .. msg)
 end
 
@@ -235,8 +240,13 @@ local function remoteNameCount()
     return n
 end
 
+-- CAUSA RAIZ FIX v2.4: gsub retorna 2 valores (string, count). Isso fazia
+-- table.insert(parts, 1, sanitize(...)) virar 4 argumentos -> Delta estrito
+-- lancava "wrong number of arguments to 'insert'" em TODA instancia.
 local function sanitize(name)
-    return tostring(name):gsub("[\r\n]", " ")
+    local s = tostring(name)
+    s = s:gsub("[\r\n]", " ")
+    return s
 end
 
 local function getPath(inst)
@@ -244,7 +254,7 @@ local function getPath(inst)
     local cur = inst
     local guard = 0
     while cur and guard < 60 do
-        table.insert(parts, 1, sanitize(cur.Name))
+        parts[#parts + 1] = sanitize(cur.Name)
         cur = cur.Parent
         guard = guard + 1
     end
@@ -258,10 +268,8 @@ local function registerRemote(inst)
         entry = { paths = {}, classes = {} }
         remotes[name] = entry
     end
-    table.insert(entry.paths, getPath(inst))
-    -- CAUSA RAIZ DO ERRO: alguns executores (Delta) devolvem ClassName nil
-    -- para certas instancias. Antes isso gravava classes[nil] = ... e o pcall
-    -- engolia o erro, deixando a entry com classes={} vazia -> crash no format.
+    -- append por indice: nunca depende de aridade do table.insert
+    entry.paths[#entry.paths + 1] = getPath(inst)
     local cls = tostring(inst.ClassName or "Unknown")
     entry.classes[cls] = (entry.classes[cls] or 0) + 1
 end
@@ -275,7 +283,7 @@ local function processList(list, onProgress)
                 registerRemote(inst)
             end
         end)
-        if not okProc then
+        if not okProc and scanWarningCount < MAX_WARNINGS then
             addWarning("Falha ao processar instancia " .. tostring(i)
                 .. " (" .. tostring(inst and inst.ClassName or "?") .. "): " .. tostring(errProc))
         end
@@ -346,8 +354,12 @@ local function buildHeader()
         .. (scanAborted and " (PARCIAL - timeout)" or "")
         .. (scanError and (" (ERRO: " .. tostring(scanError) .. ")") or ""))
     table.insert(lines, "Remotes:  " .. tostring(remoteNameCount()) .. " nomes unicos")
-    if #scanWarnings > 0 then
-        table.insert(lines, "Avisos:   " .. table.concat(scanWarnings, " | "))
+    if scanWarningCount > 0 then
+        local first = table.concat(scanWarnings, " | ")
+        if scanWarningCount > #scanWarnings then
+            first = first .. " | ... (+" .. tostring(scanWarningCount - #scanWarnings) .. " avisos)"
+        end
+        table.insert(lines, "Avisos:   " .. first)
     end
     return table.concat(lines, "\n")
 end
