@@ -1,20 +1,32 @@
 --!strict
 --[[
-    PS99 Dex Dump Mobile - Universal Remote + Hierarchy Scanner
-    Versao: 1.0 | Alvo: Pet Simulator 99 (qualquer jogo Roblox)
+    PS99 Dex Dump Webhook - Universal Remote + Hierarchy Scanner (Discord) v1.1
+    Versao: 2.1 | Alvo: Pet Simulator 99 (qualquer jogo Roblox)
     Plataforma: Executor Mobile (Delta/Hydrogen/Arceus X/Fluxus Mobile)
 
     O que faz:
       [1] Varre o DataModel inteiro atras de remotes
-          (RemoteEvent / RemoteFunction / UnreliableRemoteEvent)
       [2] Agrupa TODOS os remotes por NOME (com paths completos)
       [3] Monta dump estilo DEX por nome (arvore de classes)
-      [4] Copia tudo para o clipboard (setclipboard/toclipboard)
-      [5] Salva em arquivo se o executor suportar writefile
+      [4] ENVIA TUDO para o seu webhook do Discord (arquivo anexo)
+      [5] Copia para o clipboard tambem (fallback manual)
       [6] UI touch-friendly para mobile (botoes grandes)
 
-    Uso: execute, aguarde o scan, toque nos botoes para copiar/salvar.
+    CONFIGURACAO:
+      AUTO_SEND = true  -> envia sozinho apos o scan (recomendado)
+      WEBHOOK_URL       -> sua URL do Discord (abaixo)
+
+    FIXES v2.1 (mesma correcao do Mobile v1.1):
+      - GetDescendants() nativo (nao trava mais)
+      - xpcall no scan + pcall por instancia (nao congela mais em
+        "Scan em andamento..." - bug de instancia destruida)
+      - progresso em tempo real + dump parcial mesmo em erro/timeout
 ]]
+
+--//==============================[ CONFIG ]==============================//--
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1398723880369131631/7knZsAymoHblk9BcsXYuI7XT2-8PNHkZJfFbtyLHssHqjW_pXeBQVznZ0lDHz7G9ObRI"
+local WEBHOOK_NAME = "PS99 DexDump"
+local AUTO_SEND = true   -- mude para false se quiser enviar so pelo botao
 
 --//==============================[ 1. API COMPAT (multi-executor) ]==============================//--
 local getExecutorName = (function()
@@ -41,26 +53,117 @@ local saveFile = (function()
     end
 end)()
 
-local getHTTP = (function()
-    if is_sirhurt_closure then return function() end end
+local reqFn = (function()
     if syn and syn.request then return syn.request end
     if request then return request end
     if http and http.request then return http.request end
     return nil
 end)()
 
---//==============================[ 2. COLETOR DE REMOTES ]==============================//--
+--//==============================[ 2. WEBHOOK DISCORD ]==============================//--
+local function jsonString(s)
+    s = tostring(s)
+    s = s:gsub("\\", "\\\\"):gsub("\"", "\\\""):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t")
+    s = s:gsub("[%z\1-\31]", function(c) return string.format("\\u%04x", c:byte()) end)
+    return "\"" .. s .. "\""
+end
+
+local function sendSimple(content, username)
+    if not reqFn then return -1 end
+    local body = '{"content":' .. jsonString(content) .. ',"username":' .. jsonString(username or WEBHOOK_NAME) .. '}'
+    local ok, res = pcall(function()
+        return reqFn({
+            Url = WEBHOOK_URL,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = body,
+        })
+    end)
+    if ok and res then return tonumber(res.StatusCode) or 0 else return -1 end
+end
+
+local function sendChunked(text, label)
+    local okCount = 0
+    local remaining = tostring(text)
+    local first = true
+    while #remaining > 0 do
+        local part = remaining:sub(1, 1800)
+        local header = first and ("**" .. label .. "**\n") or ""
+        local code = sendSimple(header .. "```\n" .. part .. "\n```")
+        if code >= 200 and code < 300 then okCount = okCount + 1 end
+        remaining = remaining:sub(1801)
+        first = false
+        task.wait(0.35)
+    end
+    return okCount
+end
+
+local function sendFile(filename, content, msg)
+    if not reqFn then return -1 end
+    local boundary = "----PS99Dump" .. tostring(os.clock()):gsub("%.", "") .. "7xK"
+    local body = ""
+    if msg and #tostring(msg) > 0 then
+        body = body .. "--" .. boundary .. "\r\nContent-Disposition: form-data; name=\"content\"\r\n\r\n" .. tostring(msg) .. "\r\n"
+    end
+    body = body .. "--" .. boundary
+        .. "\r\nContent-Disposition: form-data; name=\"file1\"; filename=\"" .. filename .. "\""
+        .. "\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+        .. tostring(content)
+        .. "\r\n--" .. boundary .. "--\r\n"
+    local ok, res = pcall(function()
+        return reqFn({
+            Url = WEBHOOK_URL,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "multipart/form-data; boundary=" .. boundary },
+            Body = body,
+        })
+    end)
+    if ok and res then return tonumber(res.StatusCode) or 0 else return -1 end
+end
+
+local function sendAll(remotesText, dexText, susText, stamp)
+    if not reqFn then return "request nao suportado neste executor" end
+
+    local player = game:GetService("Players").LocalPlayer
+    local msgHeader = "Dump PS99 - " .. stamp
+        .. "\nGameId: " .. tostring(game.GameId)
+        .. "\nPlaceId: " .. tostring(game.PlaceId)
+        .. "\nPlayer: " .. tostring(player and player.Name or "?")
+        .. "\nExecutor: " .. getExecutorName
+
+    local c1 = sendFile("remotes_" .. stamp .. ".txt", remotesText, msgHeader .. "\n\n[remotes por nome]")
+    if c1 >= 200 and c1 < 300 then
+        local c2 = sendFile("dex_" .. stamp .. ".txt", dexText, msgHeader .. "\n\n[dex style por nome]")
+        local c3 = sendSimple("**Suspeitos (possiveis honeypots):**\n```\n" .. susText .. "\n```")
+        return "Enviado! (remotes=" .. tostring(c1) .. " dex=" .. tostring(c2 or -1) .. " sus=" .. tostring(c3 or -1) .. ")"
+    end
+
+    local ok1 = sendChunked(remotesText, "REMOTES POR NOME")
+    local ok2 = sendChunked(dexText, "DEX STYLE")
+    sendSimple("**Suspeitos:**\n```\n" .. susText .. "\n```")
+    return "Enviado via chunks (remotes=" .. tostring(ok1) .. " dex=" .. tostring(ok2) .. ")"
+end
+
+--//==============================[ 3. ESTADO DO SCAN ]==============================//--
 local RemoteClasses = {
     ["RemoteEvent"] = true,
     ["RemoteFunction"] = true,
     ["UnreliableRemoteEvent"] = true,
 }
 
-local remotes = {}   -- nome -> { paths = {} , classes = {} }
+local remotes = {}
 local totalInstances = 0
-local scanned = 0
+local processed = 0
 local scanAborted = false
+local scanError = nil
 local scanStart = os.clock()
+local SCAN_TIMEOUT = 25
+
+local function remoteNameCount()
+    local n = 0
+    for _ in pairs(remotes) do n = n + 1 end
+    return n
+end
 
 local function sanitize(name)
     return tostring(name):gsub("[\r\n]", " ")
@@ -69,9 +172,11 @@ end
 local function getPath(inst)
     local parts = {}
     local cur = inst
-    while cur do
+    local guard = 0
+    while cur and guard < 60 do
         table.insert(parts, 1, sanitize(cur.Name))
         cur = cur.Parent
+        guard = guard + 1
     end
     return table.concat(parts, ".")
 end
@@ -87,29 +192,58 @@ local function registerRemote(inst)
     entry.classes[inst.ClassName] = (entry.classes[inst.ClassName] or 0) + 1
 end
 
--- varredura em chunks para nao travar/congelar o executor mobile
-local function scanTree(root)
-    local children = root:GetChildren()
-    for i = 1, #children do
-        if scanAborted then return end
-        local child = children[i]
-        if RemoteClasses[child.ClassName] then
-            registerRemote(child)
-        end
-        totalInstances = totalInstances + 1
-        scanned = scanned + 1
-        if scanned % 500 == 0 then
-            if os.clock() - scanStart > 20 then
+local function processList(list, onProgress)
+    local total = #list
+    for i = 1, total do
+        local inst = list[i]
+        pcall(function()
+            if RemoteClasses[inst.ClassName] then
+                registerRemote(inst)
+            end
+        end)
+        processed = processed + 1
+        if processed % 2000 == 0 then
+            if os.clock() - scanStart > SCAN_TIMEOUT then
                 scanAborted = true
                 return
             end
+            onProgress(string.format("Escaneando... %d/%d | %d remotes",
+                i, total, remoteNameCount()))
             task.wait()
         end
-        scanTree(child)
     end
 end
 
---//==============================[ 3. FORMATADORES ]==============================//--
+local function runScan(onProgress)
+    scanStart = os.clock()
+
+    local rs = {}
+    pcall(function()
+        rs = game:GetService("ReplicatedStorage"):GetDescendants()
+    end)
+    totalInstances = totalInstances + #rs
+    processList(rs, onProgress)
+
+    if not scanAborted then
+        local ws = {}
+        pcall(function()
+            ws = workspace:GetDescendants()
+        end)
+        totalInstances = totalInstances + #ws
+        processList(ws, onProgress)
+    end
+
+    if not scanAborted then
+        local gm = {}
+        pcall(function()
+            gm = game:GetDescendants()
+        end)
+        totalInstances = totalInstances + #gm
+        processList(gm, onProgress)
+    end
+end
+
+--//==============================[ 4. FORMATADORES ]==============================//--
 local function buildHeader()
     local lines = {}
     table.insert(lines, "== PS99 DEX DUMP ==")
@@ -120,14 +254,13 @@ local function buildHeader()
     table.insert(lines, "Player:   " .. tostring(player and player.Name or "?"))
     table.insert(lines, "Executor: " .. getExecutorName)
     table.insert(lines, "Data:     " .. os.date("%Y-%m-%d %H:%M:%S"))
-    table.insert(lines, "Scan:     " .. tostring(totalInstances) .. " instancias" .. (scanAborted and " (ABORTADO por timeout)" or ""))
-    local n = 0
-    for _ in pairs(remotes) do n = n + 1 end
-    table.insert(lines, "Remotes:  " .. tostring(n) .. " nomes unicos")
+    table.insert(lines, "Scan:     " .. tostring(totalInstances) .. " instancias"
+        .. (scanAborted and " (PARCIAL - timeout)" or "")
+        .. (scanError and (" (ERRO: " .. tostring(scanError) .. ")") or ""))
+    table.insert(lines, "Remotes:  " .. tostring(remoteNameCount()) .. " nomes unicos")
     return table.concat(lines, "\n")
 end
 
--- remotes agrupados por nome (com paths e classes)
 local function formatRemotesByName()
     local lines = { buildHeader() }
     table.insert(lines, "")
@@ -153,7 +286,6 @@ local function formatRemotesByName()
     return table.concat(lines, "\n")
 end
 
--- dump estilo DEX por nome: arvore "Classe | Nome | Path"
 local function formatDexByName()
     local lines = { buildHeader() }
     table.insert(lines, "")
@@ -185,7 +317,6 @@ local function formatDexByName()
     return table.concat(lines, "\n")
 end
 
--- heuristica leve de nomes suspeitos (honeypot/anti-cheat) - apenas sinaliza
 local function formatSuspicious()
     local patterns = { "kick", "ban", "log", "anticheat", "anti_cheat", "punish", "report", "exploit", "cheat", "detect", "admin" }
     local lines = { "-- Nomes suspeitos (possiveis honeypots, requer validacao no servidor) --" }
@@ -201,7 +332,7 @@ local function formatSuspicious()
     return table.concat(lines, "\n")
 end
 
---//==============================[ 4. UI MOBILE ]==============================//--
+--//==============================[ 5. UI MOBILE ]==============================//--
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 
@@ -217,7 +348,7 @@ local function makeUI()
     bg.Name = "BG"
     bg.AnchorPoint = Vector2.new(0.5, 0.5)
     bg.Position = UDim2.new(0.5, 0, 0.5, 0)
-    bg.Size = UDim2.new(0, 400, 0, 560)
+    bg.Size = UDim2.new(0, 400, 0, 600)
     bg.BackgroundColor3 = Color3.fromRGB(15, 17, 25)
     bg.BackgroundTransparency = 0.05
     bg.BorderSizePixel = 0
@@ -230,8 +361,8 @@ local function makeUI()
     pcall(function()
         local stroke = Instance.new("UIStroke")
         stroke.Thickness = 2
-        stroke.Color = Color3.fromRGB(80, 120, 255)
-        stroke.Transparency = 0.4
+        stroke.Color = Color3.fromRGB(88, 101, 242)
+        stroke.Transparency = 0.3
         stroke.Parent = bg
     end)
 
@@ -241,27 +372,28 @@ local function makeUI()
     title.Position = UDim2.new(0, 0, 0, 10)
     title.Size = UDim2.new(1, 0, 0, 40)
     title.Font = Enum.Font.GothamBold
-    title.Text = "PS99 DEX DUMP"
+    title.Text = "PS99 DEX DUMP (Webhook)"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = 26
+    title.TextSize = 22
     title.Parent = bg
 
     local status = Instance.new("TextLabel")
     status.Name = "Status"
     status.BackgroundTransparency = 1
     status.Position = UDim2.new(0, 0, 0, 50)
-    status.Size = UDim2.new(1, 0, 0, 24)
+    status.Size = UDim2.new(1, 0, 0, 40)
     status.Font = Enum.Font.Gotham
-    status.Text = "Scan em andamento..."
+    status.Text = "Iniciando..."
     status.TextColor3 = Color3.fromRGB(255, 200, 80)
-    status.TextSize = 16
+    status.TextSize = 14
+    status.TextWrapped = true
     status.Parent = bg
 
     local scroll = Instance.new("ScrollingFrame")
     scroll.Name = "Preview"
     scroll.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
-    scroll.Position = UDim2.new(0, 12, 0, 84)
-    scroll.Size = UDim2.new(1, -24, 0, 250)
+    scroll.Position = UDim2.new(0, 12, 0, 96)
+    scroll.Size = UDim2.new(1, -24, 0, 220)
     scroll.BorderSizePixel = 0
     scroll.ScrollBarThickness = 6
     scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -281,7 +413,7 @@ local function makeUI()
     preview.Font = Enum.Font.Code
     preview.Text = "Aguardando scan..."
     preview.TextColor3 = Color3.fromRGB(200, 210, 230)
-    preview.TextSize = 13
+    preview.TextSize = 12
     preview.TextXAlignment = Enum.TextXAlignment.Left
     preview.TextYAlignment = Enum.TextYAlignment.Top
     preview.Parent = scroll
@@ -290,11 +422,11 @@ local function makeUI()
         local btn = Instance.new("TextButton")
         btn.BackgroundColor3 = color
         btn.Position = UDim2.new(0, 12, 0, y)
-        btn.Size = UDim2.new(1, -24, 0, 48)
+        btn.Size = UDim2.new(1, -24, 0, 44)
         btn.Font = Enum.Font.GothamBold
         btn.Text = text
         btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.TextSize = 17
+        btn.TextSize = 16
         btn.AutoButtonColor = true
         btn.Parent = bg
         pcall(function()
@@ -303,10 +435,10 @@ local function makeUI()
             corner.Parent = btn
         end)
         btn.Activated:Connect(function()
-            local tween = TweenService:Create(btn, TweenInfo.new(0.1), { Size = UDim2.new(1, -28, 0, 46) })
+            local tween = TweenService:Create(btn, TweenInfo.new(0.1), { Size = UDim2.new(1, -28, 0, 42) })
             tween:Play()
             task.delay(0.1, function()
-                TweenService:Create(btn, TweenInfo.new(0.1), { Size = UDim2.new(1, -24, 0, 48) }):Play()
+                TweenService:Create(btn, TweenInfo.new(0.1), { Size = UDim2.new(1, -24, 0, 44) }):Play()
             end)
             pcall(onClick)
         end)
@@ -317,15 +449,41 @@ local function makeUI()
     local dexText = ""
     local susText = ""
 
-    makeButton(344, "COPIAR REMOTES", Color3.fromRGB(70, 110, 255), function()
+    makeButton(326, "ENVIAR WEBHOOK", Color3.fromRGB(88, 101, 242), function()
+        if #remotesText == 0 then
+            status.Text = "Scan ainda nao terminou ou nao encontrou nada"
+            return
+        end
+        status.Text = "Enviando para o Discord..."
+        status.TextColor3 = Color3.fromRGB(255, 200, 80)
+        task.spawn(function()
+            local stamp = os.date("%Y%m%d_%H%M%S")
+            local res = sendAll(remotesText, dexText, susText, stamp)
+            status.Text = res
+            status.TextColor3 = Color3.fromRGB(80, 230, 120)
+        end)
+    end)
+    makeButton(378, "COPIAR REMOTES", Color3.fromRGB(70, 110, 255), function()
+        if #remotesText == 0 then
+            status.Text = "Scan ainda nao terminou ou nao encontrou nada"
+            return
+        end
         copy(remotesText)
         status.Text = "Remotes copiados! (" .. #remotesText .. " chars)"
     end)
-    makeButton(400, "COPIAR DEX", Color3.fromRGB(50, 160, 110), function()
+    makeButton(430, "COPIAR DEX", Color3.fromRGB(50, 160, 110), function()
+        if #dexText == 0 then
+            status.Text = "Scan ainda nao terminou ou nao encontrou nada"
+            return
+        end
         copy(dexText)
         status.Text = "Dex copiado! (" .. #dexText .. " chars)"
     end)
-    makeButton(456, "SALVAR ARQUIVO", Color3.fromRGB(200, 130, 40), function()
+    makeButton(482, "SALVAR ARQUIVO", Color3.fromRGB(200, 130, 40), function()
+        if #remotesText == 0 then
+            status.Text = "Scan ainda nao terminou ou nao encontrou nada"
+            return
+        end
         if saveFile then
             local stamp = os.date("%Y%m%d_%H%M%S")
             saveFile("remotes_" .. stamp .. ".txt", remotesText)
@@ -364,29 +522,58 @@ local function makeUI()
             dexText = d
             susText = s
         end,
+        setStatus = function(text, color)
+            status.Text = text
+            if color then status.TextColor3 = color end
+        end,
     }
 end
 
---//==============================[ 5. MAIN ]==============================//--
+--//==============================[ 6. MAIN (com xpcall - NAO congela mais) ]==============================//--
 local ui = makeUI()
 
 task.spawn(function()
-    scanTree(game:GetService("ReplicatedStorage"))
-    if not scanAborted then scanTree(workspace) end
-    if not scanAborted then scanTree(game) end
+    xpcall(function()
+        ui.setStatus("Escaneando...", Color3.fromRGB(255, 200, 80))
 
-    if scanAborted then
-        ui.status.Text = "Scan ABORTADO (timeout 20s) - copie o parcial"
-        ui.status.TextColor3 = Color3.fromRGB(255, 90, 90)
-    else
-        ui.status.Text = "Scan completo! Toque para copiar."
-        ui.status.TextColor3 = Color3.fromRGB(80, 230, 120)
-    end
+        runScan(function(msg)
+            ui.setStatus(msg)
+        end)
 
-    local remotesText = formatRemotesByName()
-    local dexText = formatDexByName()
-    local susText = formatSuspicious()
+        if scanAborted then
+            ui.setStatus("Scan PARCIAL (timeout " .. SCAN_TIMEOUT .. "s) - gerando dump...",
+                Color3.fromRGB(255, 120, 80))
+        else
+            ui.setStatus("Scan completo!", Color3.fromRGB(80, 230, 120))
+        end
 
-    ui.setTexts(remotesText, dexText, susText)
-    ui.preview.Text = remotesText
+        local remotesText = formatRemotesByName()
+        local dexText = formatDexByName()
+        local susText = formatSuspicious()
+
+        ui.setTexts(remotesText, dexText, susText)
+        ui.preview.Text = remotesText
+
+        if remoteNameCount() == 0 then
+            ui.setStatus("Nenhum remote encontrado (0 nomes) - verifique se o jogo carregou",
+                Color3.fromRGB(255, 120, 80))
+            return
+        end
+
+        if AUTO_SEND then
+            ui.setStatus("Enviando para o Discord...", Color3.fromRGB(255, 200, 80))
+            task.spawn(function()
+                local stamp = os.date("%Y%m%d_%H%M%S")
+                local res = sendAll(remotesText, dexText, susText, stamp)
+                ui.setStatus(res, Color3.fromRGB(80, 230, 120))
+            end)
+        end
+    end, function(err)
+        scanError = tostring(err)
+        ui.setStatus("ERRO durante scan: " .. scanError, Color3.fromRGB(255, 80, 80))
+        local remotesText = formatRemotesByName()
+        local dexText = formatDexByName()
+        ui.setTexts(remotesText, dexText, formatSuspicious())
+        ui.preview.Text = remotesText
+    end)
 end)
