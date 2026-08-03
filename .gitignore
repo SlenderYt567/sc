@@ -1,14 +1,392 @@
-# 1. Regenerar o patch de trace corrigido
-python decode\patch9_trace.py
+--!strict
+--[[
+    PS99 Dex Dump Mobile - Universal Remote + Hierarchy Scanner
+    Versao: 1.0 | Alvo: Pet Simulator 99 (qualquer jogo Roblox)
+    Plataforma: Executor Mobile (Delta/Hydrogen/Arceus X/Fluxus Mobile)
 
-# 2. Relançar o run em background (~25 min)
-Start-Process -FilePath ".\decode\lune\lune.exe" -ArgumentList "run","decode\zaphub_harness.luau" -WorkingDirectory "C:\Users\User\Desktop\IA\Workspace\zaphub" -RedirectStandardOutput "decode\run_p9b_out.txt" -RedirectStandardError "decode\run_p9b_err.txt" -NoNewWindow -PassThru
-🧭 Ponto exato onde paramos
-Etapa	Estado
-Decode base85	✅ feito
-Dump dos arrays da VM	✅ feito
-ISA dos 57 opcodes (estático)	✅ ~90% pronto
-Trace empírico (4000 instr.)	⏸️ próximo passo — patch corrigido mas não regenerado
-Decompilador do IR → zaphub.lua	⏳ pendente
-Validação PS99	⏳ pendente
-O único arquivo "perigoso" é o v4_init_patched9.lua (ainda tem o patch velho quebrado) — mas o patch9_trace.py corrigido está salvo e basta rodá-lo. Tudo documentado no PROJECT_STATE.md. Até a próxima! 👋
+    O que faz:
+      [1] Varre o DataModel inteiro atras de remotes
+          (RemoteEvent / RemoteFunction / UnreliableRemoteEvent)
+      [2] Agrupa TODOS os remotes por NOME (com paths completos)
+      [3] Monta dump estilo DEX por nome (arvore de classes)
+      [4] Copia tudo para o clipboard (setclipboard/toclipboard)
+      [5] Salva em arquivo se o executor suportar writefile
+      [6] UI touch-friendly para mobile (botoes grandes)
+
+    Uso: execute, aguarde o scan, toque nos botoes para copiar/salvar.
+]]
+
+--//==============================[ 1. API COMPAT (multi-executor) ]==============================//--
+local getExecutorName = (function()
+    local fn = identifyexecutor or identify_executor
+    if fn then
+        local ok, name = pcall(fn)
+        if ok and type(name) == "string" then return name end
+    end
+    return "unknown"
+end)()
+
+local copy = (function()
+    if setclipboard then return setclipboard end
+    if toclipboard then return toclipboard end
+    if set_clipboard then return set_clipboard end
+    return function() end
+end)()
+
+local saveFile = (function()
+    if not writefile then return nil end
+    local ok = pcall(function() makefolder("PS99Dump") end)
+    return function(name, content)
+        pcall(writefile, "PS99Dump/" .. name, content)
+    end
+end)()
+
+local getHTTP = (function()
+    if is_sirhurt_closure then return function() end end
+    if syn and syn.request then return syn.request end
+    if request then return request end
+    if http and http.request then return http.request end
+    return nil
+end)()
+
+--//==============================[ 2. COLETOR DE REMOTES ]==============================//--
+local RemoteClasses = {
+    ["RemoteEvent"] = true,
+    ["RemoteFunction"] = true,
+    ["UnreliableRemoteEvent"] = true,
+}
+
+local remotes = {}   -- nome -> { paths = {} , classes = {} }
+local totalInstances = 0
+local scanned = 0
+local scanAborted = false
+local scanStart = os.clock()
+
+local function sanitize(name)
+    return tostring(name):gsub("[\r\n]", " ")
+end
+
+local function getPath(inst)
+    local parts = {}
+    local cur = inst
+    while cur do
+        table.insert(parts, 1, sanitize(cur.Name))
+        cur = cur.Parent
+    end
+    return table.concat(parts, ".")
+end
+
+local function registerRemote(inst)
+    local name = tostring(inst.Name)
+    local entry = remotes[name]
+    if not entry then
+        entry = { paths = {}, classes = {} }
+        remotes[name] = entry
+    end
+    table.insert(entry.paths, getPath(inst))
+    entry.classes[inst.ClassName] = (entry.classes[inst.ClassName] or 0) + 1
+end
+
+-- varredura em chunks para nao travar/congelar o executor mobile
+local function scanTree(root)
+    local children = root:GetChildren()
+    for i = 1, #children do
+        if scanAborted then return end
+        local child = children[i]
+        if RemoteClasses[child.ClassName] then
+            registerRemote(child)
+        end
+        totalInstances = totalInstances + 1
+        scanned = scanned + 1
+        if scanned % 500 == 0 then
+            if os.clock() - scanStart > 20 then
+                scanAborted = true
+                return
+            end
+            task.wait()
+        end
+        scanTree(child)
+    end
+end
+
+--//==============================[ 3. FORMATADORES ]==============================//--
+local function buildHeader()
+    local lines = {}
+    table.insert(lines, "== PS99 DEX DUMP ==")
+    table.insert(lines, "GameId:   " .. tostring(game.GameId))
+    table.insert(lines, "PlaceId:  " .. tostring(game.PlaceId))
+    table.insert(lines, "JobId:    " .. tostring(game.JobId))
+    local player = game:GetService("Players").LocalPlayer
+    table.insert(lines, "Player:   " .. tostring(player and player.Name or "?"))
+    table.insert(lines, "Executor: " .. getExecutorName)
+    table.insert(lines, "Data:     " .. os.date("%Y-%m-%d %H:%M:%S"))
+    table.insert(lines, "Scan:     " .. tostring(totalInstances) .. " instancias" .. (scanAborted and " (ABORTADO por timeout)" or ""))
+    local n = 0
+    for _ in pairs(remotes) do n = n + 1 end
+    table.insert(lines, "Remotes:  " .. tostring(n) .. " nomes unicos")
+    return table.concat(lines, "\n")
+end
+
+-- remotes agrupados por nome (com paths e classes)
+local function formatRemotesByName()
+    local lines = { buildHeader() }
+    table.insert(lines, "")
+    table.insert(lines, "== REMOTES SEPARADOS POR NOME ==")
+    local names = {}
+    for name in pairs(remotes) do table.insert(names, name) end
+    table.sort(names)
+    for _, name in ipairs(names) do
+        local entry = remotes[name]
+        local classSummary = {}
+        for cls, qtd in pairs(entry.classes) do
+            table.insert(classSummary, cls .. "x" .. tostring(qtd))
+        end
+        table.sort(classSummary)
+        table.insert(lines, "")
+        table.insert(lines, string.format("[%s] %s (%d instancia(s)) [%s]",
+            next(entry.classes), name, #entry.paths, table.concat(classSummary, ", ")))
+        table.sort(entry.paths)
+        for _, p in ipairs(entry.paths) do
+            table.insert(lines, "    - " .. p)
+        end
+    end
+    return table.concat(lines, "\n")
+end
+
+-- dump estilo DEX por nome: arvore "Classe | Nome | Path"
+local function formatDexByName()
+    local lines = { buildHeader() }
+    table.insert(lines, "")
+    table.insert(lines, "== DEX STYLE - ARVORE POR NOME ==")
+    local all = {}
+    for name, entry in pairs(remotes) do
+        for _, p in ipairs(entry.paths) do
+            for cls in pairs(entry.classes) do
+                table.insert(all, { cls = cls, name = name, path = p })
+            end
+        end
+    end
+    table.sort(all, function(a, b)
+        if a.cls == b.cls then
+            if a.name == b.name then return a.path < b.path end
+            return a.name < b.name
+        end
+        return a.cls < b.cls
+    end)
+    local lastCls = ""
+    for _, item in ipairs(all) do
+        if item.cls ~= lastCls then
+            lastCls = item.cls
+            table.insert(lines, "")
+            table.insert(lines, "-- " .. lastCls .. " --")
+        end
+        table.insert(lines, string.format("    %-28s %s", item.name, item.path))
+    end
+    return table.concat(lines, "\n")
+end
+
+-- heuristica leve de nomes suspeitos (honeypot/anti-cheat) - apenas sinaliza
+local function formatSuspicious()
+    local patterns = { "kick", "ban", "log", "anticheat", "anti_cheat", "punish", "report", "exploit", "cheat", "detect", "admin" }
+    local lines = { "-- Nomes suspeitos (possiveis honeypots, requer validacao no servidor) --" }
+    for name, entry in pairs(remotes) do
+        local lower = name:lower()
+        for _, pat in ipairs(patterns) do
+            if lower:find(pat, 1, true) then
+                table.insert(lines, "  [!!] " .. name .. "  (" .. #entry.paths .. "x)")
+                break
+            end
+        end
+    end
+    return table.concat(lines, "\n")
+end
+
+--//==============================[ 4. UI MOBILE ]==============================//--
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local function makeUI()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "PS99DexDump"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 999
+    gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+
+    local bg = Instance.new("Frame")
+    bg.Name = "BG"
+    bg.AnchorPoint = Vector2.new(0.5, 0.5)
+    bg.Position = UDim2.new(0.5, 0, 0.5, 0)
+    bg.Size = UDim2.new(0, 400, 0, 560)
+    bg.BackgroundColor3 = Color3.fromRGB(15, 17, 25)
+    bg.BackgroundTransparency = 0.05
+    bg.BorderSizePixel = 0
+    bg.Parent = gui
+    pcall(function()
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 16)
+        corner.Parent = bg
+    end)
+    pcall(function()
+        local stroke = Instance.new("UIStroke")
+        stroke.Thickness = 2
+        stroke.Color = Color3.fromRGB(80, 120, 255)
+        stroke.Transparency = 0.4
+        stroke.Parent = bg
+    end)
+
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.new(0, 0, 0, 10)
+    title.Size = UDim2.new(1, 0, 0, 40)
+    title.Font = Enum.Font.GothamBold
+    title.Text = "PS99 DEX DUMP"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 26
+    title.Parent = bg
+
+    local status = Instance.new("TextLabel")
+    status.Name = "Status"
+    status.BackgroundTransparency = 1
+    status.Position = UDim2.new(0, 0, 0, 50)
+    status.Size = UDim2.new(1, 0, 0, 24)
+    status.Font = Enum.Font.Gotham
+    status.Text = "Scan em andamento..."
+    status.TextColor3 = Color3.fromRGB(255, 200, 80)
+    status.TextSize = 16
+    status.Parent = bg
+
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Name = "Preview"
+    scroll.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
+    scroll.Position = UDim2.new(0, 12, 0, 84)
+    scroll.Size = UDim2.new(1, -24, 0, 250)
+    scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 6
+    scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.Parent = bg
+    pcall(function()
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 10)
+        corner.Parent = scroll
+    end)
+
+    local preview = Instance.new("TextLabel")
+    preview.Name = "Text"
+    preview.BackgroundTransparency = 1
+    preview.Size = UDim2.new(1, 0, 0, 0)
+    preview.AutomaticSize = Enum.AutomaticSize.Y
+    preview.Font = Enum.Font.Code
+    preview.Text = "Aguardando scan..."
+    preview.TextColor3 = Color3.fromRGB(200, 210, 230)
+    preview.TextSize = 13
+    preview.TextXAlignment = Enum.TextXAlignment.Left
+    preview.TextYAlignment = Enum.TextYAlignment.Top
+    preview.Parent = scroll
+
+    local function makeButton(y, text, color, onClick)
+        local btn = Instance.new("TextButton")
+        btn.BackgroundColor3 = color
+        btn.Position = UDim2.new(0, 12, 0, y)
+        btn.Size = UDim2.new(1, -24, 0, 48)
+        btn.Font = Enum.Font.GothamBold
+        btn.Text = text
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.TextSize = 17
+        btn.AutoButtonColor = true
+        btn.Parent = bg
+        pcall(function()
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 12)
+            corner.Parent = btn
+        end)
+        btn.Activated:Connect(function()
+            local tween = TweenService:Create(btn, TweenInfo.new(0.1), { Size = UDim2.new(1, -28, 0, 46) })
+            tween:Play()
+            task.delay(0.1, function()
+                TweenService:Create(btn, TweenInfo.new(0.1), { Size = UDim2.new(1, -24, 0, 48) }):Play()
+            end)
+            pcall(onClick)
+        end)
+        return btn
+    end
+
+    local remotesText = ""
+    local dexText = ""
+    local susText = ""
+
+    makeButton(344, "COPIAR REMOTES", Color3.fromRGB(70, 110, 255), function()
+        copy(remotesText)
+        status.Text = "Remotes copiados! (" .. #remotesText .. " chars)"
+    end)
+    makeButton(400, "COPIAR DEX", Color3.fromRGB(50, 160, 110), function()
+        copy(dexText)
+        status.Text = "Dex copiado! (" .. #dexText .. " chars)"
+    end)
+    makeButton(456, "SALVAR ARQUIVO", Color3.fromRGB(200, 130, 40), function()
+        if saveFile then
+            local stamp = os.date("%Y%m%d_%H%M%S")
+            saveFile("remotes_" .. stamp .. ".txt", remotesText)
+            saveFile("dex_" .. stamp .. ".txt", dexText)
+            saveFile("suspects_" .. stamp .. ".txt", susText)
+            status.Text = "Salvo em PS99Dump/ !"
+        else
+            status.Text = "writefile nao suportado neste executor"
+        end
+    end)
+
+    local close = Instance.new("TextButton")
+    close.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+    close.Position = UDim2.new(1, -64, 0, 12)
+    close.Size = UDim2.new(0, 48, 0, 40)
+    close.Font = Enum.Font.GothamBold
+    close.Text = "X"
+    close.TextColor3 = Color3.fromRGB(255, 255, 255)
+    close.TextSize = 20
+    close.Parent = bg
+    pcall(function()
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 10)
+        corner.Parent = close
+    end)
+    close.Activated:Connect(function()
+        gui:Destroy()
+    end)
+
+    return {
+        gui = gui,
+        status = status,
+        preview = preview,
+        setTexts = function(r, d, s)
+            remotesText = r
+            dexText = d
+            susText = s
+        end,
+    }
+end
+
+--//==============================[ 5. MAIN ]==============================//--
+local ui = makeUI()
+
+task.spawn(function()
+    scanTree(game:GetService("ReplicatedStorage"))
+    if not scanAborted then scanTree(workspace) end
+    if not scanAborted then scanTree(game) end
+
+    if scanAborted then
+        ui.status.Text = "Scan ABORTADO (timeout 20s) - copie o parcial"
+        ui.status.TextColor3 = Color3.fromRGB(255, 90, 90)
+    else
+        ui.status.Text = "Scan completo! Toque para copiar."
+        ui.status.TextColor3 = Color3.fromRGB(80, 230, 120)
+    end
+
+    local remotesText = formatRemotesByName()
+    local dexText = formatDexByName()
+    local susText = formatSuspicious()
+
+    ui.setTexts(remotesText, dexText, susText)
+    ui.preview.Text = remotesText
+end)
