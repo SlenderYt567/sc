@@ -60,6 +60,37 @@ local reqFn = (function()
     return nil
 end)()
 
+-- Log com buffer: guarda tudo para aparecer na UI mesmo se o console do
+-- executor mobile suprimir print (caso Delta). print() sempre e tentado.
+local logBuffer = {}
+local function logMsg(msg)
+    msg = tostring(msg)
+    table.insert(logBuffer, msg)
+    if #logBuffer > 200 then table.remove(logBuffer, 1) end
+    local okPrint = pcall(print, "[PS99Dump] " .. msg)
+    return okPrint
+end
+
+-- Leitura segura de ambiente: nunca deixa o script morrer em acesso ao game.
+local function safeGame()
+    local ok, g = pcall(function() return game end)
+    return ok and g or nil
+end
+
+local function safeGetService(serviceName)
+    local g = safeGame()
+    if not g then return nil end
+    local ok, svc = pcall(function() return g:GetService(serviceName) end)
+    return ok and svc or nil
+end
+
+local function safeLocalPlayer()
+    local players = safeGetService("Players")
+    if not players then return nil end
+    local ok, plr = pcall(function() return players.LocalPlayer end)
+    return ok and plr or nil
+end
+
 --//==============================[ 2. WEBHOOK DISCORD ]==============================//--
 local function jsonString(s)
     s = tostring(s)
@@ -147,21 +178,33 @@ end
 -- Envia aviso de ERRO para o Discord (com stack trace e info do jogo)
 local function notifyError(msg, trace)
     if not reqFn then
+        logMsg("request nao suportado - erro apenas na tela: " .. tostring(msg))
         return "request nao suportado - erro apenas na tela: " .. tostring(msg)
     end
-    local player = game:GetService("Players").LocalPlayer
+    local player = safeLocalPlayer()
+    local g = safeGame()
+    local gid = "?"
+    local pid = "?"
+    if g then
+        local ok1, v1 = pcall(function() return g.GameId end)
+        local ok2, v2 = pcall(function() return g.PlaceId end)
+        if ok1 then gid = tostring(v1) end
+        if ok2 then pid = tostring(v2) end
+    end
     local info = "**ERRO no PS99 DexDump**\n```\n"
         .. tostring(msg):sub(1, 800)
         .. "\n```\n**Stack:**\n```\n"
         .. tostring(trace or "n/a"):sub(1, 900)
-        .. "\n```\nGameId: " .. tostring(game.GameId)
-        .. "\nPlaceId: " .. tostring(game.PlaceId)
+        .. "\n```\nGameId: " .. gid
+        .. "\nPlaceId: " .. pid
         .. "\nPlayer: " .. tostring(player and player.Name or "?")
         .. "\nExecutor: " .. getExecutorName
     local code = sendSimple(info, WEBHOOK_NAME .. " [ERRO]")
     if code >= 200 and code < 300 then
+        logMsg("Erro enviado pro Discord! (" .. tostring(code) .. ")")
         return "Erro enviado pro Discord! (" .. tostring(code) .. ")"
     end
+    logMsg("Falha ao enviar erro (codigo " .. tostring(code) .. ") - erro na tela: " .. tostring(msg))
     return "Falha ao enviar erro (codigo " .. tostring(code) .. ") - erro na tela: " .. tostring(msg)
 end
 
@@ -373,8 +416,8 @@ local function formatSuspicious()
 end
 
 --//==============================[ 5. UI MOBILE ]==============================//--
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
+local Players = safeGetService("Players")
+local TweenService = safeGetService("TweenService")
 
 local function makeUI()
     local gui = Instance.new("ScreenGui")
@@ -569,72 +612,129 @@ local function makeUI()
     }
 end
 
---//==============================[ 6. MAIN (com xpcall - NAO congela mais) ]==============================//--
-local ui = makeUI()
+--//==============================[ 6. MAIN (blindado em camadas) ]==============================//--
+-- UI stub: se makeUI falhar, o scan continua rodando (headless) e o erro
+-- ainda e reportado para o Discord. NUNCA deixa o script morrer antes do xpcall.
+local ui = (function()
+    local ok, u = pcall(makeUI)
+    if ok and u then return u end
+    local err = tostring(u)
+    logMsg("Falha ao criar UI (" .. err .. ") - rodando em modo headless")
+    return {
+        gui = nil,
+        status = { Text = "headless" },
+        preview = { Text = "" },
+        setTexts = function() end,
+        setStatus = function(text, color)
+            logMsg("[status] " .. tostring(text))
+        end,
+    }
+end)()
 
-task.spawn(function()
-    xpcall(function()
-        ui.setStatus("Escaneando...", Color3.fromRGB(255, 200, 80))
+-- Envia um ping de TESTE logo ao iniciar. Serve para confirmar que o webhook
+-- funciona ANTES do scan - se o ping nao chegar, o problema e a URL/executor.
+local function sendTestPing()
+    if not reqFn then
+        logMsg("WEBHOOK: request nao suportado - ping de teste SKIPPED")
+        return
+    end
+    local player = safeLocalPlayer()
+    local g = safeGame()
+    local code = sendSimple(
+        "**PS99 DexDump - TESTE**\nScript iniciado com sucesso.\n"
+        .. "GameId: " .. tostring(g and g.GameId or "?")
+        .. "\nPlayer: " .. tostring(player and player.Name or "?")
+        .. "\nExecutor: " .. getExecutorName
+        .. "\nTask: " .. tostring(task ~= nil),
+        WEBHOOK_NAME .. " [TESTE]"
+    )
+    logMsg("Ping de teste: codigo " .. tostring(code))
+end
 
-        runScan(function(msg)
-            ui.setStatus(msg)
-        end)
-
-        if scanAborted then
-            ui.setStatus("Scan PARCIAL (timeout " .. SCAN_TIMEOUT .. "s) - gerando dump...",
-                Color3.fromRGB(255, 120, 80))
-        else
-            ui.setStatus("Scan completo!", Color3.fromRGB(80, 230, 120))
-        end
-
-        local remotesText = formatRemotesByName()
-        local dexText = formatDexByName()
-        local susText = formatSuspicious()
-
-        ui.setTexts(remotesText, dexText, susText)
-        ui.preview.Text = remotesText
-
-        if remoteNameCount() == 0 then
-            ui.setStatus("Nenhum remote encontrado (0 nomes) - verifique se o jogo carregou",
-                Color3.fromRGB(255, 120, 80))
-            task.spawn(function()
-                local player = game:GetService("Players").LocalPlayer
-                local msg = "**PS99 DexDump - AVISO**\nNenhum remote encontrado.\n"
-                    .. "Instancias escaneadas: " .. tostring(totalInstances)
-                    .. "\nWarnings: " .. (#scanWarnings > 0 and table.concat(scanWarnings, " | ") or "nenhum")
-                    .. "\nGameId: " .. tostring(game.GameId)
-                    .. "\nPlayer: " .. tostring(player and player.Name or "?")
-                    .. "\nExecutor: " .. getExecutorName
-                local code = sendSimple(msg, WEBHOOK_NAME .. " [AVISO]")
-                ui.setStatus("0 remotes. Aviso enviado pro Discord (" .. tostring(code) .. ")",
-                    Color3.fromRGB(255, 120, 80))
-            end)
-            return
-        end
-
-        if AUTO_SEND then
-            ui.setStatus("Enviando para o Discord...", Color3.fromRGB(255, 200, 80))
-            task.spawn(function()
-                local stamp = os.date("%Y%m%d_%H%M%S")
-                local res = sendAll(remotesText, dexText, susText, stamp)
-                ui.setStatus(res, Color3.fromRGB(80, 230, 120))
-            end)
-        end
-    end, function(err)
-        scanError = tostring(err)
-        ui.setStatus("ERRO durante scan: " .. scanError, Color3.fromRGB(255, 80, 80))
-        local remotesText = formatRemotesByName()
-        local dexText = formatDexByName()
-        ui.setTexts(remotesText, dexText, formatSuspicious())
-        ui.preview.Text = remotesText
-        -- Avisa no Discord sobre o erro (tela + webhook)
-        local trace = debug.traceback(tostring(err), 2)
-        task.spawn(function()
-            ui.setStatus("ERRO capturado. Enviando aviso pro Discord...",
-                Color3.fromRGB(255, 160, 80))
-            local res = notifyError(err, trace)
-            ui.setStatus("ERRO: " .. scanError .. "\n" .. res,
-                Color3.fromRGB(255, 80, 80))
-        end)
+-- Handler de erro raiz: tenta TUDO em pcall para nunca morrer mudo.
+local function rootErrorHandler(err)
+    scanError = tostring(err)
+    logMsg("ERRO RAIZ: " .. scanError)
+    local okUI, trace = pcall(debug.traceback, tostring(err), 2)
+    if not okUI then trace = "sem traceback" end
+    -- 1) tenta UI
+    pcall(function()
+        ui.setStatus("ERRO: " .. scanError, Color3.fromRGB(255, 80, 80))
     end)
-end)
+    -- 2) tenta Discord (blindado)
+    pcall(notifyError, err, trace)
+    -- 3) tenta montar dump parcial
+    pcall(function()
+        local rt = formatRemotesByName()
+        local dt = formatDexByName()
+        ui.setTexts(rt, dt, formatSuspicious())
+        ui.preview.Text = rt
+    end)
+    return "handled"
+end
+
+local function mainFlow()
+    sendTestPing()
+    ui.setStatus("Escaneando...", Color3.fromRGB(255, 200, 80))
+
+    runScan(function(msg)
+        ui.setStatus(msg)
+    end)
+
+    if scanAborted then
+        ui.setStatus("Scan PARCIAL (timeout " .. SCAN_TIMEOUT .. "s) - gerando dump...",
+            Color3.fromRGB(255, 120, 80))
+    else
+        ui.setStatus("Scan completo!", Color3.fromRGB(80, 230, 120))
+    end
+
+    local remotesText = formatRemotesByName()
+    local dexText = formatDexByName()
+    local susText = formatSuspicious()
+
+    ui.setTexts(remotesText, dexText, susText)
+    ui.preview.Text = remotesText
+
+    if remoteNameCount() == 0 then
+        ui.setStatus("Nenhum remote encontrado (0 nomes) - verifique se o jogo carregou",
+            Color3.fromRGB(255, 120, 80))
+        task.spawn(function()
+            local player = safeLocalPlayer()
+            local g = safeGame()
+            local msg = "**PS99 DexDump - AVISO**\nNenhum remote encontrado.\n"
+                .. "Instancias escaneadas: " .. tostring(totalInstances)
+                .. "\nWarnings: " .. (#scanWarnings > 0 and table.concat(scanWarnings, " | ") or "nenhum")
+                .. "\nGameId: " .. tostring(g and g.GameId or "?")
+                .. "\nPlayer: " .. tostring(player and player.Name or "?")
+                .. "\nExecutor: " .. getExecutorName
+            local code = sendSimple(msg, WEBHOOK_NAME .. " [AVISO]")
+            ui.setStatus("0 remotes. Aviso enviado pro Discord (" .. tostring(code) .. ")",
+                Color3.fromRGB(255, 120, 80))
+        end)
+        return
+    end
+
+    if AUTO_SEND then
+        ui.setStatus("Enviando para o Discord...", Color3.fromRGB(255, 200, 80))
+        task.spawn(function()
+            local stamp = os.date("%Y%m%d_%H%M%S")
+            local res = sendAll(remotesText, dexText, susText, stamp)
+            ui.setStatus(res, Color3.fromRGB(80, 230, 120))
+        end)
+    end
+end
+
+-- spawn seguro: erros dentro de task.spawn nao escapam mais em silencio.
+local function safeSpawn(fn)
+    if task and task.spawn then
+        task.spawn(function()
+            local ok, err = xpcall(fn, rootErrorHandler)
+            if not ok then rootErrorHandler(err) end
+        end)
+    else
+        local ok, err = xpcall(fn, rootErrorHandler)
+        if not ok then rootErrorHandler(err) end
+    end
+end
+
+safeSpawn(mainFlow)
