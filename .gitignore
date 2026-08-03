@@ -23,8 +23,16 @@ local WEBHOOK_URL = "https://discord.com/api/webhooks/1398723880369131631/7knZsA
 local WEBHOOK_NAME = "Zaphub Extractor"
 local SAVE_DIR = "ZaphubExtract"
 
--- sua chave Luarmor
-_G.script_key = "nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw"
+-- Sua chave Luarmor - define a global DIRETA script_key (padrao oficial:
+-- o loader Luarmor le "script_key" como variavel global, nao _G.script_key)
+script_key = "nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw"
+_G.script_key = script_key
+
+-- Comando oficial exato do Zaphub (como o usuario roda no executor):
+--   script_key="nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw";
+--   loadstring(game:HttpGet('https://zaphub.xyz/Exec'))()
+local ZAPHUB_SNIPPET = "script_key=%q; loadstring(game:HttpGet('https://zaphub.xyz/Exec'))()"
+local ZAPHUB_KEY = "nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw"
 
 -- tamanho minimo para considerar "payload real" (bytecode Luraph > 1KB)
 local MIN_CAPTURE = 1000
@@ -215,21 +223,18 @@ end
 
 --//==============================[ EXECUCAO DO LOADER OFICIAL ]==============================//--
 local function runOfficialLoader()
-    logMsg("Buscando loader oficial zaphub.xyz/Exec...")
-    local okUrl, scriptText = pcall(function()
-        return game:HttpGet("https://zaphub.xyz/Exec")
-    end)
-    if not okUrl or not scriptText then
-        logMsg("Falha no HttpGet do loader")
-        return false
-    end
-    logMsg("Loader obtido (" .. tostring(#scriptText) .. " chars) - executando...")
+    logMsg("Montando snippet oficial com script_key inline...")
+    -- comando literal identico ao que o usuario roda:
+    --   script_key="nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw";
+    --   loadstring(game:HttpGet('https://zaphub.xyz/Exec'))()
+    local snippet = string.format(ZAPHUB_SNIPPET, ZAPHUB_KEY)
+    logMsg("Executando: " .. snippet)
     local okRun, errRun = pcall(function()
-        local f = loadstring(scriptText)
+        local f = loadstring(snippet)
         if f then f() end
     end)
     if not okRun then
-        logMsg("Erro ao executar loader: " .. tostring(errRun))
+        logMsg("Erro ao executar snippet: " .. tostring(errRun))
         return false
     end
     return true
