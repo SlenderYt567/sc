@@ -1,49 +1,36 @@
 --!strict
 --[[
-    PS99 Remote Argument Capture - Recon Passivo (Discord) v1.0
+    PS99 Script Dump - Extrator de TODO o codigo do jogo (Discord/local) v1.0
+    Alvo: Pet Simulator 99 (qualquer jogo Roblox)
     Plataforma: Executor Mobile (Delta/Hydrogen/Arceus X/Fluxus Mobile)
 
-    O que faz (RECON - NAO dispara NADA):
-      [1] Hook de __namecall -> captura FireServer/InvokeServer que o PROPRio
-          jogo faz (direcao client->server). Revela os argumentos reais.
-      [2] OnClientEvent/OnClientInvoke -> captura o que o SERVIDOR envia
-          (direcao server->client). Revela o formato dos payloads.
-      [3] Filtra por lista de INTERESSE e ignora HONEYPOTS (AdminAbuse etc).
-      [4] Identifica o script do jogo que dispara cada remote.
-      [5] Envia payloads formatados para o Discord em lote.
+    O que faz:
+      [1] Varre o DataModel atras de Script / LocalScript / ModuleScript
+      [2] Decompila cada um com decompile() do executor
+      [3] Salva TUDO em arquivos locais (writefile) organizados por path
+      [4] Envia para o Discord (anexos .lua em lotes <= 8MB)
+      [5] Gera indice (paths + tamanhos + status de decompilacao)
 
-    SEGURANCA:
-      - Nenhuma FireServer/InvokeServer e feito por este script.
-      - Hooks so OBSERVAM e repassam o resultado original.
-      - Remotes de honeypot (AdminAbuse/Admin/FFlags) sao ignorados.
-      - Conta de teste recomendada: o jogo pode logar hooks.
+    LIMITACOES HONESTAS:
+      - Scripts SERVIDOR nao replicados: o objeto existe no cliente, mas o
+        source NAO e enviado -> "[sem source no cliente]"
+      - Modulos com bytecode protegido/ofuscado: decompile() retorna
+        bytecode bruto ou vazio (requer desofuscacao separada)
+      - A GUI criada por este script e ignorada no scan
 
-    CONFIG:
-      INTEREST  -> padroes de nome dos remotes a observar
-      HONEYPOTS -> padroes a IGNORAR (nunca logar)
-      FLUSH_EVERY -> numero de capturas por envio ao Discord
+    FIX anti-trava (padrao v1.1 do Capture):
+      - decompile()/writefile()/request() rodam SOMENTE em thread de task.spawn
+      - Nenhuma chamada de I/O acontece no thread principal do jogo
+      - task.wait() a cada N scripts para nao congelar o frame
 ]]
 
 --//==============================[ CONFIG ]==============================//--
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1398723880369131631/7knZsAymoHblk9BcsXYuI7XT2-8PNHkZJfFbtyLHssHqjW_pXeBQVznZ0lDHz7G9ObRI"
-local WEBHOOK_NAME = "PS99 Capture"
-local FLUSH_EVERY = 15          -- capturas por lote
-local FLUSH_SECONDS = 30        -- flush maximo por tempo (segundos)
-local MAX_CAPTURE_CHARS = 1600  -- cap por captura
-
--- Remotes de INTERESSE (substring do nome) - categorias verde/amarela do dump
-local INTEREST = {
-    "AutoFarm", "AutoHatch", "AutoDice", "Eggs_", "Pets_", "Farming_",
-    "FishingEvent", "Enchants_", "Rebirth_", "Auction", "Box", "DailyRewards",
-    "Ranks_", "EventGoals", "Login Streaks", "ForeverPacks", "Claim",
-    "ChargedHatch", "BoothSlot", "Guilds_", "Leagues_", "Instancing_",
-}
-
--- HONEYPOTS: nunca logar nem observar (nomes deliberados de armadilha)
-local HONEYPOTS = {
-    "AdminAbuse", "Run Admin Command", "ExecuteAdminAbuse", "Get BIG Admin",
-    "FFlags", "AdminToolbar", "EnterInstanceAdminCommand",
-}
+local WEBHOOK_NAME = "PS99 ScriptDump"
+local SAVE_LOCAL = true        -- grava em arquivos via writefile (principal)
+local SEND_DISCORD = true      -- envia lotes de anexos pro Discord
+local ROOT_DIR = "PS99Scripts" -- pasta local de saida
+local YIELD_EVERY = 5          -- task.wait() a cada N scripts (anti-freeze)
 
 --//==============================[ 1. API COMPAT ]==============================//--
 local getExecutorName = (function()
@@ -62,12 +49,17 @@ local copy = (function()
     return function() end
 end)()
 
-local saveFile = (function()
-    if not writefile then return nil end
-    local ok = pcall(function() makefolder("PS99Capture") end)
-    return function(name, content)
-        pcall(writefile, "PS99Capture/" .. name, content)
-    end
+-- decompile do executor (Delta suporta). Fallback: bytecode bruto.
+local decompileFn = (function()
+    if decompile then return decompile end
+    if decompilefunc then return decompilefunc end
+    return nil
+end)()
+
+local getBytecodeFn = (function()
+    if getscriptbytecode then return getscriptbytecode end
+    if getbytecode then return getbytecode end
+    return nil
 end)()
 
 local reqFn = (function()
@@ -77,22 +69,45 @@ local reqFn = (function()
     return nil
 end)()
 
-local makeClosure = (function()
-    if newcclosure then return newcclosure end
-    return function(f) return f end
-end)()
+-- writefile helpers com compat de assinatura
+local makefolderFn = makefolder or function() end
+local writefileFn = writefile
+local isfileFn = isfile or function() return false end
+local listfilesFn = listfiles or function() return {} end
 
-local hookMM = (function()
-    if hookmetamethod then return hookmetamethod end
-    return function() return function(...) return ... end end
-end)()
+local function ensureFolder(path)
+    if not writefileFn then return end
+    pcall(function()
+        local parts = {}
+        for part in path:gmatch("[^/]+") do
+            parts[#parts + 1] = part
+            local cur = table.concat(parts, "/")
+            if not isfileFn(cur .. "/__check") then
+                pcall(makefolderFn, cur)
+            end
+        end
+    end)
+end
+
+local function saveFileLocal(relPath, content)
+    if not writefileFn then return false end
+    ensureFolder(ROOT_DIR .. "/" .. relPath)
+    local ok, err = pcall(function()
+        writefileFn(ROOT_DIR .. "/" .. relPath, content)
+    end)
+    if not ok then
+        pcall(print, "[ScriptDump] writefile falhou em " .. tostring(relPath) .. ": " .. tostring(err))
+        return false
+    end
+    return true
+end
 
 local logBuffer = {}
 local function logMsg(msg)
     msg = tostring(msg)
     table.insert(logBuffer, msg)
     if #logBuffer > 200 then table.remove(logBuffer, 1) end
-    pcall(print, "[PS99Capture] " .. msg)
+    pcall(print, "[ScriptDump] " .. msg)
 end
 
 local function safeGame()
@@ -136,36 +151,22 @@ local function sendSimple(content, username)
     if ok and res then return tonumber(res.StatusCode) or 0 else return -1 end
 end
 
-local function sendChunked(text, label)
-    local okCount = 0
-    local remaining = tostring(text)
-    local first = true
-    while #remaining > 0 do
-        local part = remaining:sub(1, 1800)
-        local header = first and ("**" .. label .. "**\n") or ""
-        local code = sendSimple(header .. "```\n" .. part .. "\n```")
-        if code >= 200 and code < 300 then okCount = okCount + 1 end
-        remaining = remaining:sub(1801)
-        first = false
-        task.wait(0.4)
-    end
-    return okCount
-end
-
--- 1 request unico (anexo): muito mais leve que chunked - evita travar
--- o jogo com N requests síncronos em sequencia
-local function sendFile(filename, content, msg)
+-- Multipart com MULTIPLOS anexos (ate 10 arquivos / ~8MB por mensagem)
+local function sendFileMulti(msg, files)
     if not reqFn then return -1 end
-    local boundary = "----PS99Cap" .. tostring(os.clock()):gsub("%.", "") .. "7xK"
+    local boundary = "----PS99SD" .. tostring(os.clock()):gsub("%.", "") .. "7xK"
     local body = ""
     if msg and #tostring(msg) > 0 then
         body = body .. "--" .. boundary .. "\r\nContent-Disposition: form-data; name=\"content\"\r\n\r\n" .. tostring(msg) .. "\r\n"
     end
-    body = body .. "--" .. boundary
-        .. "\r\nContent-Disposition: form-data; name=\"file1\"; filename=\"" .. filename .. "\""
-        .. "\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
-        .. tostring(content)
-        .. "\r\n--" .. boundary .. "--\r\n"
+    for i = 1, #files do
+        body = body .. "--" .. boundary
+            .. "\r\nContent-Disposition: form-data; name=\"file" .. tostring(i) .. "\"; filename=\"" .. tostring(files[i].name) .. "\""
+            .. "\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+            .. tostring(files[i].content)
+            .. "\r\n"
+    end
+    body = body .. "--" .. boundary .. "--\r\n"
     local ok, res = pcall(function()
         return reqFn({
             Url = WEBHOOK_URL,
@@ -177,270 +178,241 @@ local function sendFile(filename, content, msg)
     if ok and res then return tonumber(res.StatusCode) or 0 else return -1 end
 end
 
---//==============================[ 3. SERIALIZADOR SEGURO ]==============================//--
--- FIX: gsub retorna 2 valores -> NUNCA usar em return direto nem em table.insert
-local function sanitize(v)
-    local s = tostring(v)
-    s = s:gsub("[\r\n]", " ")
+--//==============================[ 3. SCAN ]==============================//--
+local ScriptClasses = {
+    ["Script"] = true,
+    ["LocalScript"] = true,
+    ["ModuleScript"] = true,
+}
+
+-- path pai->filho legivel (contrario do getPath do dump)
+local function getPathFull(inst)
+    local parts = {}
+    local cur = inst
+    local guard = 0
+    while cur and guard < 80 do
+        parts[#parts + 1] = tostring(cur.Name)
+        cur = cur.Parent
+        guard = guard + 1
+    end
+    -- inverte: parte[1] era o proprio script; queremos raiz primeiro
+    local rev = {}
+    for i = #parts, 1, -1 do
+        rev[#rev + 1] = parts[i]
+    end
+    return table.concat(rev, "/")
+end
+
+-- sanitiza nome para uso como arquivo (sem caracteres invalidos no Windows)
+local function sanitizeFilename(name)
+    local s = tostring(name)
+    s = s:gsub("[/\\:*?\"<>|]", "_")
+    s = s:gsub("%s+", " ")
+    if #s == 0 then s = "_" end
     return s
 end
 
-local function serialize(value, depth, seen)
-    depth = depth or 0
-    seen = seen or {}
-    local t = type(value)
-    if t == "string" then
-        return string.format("%q", sanitize(value))
-    elseif t == "number" then
-        return tostring(value)
-    elseif t == "boolean" then
-        return tostring(value)
-    elseif t == "nil" then
-        return "nil"
-    elseif t == "function" then
-        return "<function>"
-    elseif t == "userdata" then
-        -- Instancias Roblox: mostrar ClassName + Name, nada mais
-        local ok, cls = pcall(function() return value.ClassName end)
-        if ok and cls then
-            local okName, nm = pcall(function() return value.Name end)
-            return "<" .. tostring(cls) .. ":" .. tostring(okName and nm or "?") .. ">"
-        end
-        return "<userdata>"
-    elseif t == "thread" then
-        return "<thread>"
-    elseif t == "table" then
-        if seen[value] then return "<circular>" end
-        seen[value] = true
-        if depth > 5 then return "{...}" end
-        local parts = {}
-        local count = 0
-        for k, v in pairs(value) do
-            count = count + 1
-            if count <= 40 then
-                parts[#parts + 1] = "[" .. sanitize(k) .. "]=" .. serialize(v, depth + 1, seen)
-            end
-        end
-        if count > 40 then
-            parts[#parts + 1] = "...(+truncado)"
-        end
-        seen[value] = nil
-        return "{" .. table.concat(parts, ", ") .. "}"
+local function collectScripts(onProgress)
+    local found = {}
+    local g = safeGame()
+    if not g then return found end
+    local ok, all = pcall(function() return g:GetDescendants() end)
+    if not ok or not all then
+        logMsg("Falha ao ler DataModel - scan pode ser parcial")
+        return found
     end
-    return tostring(value)
-end
-
-local function captureText(remoteName, direction, args)
-    local parts = { "[" .. direction .. "] " .. tostring(remoteName) }
-    if direction == "C->S" then
-        local src = "?"
-        local ok, info = pcall(debug.info, 3, "s")
-        if ok and info then src = tostring(info) end
-        parts[#parts + 1] = "script=" .. sanitize(src)
-    end
-    for i = 1, #args do
-        local text = serialize(args[i])
-        if #text > MAX_CAPTURE_CHARS then
-            text = text:sub(1, MAX_CAPTURE_CHARS) .. "...(cap)"
-        end
-        parts[#parts + 1] = "arg" .. tostring(i) .. "=" .. text
-    end
-    return table.concat(parts, "\n")
-end
-
---//==============================[ 4. CAPTURA + FLUSH ]==============================//--
--- REGRA CRITICA (fix trava): hooks de __namecall e callbacks de OnClientEvent
--- rodam NO THREAD PRINCIPAL do jogo. Qualquer request()/I/O aqui CONGELA o
--- jogo. Entao:
---   [A] addCapture()  -> SO enfileira (custo O(1), sem I/O)
---   [B] flushCaptures() -> chamado SOMENTE pelo loop dedicado (thread de
---       task.spawn) e pelo botao. Faz task.wait antes de enviar.
-local captures = {}
-local captureCount = 0
-local lastFlush = os.clock()
-local forceFlushPending = false
--- contadores globais do script (declarados ANTES de flushCaptures usá-los)
-local totalLogged = 0
-local interestCount = 0
-local honeypotCount = 0
-
-local function addCapture(line)
-    captures[#captures + 1] = line
-    captureCount = captureCount + 1
-end
-
-local function flushCaptures(force)
-    if #captures == 0 then return end
-    local byTime = (os.clock() - lastFlush) >= FLUSH_SECONDS
-    if not force and captureCount < FLUSH_EVERY and not byTime then return end
-
-    -- copia o lote e limpa ANTES do request (evita reentrada se o envio
-    -- demorar - novas capturas entram no proximo lote)
-    local text = table.concat(captures, "\n\n")
-    local lote = #captures
-    captures = {}
-    captureCount = 0
-    lastFlush = os.clock()
-
-    local header = "**PS99 Capture - Recon**\n"
-        .. "Capturas: " .. tostring(lote) .. " (lote)\n"
-        .. "Total: " .. tostring(totalLogged) .. " | Interesse: " .. tostring(interestCount)
-        .. " | Honeypots ignorados: " .. tostring(honeypotCount)
-
-    -- thread dedicada: NAO roda no thread do jogo
-    task.spawn(function()
-        -- respiro antes do request (evita travar frame atual)
-        task.wait(0.1)
-        local c = sendFile("capture_" .. os.date("%Y%m%d_%H%M%S") .. ".txt", text, header)
-        if not (c >= 200 and c < 300) then
-            -- fallback: chunks (so se o anexo falhar)
-            local ok1 = sendChunked(header .. "\n\n" .. text, "CAPTURAS")
-            if ok1 == 0 then
-                if saveFile then
-                    saveFile("capture_" .. os.date("%Y%m%d_%H%M%S") .. ".txt", text)
-                    logMsg("Webhook falhou - salvo em PS99Capture/")
-                else
-                    copy(text)
-                    logMsg("Webhook falhou - copiado pro clipboard")
+    for i = 1, #all do
+        local inst = all[i]
+        local okProc, name = pcall(function()
+            if ScriptClasses[inst.ClassName] then
+                local n = tostring(inst.Name)
+                if n ~= "PS99ScriptDump" then
+                    found[#found + 1] = inst
                 end
+                return n
+            end
+            return nil
+        end)
+        if okProc and name then
+            if i % YIELD_EVERY == 0 then
+                onProgress(string.format("Coletando... %d/%d | scripts: %d", i, #all, #found))
+                task.wait()
             end
         end
-    end)
+    end
+    return found
 end
 
---//==============================[ 5. FILTROS ]==============================//--
-local function matchesAny(name, patterns)
-    local lower = tostring(name):lower()
-    for _, pat in ipairs(patterns) do
-        if lower:find(tostring(pat):lower(), 1, true) then
-            return true
+--//==============================[ 4. PROCESSAMENTO ]==============================//--
+local function decompileScript(script)
+    if decompileFn then
+        local ok, res = pcall(function() return decompileFn(script) end)
+        if ok and type(res) == "string" and #res > 0 then
+            return res, "ok"
         end
     end
-    return false
+    -- fallback: bytecode bruto (se o executor tiver)
+    if getBytecodeFn then
+        local ok, res = pcall(function() return getBytecodeFn(script) end)
+        if ok and type(res) == "string" and #res > 0 then
+            return res, "bytecode"
+        end
+    end
+    return nil, "sem_source_no_cliente"
 end
 
-local function isHoneypot(name)
-    return matchesAny(name, HONEYPOTS)
-end
+local function processScripts(scripts, onProgress)
+    local total = #scripts
+    local done = 0
+    local okCount = 0
+    local bytecodeCount = 0
+    local emptyCount = 0
+    local totalBytes = 0
+    local files = {}          -- lotes prontos para envio (so decompilados ok)
 
-local function isInteresting(name)
-    return matchesAny(name, INTEREST)
-end
+    for i = 1, total do
+        local script = scripts[i]
+        local okProc, info = pcall(function()
+            local pathFull = getPathFull(script)
+            local cls = tostring(script.ClassName)
+            local filename = sanitizeFilename(script.Name) .. ".lua"
 
---//==============================[ 6. HOOK DE __NAMECALL (client->server) ]==============================//--
-local hookedNamecall = false
-local function installNamecallHook()
-    local old = hookMM(game, "__namecall", makeClosure(function(self, ...)
-        -- captura varargs ANTES de qualquer pcall (closures internas nao
-        -- recebem o '...' do escopo pai)
-        local extra = { select(2, ...) }
-        local methodOk, method = pcall(getnamecallmethod)
-        local obs = false
-        local name = "?"
-        if methodOk then
-            local m = tostring(method)
-            if m == "FireServer" or m == "InvokeServer" then
-                if typeof(self) == "Instance" then
-                    local clsOk, cls = pcall(function() return self.ClassName end)
-                    local nmOk, nm = pcall(function() return self.Name end)
-                    if clsOk and cls and (cls == "RemoteEvent" or cls == "RemoteFunction" or cls == "UnreliableRemoteEvent") then
-                        obs = true
-                        name = tostring(nmOk and nm or "?")
-                    end
+            local source, status = decompileScript(script)
+            if not source then
+                emptyCount = emptyCount + 1
+                return { name = script.Name, path = pathFull, cls = cls, status = status, bytes = 0 }
+            end
+
+            local header = "-- [" .. cls .. "] " .. tostring(script.Name) .. "\n"
+                .. "-- Path: " .. pathFull .. "\n"
+                .. "-- Status: " .. tostring(status) .. "\n\n"
+
+            local content = header .. source
+            local bytes = #content
+            totalBytes = totalBytes + bytes
+
+            if SAVE_LOCAL then
+                saveFileLocal(pathFull .. "/" .. filename, content)
+            end
+
+            if status == "ok" then
+                okCount = okCount + 1
+                if SEND_DISCORD then
+                    files[#files + 1] = { name = filename, content = content }
                 end
+            elseif status == "bytecode" then
+                bytecodeCount = bytecodeCount + 1
             end
-        end
-        if obs then
-            if not isHoneypot(name) and isInteresting(name) then
-                addCapture(captureText(name, "C->S", extra))
-                interestCount = interestCount + 1
-                -- SEM flush aqui: thread principal do jogo
-            else
-                honeypotCount = honeypotCount + 1
-            end
-        end
-        return old(self, ...)
-    end))
-    hookedNamecall = old ~= nil
-    logMsg("Hook __namecall instalado: " .. tostring(hookedNamecall))
-end
 
---//==============================[ 7. HOOKS DE EVENTOS (server->client) ]==============================//--
--- dedupe por INSTANCIA (nao por nome): se o remote for recriado apos
--- teleporte, a nova instancia e hookada no proximo scanAndHook()
-local hookedInstances = {}
-local hookedEvents = 0
-
-local function hookRemote(remote)
-    if hookedInstances[remote] then return end
-    hookedInstances[remote] = true
-    local name = tostring(remote.Name)
-    local cls = tostring(remote.ClassName)
-
-    if cls == "RemoteEvent" or cls == "UnreliableRemoteEvent" then
-        local ok, conn = pcall(function()
-            return remote.OnClientEvent:Connect(function(...)
-                local args = { ... }
-                addCapture(captureText(name, "S->C", args))
-                totalLogged = totalLogged + 1
-                -- SEM flush aqui: thread principal do jogo
-            end)
+            return { name = script.Name, path = pathFull, cls = cls, status = status, bytes = bytes }
         end)
-        if ok and conn then hookedEvents = hookedEvents + 1 end
-    elseif cls == "RemoteFunction" then
-        pcall(function()
-            local orig = remote.OnClientInvoke
-            remote.OnClientInvoke = function(...)
-                local args = { ... }
-                addCapture(captureText(name, "S->C(Invoke)", args))
-                totalLogged = totalLogged + 1
-                -- SEM flush aqui: thread principal do jogo
-                if orig then return orig(...) end
-                return nil
-            end
-            hookedEvents = hookedEvents + 1
-        end)
-    end
-end
-
-local function scanAndHook()
-    local rs = safeGetService("ReplicatedStorage")
-    if not rs then return end
-    local ok, list = pcall(function() return rs:GetDescendants() end)
-    if not ok or not list then return end
-    for i = 1, #list do
-        local inst = list[i]
-        local okProc = pcall(function()
-            local cls = inst.ClassName
-            if cls == "RemoteEvent" or cls == "RemoteFunction" or cls == "UnreliableRemoteEvent" then
-                if isInteresting(inst.Name) and not isHoneypot(inst.Name) then
-                    hookRemote(inst)
-                end
-            end
-        end)
-        if not okProc then
-            honeypotCount = honeypotCount + 1
+        done = done + 1
+        if done % 10 == 0 then
+            onProgress(string.format("Decompilando... %d/%d | ok=%d bytecode=%d vazio=%d | %d KB",
+                done, total, okCount, bytecodeCount, emptyCount, math.floor(totalBytes / 1024)))
+            task.wait()
         end
     end
-    logMsg("Hooks de eventos instalados: " .. tostring(hookedEvents))
+
+    return {
+        total = total,
+        ok = okCount,
+        bytecode = bytecodeCount,
+        empty = emptyCount,
+        totalBytes = totalBytes,
+        files = files,
+    }
 end
 
--- re-varre periodicamente (remotes podem ser recriados apos teleporte)
-local function hookLoop()
-    while true do
-        task.wait(45)
-        scanAndHook()
-        -- SEM flush direto aqui: deixa o flushLoop cuidar (thread proprio)
+--//==============================[ 5. INDICE + ENVIO ]==============================//--
+-- Rate limit Discord: 10 arquivos/mensagem, ~8MB/mensagem, espera 1.2s
+-- entre mensagens (limite de 5 msgs/10s por webhook).
+local DISCORD_MAX_FILES = 8
+local DISCORD_MAX_BYTES = 6000000  -- 6MB de folga dentro do limite de 8MB
+local DISCORD_WAIT = 1.2
+
+local function sendScriptBatches(files, onProgress)
+    if not reqFn then
+        logMsg("request nao suportado - envio Discord SKIPPED (so arquivos locais)")
+        return 0
     end
+    local sent = 0
+    local batch = {}
+    local batchBytes = 0
+    local i = 1
+    local total = #files
+
+    local function flushBatch()
+        if #batch == 0 then return end
+        local msg = "**PS99 ScriptDump - lote de scripts** (" .. tostring(#batch) .. " arquivos)"
+        local ok, res = pcall(function()
+            return sendFileMulti(msg, batch)
+        end)
+        local code = -1
+        if ok and res then code = tonumber(res.StatusCode) or -1 end
+        if code >= 200 and code < 300 then
+            sent = sent + #batch
+            onProgress(string.format("Enviando... %d/%d arquivos (lote ok)", sent, total))
+        else
+            logMsg("Lote falhou (codigo " .. tostring(code) .. ") - arquivos ficam locais")
+        end
+        batch = {}
+        batchBytes = 0
+    end
+
+    while i <= total do
+        local f = files[i]
+        local fBytes = #tostring(f.content)
+        if fBytes > DISCORD_MAX_BYTES then
+            -- arquivo gigante: nao cabe em nenhum lote, deixa so local
+            logMsg("Arquivo grande demais para Discord: " .. tostring(f.name) .. " (" .. fBytes .. " bytes)")
+            i = i + 1
+        else
+            if #batch > 0 and (#batch >= DISCORD_MAX_FILES or batchBytes + fBytes > DISCORD_MAX_BYTES) then
+                flushBatch()
+                task.wait(DISCORD_WAIT)
+            end
+            batch[#batch + 1] = f
+            batchBytes = batchBytes + fBytes
+            i = i + 1
+        end
+        -- flush intermediario a cada lote cheio (evita esperar o loop todo)
+        if #batch >= DISCORD_MAX_FILES then
+            flushBatch()
+            task.wait(DISCORD_WAIT)
+        end
+    end
+    flushBatch()
+    return sent
 end
 
---//==============================[ 8. UI MINIMALISTA ]==============================//--
+local function buildIndex(stats)
+    local lines = {
+        "== PS99 SCRIPT DUMP - INDICE ==",
+        "GameId:  " .. tostring(safeGame() and safeGame().GameId or "?"),
+        "Player:  " .. tostring((safeLocalPlayer() and safeLocalPlayer().Name) or "?"),
+        "Executor:" .. getExecutorName,
+        "Data:    " .. os.date("%Y-%m-%d %H:%M:%S"),
+        "",
+        "Total scripts:   " .. tostring(stats.total),
+        "Decompilados ok: " .. tostring(stats.ok),
+        "Bytecode bruto:  " .. tostring(stats.bytecode),
+        "Sem source:      " .. tostring(stats.empty),
+        "Tamanho total:   " .. tostring(math.floor((stats.totalBytes or 0) / 1024)) .. " KB",
+        "",
+        "Arquivos salvos em: " .. ROOT_DIR .. "/<path>/<nome>.lua",
+        "Enviados ao Discord: " .. tostring(stats.sent or 0) .. " arquivos em anexos.",
+    }
+    return table.concat(lines, "\n")
+end
+
+--//==============================[ 6. UI TOUCH ]==============================//--
 local Players = safeGetService("Players")
 local TweenService = safeGetService("TweenService")
 
 local function makeUI()
     local gui = Instance.new("ScreenGui")
-    gui.Name = "PS99Capture"
+    gui.Name = "PS99ScriptDump"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.DisplayOrder = 999
@@ -449,7 +421,7 @@ local function makeUI()
     local bg = Instance.new("Frame")
     bg.AnchorPoint = Vector2.new(0.5, 0.5)
     bg.Position = UDim2.new(0.5, 0, 0.5, 0)
-    bg.Size = UDim2.new(0, 360, 0, 300)
+    bg.Size = UDim2.new(0, 380, 0, 320)
     bg.BackgroundColor3 = Color3.fromRGB(15, 17, 25)
     bg.BackgroundTransparency = 0.05
     bg.BorderSizePixel = 0
@@ -465,7 +437,7 @@ local function makeUI()
     title.Position = UDim2.new(0, 0, 0, 10)
     title.Size = UDim2.new(1, 0, 0, 36)
     title.Font = Enum.Font.GothamBold
-    title.Text = "PS99 REMOTE CAPTURE"
+    title.Text = "PS99 SCRIPT DUMP"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.TextSize = 18
     title.Parent = bg
@@ -473,43 +445,42 @@ local function makeUI()
     local status = Instance.new("TextLabel")
     status.BackgroundTransparency = 1
     status.Position = UDim2.new(0, 12, 0, 52)
-    status.Size = UDim2.new(1, -24, 0, 60)
+    status.Size = UDim2.new(1, -24, 0, 80)
     status.Font = Enum.Font.Gotham
-    status.Text = "Recon passivo ativo...\nCapturando payloads C->S e S->C"
-    status.TextColor3 = Color3.fromRGB(80, 230, 120)
-    status.TextSize = 13
+    status.Text = "Iniciando..."
+    status.TextColor3 = Color3.fromRGB(255, 200, 80)
+    status.TextSize = 14
     status.TextWrapped = true
     status.Parent = bg
 
     local stats = Instance.new("TextLabel")
     stats.BackgroundTransparency = 1
-    stats.Position = UDim2.new(0, 12, 0, 118)
+    stats.Position = UDim2.new(0, 12, 0, 140)
     stats.Size = UDim2.new(1, -24, 0, 90)
     stats.Font = Enum.Font.Code
-    stats.Text = "Capturas: 0\nHooks: 0\nFlush: aguardando..."
+    stats.Text = "aguardando scan..."
     stats.TextColor3 = Color3.fromRGB(200, 210, 230)
-    stats.TextSize = 13
+    stats.TextSize = 12
     stats.TextXAlignment = Enum.TextXAlignment.Left
     stats.TextYAlignment = Enum.TextYAlignment.Top
     stats.Parent = bg
 
-    local flushBtn = Instance.new("TextButton")
-    flushBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    flushBtn.Position = UDim2.new(0, 12, 1, -56)
-    flushBtn.Size = UDim2.new(1, -24, 0, 44)
-    flushBtn.Font = Enum.Font.GothamBold
-    flushBtn.Text = "FLUSH AGORA"
-    flushBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    flushBtn.TextSize = 15
-    flushBtn.Parent = bg
+    local close = Instance.new("TextButton")
+    close.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+    close.Position = UDim2.new(1, -64, 0, 12)
+    close.Size = UDim2.new(0, 48, 0, 36)
+    close.Font = Enum.Font.GothamBold
+    close.Text = "X"
+    close.TextColor3 = Color3.fromRGB(255, 255, 255)
+    close.TextSize = 18
+    close.Parent = bg
     pcall(function()
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 10)
-        corner.Parent = flushBtn
+        corner.Parent = close
     end)
-    flushBtn.Activated:Connect(function()
-        forceFlushPending = true
-        status.Text = "Flush agendado... (loop envia)"
+    close.Activated:Connect(function()
+        gui:Destroy()
     end)
 
     return {
@@ -520,11 +491,8 @@ local function makeUI()
             status.Text = text
             if color then status.TextColor3 = color end
         end,
-        setStats = function(capturas, hooks)
-            stats.Text = "Capturas: " .. tostring(capturas)
-                .. "\nHooks de evento: " .. tostring(hooks)
-                .. "\nInteresse: " .. tostring(interestCount)
-                .. "\nHoneypots ignorados: " .. tostring(honeypotCount)
+        setStats = function(text)
+            stats.Text = text
         end,
     }
 end
@@ -542,12 +510,12 @@ local ui = (function()
     }
 end)()
 
---//==============================[ 9. MAIN ]==============================//--
+--//==============================[ 7. MAIN (thread dedicada) ]==============================//--
 local function notifyError(msg, trace)
     if not reqFn then return "request nao suportado" end
     local player = safeLocalPlayer()
     local g = safeGame()
-    local info = "**ERRO no PS99 Capture**\n```\n"
+    local info = "**ERRO no PS99 ScriptDump**\n```\n"
         .. tostring(msg):sub(1, 800) .. "\n```\n**Stack:**\n```\n"
         .. tostring(trace or "n/a"):sub(1, 900) .. "\n```\n"
         .. "GameId: " .. tostring(g and g.GameId or "?")
@@ -565,7 +533,7 @@ local function sendTestPing()
     local player = safeLocalPlayer()
     local g = safeGame()
     local code = sendSimple(
-        "**PS99 Capture - TESTE**\nRecon passivo iniciado.\n"
+        "**PS99 ScriptDump - TESTE**\nExtrator de scripts iniciado.\n"
         .. "GameId: " .. tostring(g and g.GameId or "?")
         .. "\nPlayer: " .. tostring(player and player.Name or "?")
         .. "\nExecutor: " .. getExecutorName
@@ -600,35 +568,45 @@ local function safeSpawn(fn)
     end
 end
 
-local function statsLoop()
-    while true do
-        task.wait(5)
-        ui.setStats(#captures, hookedEvents)
-    end
-end
-
-local function flushLoop()
-    while true do
-        task.wait(1)
-        local doFlush = forceFlushPending
-        forceFlushPending = false
-        if doFlush then
-            flushCaptures(true)
-        else
-            flushCaptures(false)
-        end
-    end
-end
-
 local function mainFlow()
     sendTestPing()
-    installNamecallHook()
-    scanAndHook()
-    ui.setStatus("Recon passivo ativo!\nJogue normal: eggs, hatch, farm, auction...", Color3.fromRGB(80, 230, 120))
-    task.spawn(hookLoop)
-    task.spawn(statsLoop)
-    task.spawn(flushLoop)
-    -- mainFlow termina; os loops dedicados mantem o script vivo
+    ui.setStatus("Coletando scripts...", Color3.fromRGB(255, 200, 80))
+
+    local scripts = collectScripts(function(msg)
+        ui.setStatus(msg, Color3.fromRGB(255, 200, 80))
+    end)
+
+    if #scripts == 0 then
+        ui.setStatus("Nenhum script encontrado - jogo carregou?",
+            Color3.fromRGB(255, 120, 80))
+        return
+    end
+
+    ui.setStatus("Decompilando " .. tostring(#scripts) .. " scripts...",
+        Color3.fromRGB(255, 200, 80))
+
+    local stats = processScripts(scripts, function(msg)
+        ui.setStatus(msg, Color3.fromRGB(255, 200, 80))
+        ui.setStats(msg)
+    end)
+
+    -- envio dos lotes em thread dedicada (NUNCA no thread do jogo)
+    task.spawn(function()
+        task.wait(0.3)
+        stats.sent = sendScriptBatches(stats.files or {}, function(msg)
+            ui.setStatus(msg, Color3.fromRGB(255, 200, 80))
+        end)
+        local index = buildIndex(stats)
+        ui.setStats(index)
+        ui.setStatus("Concluido! ok=" .. tostring(stats.ok)
+            .. " bytecode=" .. tostring(stats.bytecode)
+            .. " sem_source=" .. tostring(stats.empty),
+            Color3.fromRGB(80, 230, 120))
+        task.wait(0.2)
+        local c = sendFileMulti(index, {})
+        logMsg("Indice enviado (codigo " .. tostring(c) .. ")")
+        copy(index)
+    end)
 end
 
 safeSpawn(mainFlow)
