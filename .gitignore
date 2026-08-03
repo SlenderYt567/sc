@@ -1,32 +1,24 @@
 --!strict
 --[[
-    Zaphub Extractor v3 - Captura o payload final (Luraph/Luarmor) no Delta
-    Plataforma: Delta (hookmetamethod/__namecall + request hook - CONFIRMADO FUNCIONANDO)
+    Zaphub Extractor v3.1 - Captura o payload final (Luraph/Luarmor) no Delta
+    Plataforma: Delta (hookmetamethod/__namecall + request + readfile hooks - CONFIRMADO)
 
-    DIAGNOSTICO v2 (TESTE do usuario):
-      - Hook loadstring: NENHUM (hookfunction bloqueado em loadstring/load + globals read-only)
-      - Hook HTTP: OK (hookmetamethod __namecall)
-      - Hook request: OK
+    DESCOBERTA v3 (analise dos arquivos capturados):
+      - O fluxo real e Luarmor v8 AUTH: o runtime (cacheado) faz GET em
+        eu1-roblox-auth.luarmor.net/v8/auth/<id>/init?t=<token>&k=<script_key>
+        e recebe o PAYLOAD CODIFICADO (~314 bytes).
+      - O RUNTIME (init-74c74f95fd0-marbeg.lua) JÁ ESTAVA EM CACHE no executor
+        -> o loader leu via readfile e NAO baixou do CDN -> falta captura-lo.
+      - O payload codificado ja foi capturado (http_2.lua). Falta o runtime
+        para decodificar offline (ele contem a logica que usa _bsdata0+key).
 
-    POR QUE o hook de loadstring e inutil neste Delta:
-      O executor protege loadstring/load contra hookfunction e reatribuicao
-      (anti-dumper). Tentar de novo = perder tempo.
-
-    SOLUCAO v3 - APOSTA TOTAL NO HTTP + INJECAO NO LOADER:
-      [1] Captura PASSIVA via hookmetamethod __namecall + request:
-          - Loga TODAS as URLs (diagnostico)
-          - Salva TODO body >= 300 bytes (loader + init do CDN + o que mais vier)
-          - Envia via webhook os relevantes (>= 500 bytes ou URL luarmor/cdn)
-      [2] INJECAO NO LOADER (a tecnica forte):
-          - Quando o HTTP hook ve o loader api.luarmor.net/.../loaders/*.lua,
-            REESCREVE o body injetando um wrapper de loadstring no topo.
-          - Resultado: quando o loader fizer loadstring(init) e o init fizer
-            loadstring(bytecode_final), o wrapper CAPTURA (salva local + envia)
-            e ainda executa normalmente (nao quebra o Zaphub).
-          - O init + bytecode ficam em ZaphubExtract/inj_*.bin -> eu decripto
-            offline com a script_key se necessario.
-      [3] Poll de injetados: envia os inj_*.bin para o webhook (thread dedicada).
-      [4] Scan getgc periodico: closures Luraph residuais (bônus se disponivel).
+    MELHORIAS v3.1:
+      [1] HOOK DE readfile: captura o runtime quando o loader ler o cache
+          (static_content_130525/init-*.lua). E a peca que faltava.
+      [2] Salva o LOADER ORIGINAL antes da injecao (com o _bsdata0 da sessao).
+      [3] Filtra o auto-loop: ignora respostas do nosso proprio webhook.
+      [4] Captura TAMBEM respostas >= 200 bytes (o Exec tem 642).
+      [5] Injeta o wrapper de loadstring (bonus: pode capturar o bytecode final).
 
     SEGURANCA ANTI-TRAVA (padrao da casa):
       - I/O de rede so em task.spawn dedicada
@@ -48,7 +40,7 @@ local ZAPHUB_SNIPPET = "script_key=%q; loadstring(game:HttpGet('https://zaphub.x
 local ZAPHUB_KEY = "nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw"
 
 -- Captura passiva: salva TODO body >= MIN_HTTP_SAVE
-local MIN_HTTP_SAVE = 300
+local MIN_HTTP_SAVE = 200
 -- Envia via webhook se body >= MIN_HTTP_SEND OU URL relevante
 local MIN_HTTP_SEND = 500
 -- Injetar wrapper de loadstring no loader do Luarmor (true = recomendado)
@@ -201,6 +193,71 @@ local function sendCaptureAsync(tag, title, chunk, fname)
     end)
 end
 
+--//==============================[ HOOK DE READFILE (captura o runtime do cache) ]==============================//--
+-- O loader Luarmor le o runtime de static_content_130525/init-*.lua via readfile.
+-- Hookando readfile capturamos o runtime SEM precisar baixar o CDN.
+local readfileHookOk = false
+local readfileCaptured = 0
+
+local function installReadfileHook()
+    local oldRF = readfileFn
+    if not oldRF then
+        logMsg("readfile nao encontrado")
+        return false
+    end
+    -- caminho A: hookfunction (patcheia a closure real)
+    local okH = false
+    if type(hf) == "function" then
+        okH = pcall(hf, oldRF, function(path, ...)
+            local res = oldRF(path, ...)
+            if type(res) == "string" and #res >= 200 then
+                local p = tostring(path)
+                if p:find("static_content") or p:find("init%-") or p:find("luarmor") or p:find("marbeg") then
+                    readfileCaptured = readfileCaptured + 1
+                    local idx = readfileCaptured
+                    logMsg("[READFILE] CAPTURADO runtime #" .. tostring(idx) .. " (" .. tostring(#res) .. " bytes): " .. p)
+                    logManifest("readfile #" .. tostring(idx) .. " | " .. p .. " | " .. tostring(#res) .. " bytes")
+                    pcall(saveLocal, "runtime_" .. tostring(idx) .. ".lua", res)
+                    pcall(saveLocal, "runtime_" .. tostring(idx) .. "_path.txt", p)
+                    sendCaptureAsync("runtime", "RUNTIME " .. tostring(idx), res, "runtime_" .. tostring(idx) .. ".lua.b64.txt")
+                end
+            end
+            return res
+        end)
+        if okH then
+            readfileHookOk = true
+            logMsg("Hook readfile: hookfunction OK")
+            return true
+        end
+    end
+    -- caminho B: reatribuicao de global
+    local okA = pcall(function()
+        _G.readfile = function(path, ...)
+            local res = oldRF(path, ...)
+            if type(res) == "string" and #res >= 200 then
+                local p = tostring(path)
+                if p:find("static_content") or p:find("init%-") or p:find("luarmor") or p:find("marbeg") then
+                    readfileCaptured = readfileCaptured + 1
+                    local idx = readfileCaptured
+                    logMsg("[READFILE] CAPTURADO runtime #" .. tostring(idx) .. " (" .. tostring(#res) .. " bytes): " .. p)
+                    logManifest("readfile #" .. tostring(idx) .. " | " .. p .. " | " .. tostring(#res) .. " bytes")
+                    pcall(saveLocal, "runtime_" .. tostring(idx) .. ".lua", res)
+                    pcall(saveLocal, "runtime_" .. tostring(idx) .. "_path.txt", p)
+                    sendCaptureAsync("runtime", "RUNTIME " .. tostring(idx), res, "runtime_" .. tostring(idx) .. ".lua.b64.txt")
+                end
+            end
+            return res
+        end
+    end)
+    if okA then
+        readfileHookOk = true
+        logMsg("Hook readfile: global-reassign OK")
+        return true
+    end
+    logMsg("Hook readfile: FALHOU")
+    return false
+end
+
 --//==============================[ INJECAO NO LOADER ]==============================//--
 -- Código injetado no topo do loader Luarmor. Captura init + bytecode final
 -- via wrapper de loadstring e devolve o resultado original (nao quebra nada).
@@ -259,13 +316,27 @@ local function captureHttpResponse(url, body)
     end
     if type(body) ~= "string" or #body < MIN_HTTP_SAVE then return body end
 
-    -- injecao no loader
+    -- Filtra auto-loop: respostas do nosso proprio webhook (nao importam)
+    if low:find("discord%.com/api/webhooks") or low:find("discordapp%.com/api/webhooks") then
+        return body
+    end
+
+    -- injecao no loader (e salva o ORIGINAL antes - o _bsdata0 da sessao)
     if INJECT_LOADER and looksLikeLoader(url, body) then
+        -- salva o loader original primeiro (contem o _bsdata0 da sessao)
+        httpCaptured = httpCaptured + 1
+        local idx = httpCaptured
+        logMsg("[HTTP] LOADER ORIGINAL #" .. tostring(idx) .. " (" .. tostring(#body) .. " bytes): " .. tostring(url))
+        logManifest("loader_original #" .. tostring(idx) .. " | " .. tostring(url) .. " | " .. tostring(#body) .. " bytes")
+        pcall(saveLocal, "loader_" .. tostring(idx) .. "_url.txt", tostring(url))
+        pcall(saveLocal, "loader_" .. tostring(idx) .. ".lua", body)
+        sendCaptureAsync("loader", "LOADER " .. tostring(idx), body, "loader_" .. tostring(idx) .. ".lua.b64.txt")
+
         local okW, wrapped = pcall(function()
             return INJECTION_CODE .. "\n" .. body
         end)
         if okW and type(wrapped) == "string" then
-            logMsg("[HTTP] INJETADO wrapper no loader (" .. tostring(#wrapped) .. " bytes, era " .. tostring(#body) .. ")")
+            logMsg("[HTTP] INJETADO wrapper no loader (era " .. tostring(#body) .. ")")
             logManifest("injecao no loader | " .. tostring(url))
             return wrapped -- retorna o body modificado -> loader roda com wrapper
         end
@@ -516,8 +587,9 @@ local function mainFlow()
 
     local okHookHttp = installHttpGetHook()
     local okHookReq = installRequestHook()
+    local okHookRF = installReadfileHook()
 
-    ui.setStatus("Hooks: HTTP [" .. tostring(okHookHttp and "OK" or "FAIL") .. "] request [" .. tostring(okHookReq and "OK" or "FAIL") .. "]\n"
+    ui.setStatus("Hooks: HTTP [" .. tostring(okHookHttp and "OK" or "FAIL") .. "] request [" .. tostring(okHookReq and "OK" or "FAIL") .. "] readfile [" .. tostring(okHookRF and "OK" or "FAIL") .. "]\n"
         .. "Injecao no loader: " .. tostring(INJECT_LOADER),
         Color3.fromRGB(255, 200, 80))
 
@@ -526,9 +598,10 @@ local function mainFlow()
         task.spawn(function()
             task.wait(0.2)
             local code = sendSimple(
-                "**Zaphub Extractor v3 - TESTE**\nExecutor: " .. getExecutorName
+                "**Zaphub Extractor v3.1 - TESTE**\nExecutor: " .. getExecutorName
                     .. "\nHook HTTP: " .. tostring(okHookHttp)
                     .. "\nHook request: " .. tostring(okHookReq)
+                    .. "\nHook readfile: " .. tostring(okHookRF)
                     .. "\nInjecao loader: " .. tostring(INJECT_LOADER),
                 WEBHOOK_NAME .. " [TESTE]"
             )
@@ -556,7 +629,8 @@ local function mainFlow()
         end
         if waited % 10 == 0 then
             ui.setStatus("Aguardando captura... " .. tostring(waited) .. "s\n"
-                .. "http: " .. tostring(httpCaptured) .. " | inj: " .. tostring(injectedCaptured) .. " | gc: " .. tostring(gcCaptured),
+                .. "http: " .. tostring(httpCaptured) .. " | runtime: " .. tostring(readfileCaptured)
+                .. " | inj: " .. tostring(injectedCaptured) .. " | gc: " .. tostring(gcCaptured),
                 Color3.fromRGB(255, 200, 80))
         end
     end
@@ -566,13 +640,14 @@ local function mainFlow()
 
     pcall(saveLocal, "manifest.txt", table.concat(manifest, "\n"))
 
-    ui.setStatus("RESULTADO: http " .. tostring(httpCaptured) .. " | inj " .. tostring(injectedCaptured)
-        .. " | gc " .. tostring(gcFound) .. "\nSalvos em: " .. SAVE_DIR .. "/",
+    ui.setStatus("RESULTADO: http " .. tostring(httpCaptured) .. " | runtime " .. tostring(readfileCaptured)
+        .. " | inj " .. tostring(injectedCaptured) .. " | gc " .. tostring(gcFound) .. "\nSalvos em: " .. SAVE_DIR .. "/",
         Color3.fromRGB(80, 230, 120))
 
-    sendSimple("**Zaphub Extractor v3 - RESUMO**\n"
+    sendSimple("**Zaphub Extractor v3.1 - RESUMO**\n"
         .. "Executor: " .. getExecutorName
         .. "\nHTTP capturas: " .. tostring(httpCaptured)
+        .. "\nRuntime (readfile): " .. tostring(readfileCaptured)
         .. "\nInjetados: " .. tostring(injectedCaptured)
         .. "\nGC closures: " .. tostring(gcFound),
         WEBHOOK_NAME .. " [RESUMO]")
@@ -585,7 +660,7 @@ task.spawn(function()
         ui.setStatus("ERRO: " .. tostring(err), Color3.fromRGB(255, 80, 80))
         if reqFn then
             task.spawn(function()
-                sendSimple("**Zaphub Extractor v3 - ERRO**\n```\n" .. tostring(err) .. "\n```", WEBHOOK_NAME .. " [ERRO]")
+                sendSimple("**Zaphub Extractor v3.1 - ERRO**\n```\n" .. tostring(err) .. "\n```", WEBHOOK_NAME .. " [ERRO]")
             end)
         end
         return nil
