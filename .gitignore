@@ -144,6 +144,27 @@ local function sendAll(remotesText, dexText, susText, stamp)
     return "Enviado via chunks (remotes=" .. tostring(ok1) .. " dex=" .. tostring(ok2) .. ")"
 end
 
+-- Envia aviso de ERRO para o Discord (com stack trace e info do jogo)
+local function notifyError(msg, trace)
+    if not reqFn then
+        return "request nao suportado - erro apenas na tela: " .. tostring(msg)
+    end
+    local player = game:GetService("Players").LocalPlayer
+    local info = "**ERRO no PS99 DexDump**\n```\n"
+        .. tostring(msg):sub(1, 800)
+        .. "\n```\n**Stack:**\n```\n"
+        .. tostring(trace or "n/a"):sub(1, 900)
+        .. "\n```\nGameId: " .. tostring(game.GameId)
+        .. "\nPlaceId: " .. tostring(game.PlaceId)
+        .. "\nPlayer: " .. tostring(player and player.Name or "?")
+        .. "\nExecutor: " .. getExecutorName
+    local code = sendSimple(info, WEBHOOK_NAME .. " [ERRO]")
+    if code >= 200 and code < 300 then
+        return "Erro enviado pro Discord! (" .. tostring(code) .. ")"
+    end
+    return "Falha ao enviar erro (codigo " .. tostring(code) .. ") - erro na tela: " .. tostring(msg)
+end
+
 --//==============================[ 3. ESTADO DO SCAN ]==============================//--
 local RemoteClasses = {
     ["RemoteEvent"] = true,
@@ -158,6 +179,12 @@ local scanAborted = false
 local scanError = nil
 local scanStart = os.clock()
 local SCAN_TIMEOUT = 25
+local scanWarnings = {}
+
+local function addWarning(msg)
+    table.insert(scanWarnings, msg)
+    print("[PS99Dump] WARN: " .. msg)
+end
 
 local function remoteNameCount()
     local n = 0
@@ -216,28 +243,38 @@ end
 
 local function runScan(onProgress)
     scanStart = os.clock()
+    scanWarnings = {}
 
     local rs = {}
-    pcall(function()
+    local okRS = pcall(function()
         rs = game:GetService("ReplicatedStorage"):GetDescendants()
     end)
+    if not okRS then
+        addWarning("Falha ao ler ReplicatedStorage (pode estar bloqueado pelo executor)")
+    end
     totalInstances = totalInstances + #rs
     processList(rs, onProgress)
 
     if not scanAborted then
         local ws = {}
-        pcall(function()
+        local okWS = pcall(function()
             ws = workspace:GetDescendants()
         end)
+        if not okWS then
+            addWarning("Falha ao ler Workspace (pode estar bloqueado pelo executor)")
+        end
         totalInstances = totalInstances + #ws
         processList(ws, onProgress)
     end
 
     if not scanAborted then
         local gm = {}
-        pcall(function()
+        local okGM = pcall(function()
             gm = game:GetDescendants()
         end)
+        if not okGM then
+            addWarning("Falha ao ler DataModel (pode estar bloqueado pelo executor)")
+        end
         totalInstances = totalInstances + #gm
         processList(gm, onProgress)
     end
@@ -258,6 +295,9 @@ local function buildHeader()
         .. (scanAborted and " (PARCIAL - timeout)" or "")
         .. (scanError and (" (ERRO: " .. tostring(scanError) .. ")") or ""))
     table.insert(lines, "Remotes:  " .. tostring(remoteNameCount()) .. " nomes unicos")
+    if #scanWarnings > 0 then
+        table.insert(lines, "Avisos:   " .. table.concat(scanWarnings, " | "))
+    end
     return table.concat(lines, "\n")
 end
 
@@ -557,6 +597,18 @@ task.spawn(function()
         if remoteNameCount() == 0 then
             ui.setStatus("Nenhum remote encontrado (0 nomes) - verifique se o jogo carregou",
                 Color3.fromRGB(255, 120, 80))
+            task.spawn(function()
+                local player = game:GetService("Players").LocalPlayer
+                local msg = "**PS99 DexDump - AVISO**\nNenhum remote encontrado.\n"
+                    .. "Instancias escaneadas: " .. tostring(totalInstances)
+                    .. "\nWarnings: " .. (#scanWarnings > 0 and table.concat(scanWarnings, " | ") or "nenhum")
+                    .. "\nGameId: " .. tostring(game.GameId)
+                    .. "\nPlayer: " .. tostring(player and player.Name or "?")
+                    .. "\nExecutor: " .. getExecutorName
+                local code = sendSimple(msg, WEBHOOK_NAME .. " [AVISO]")
+                ui.setStatus("0 remotes. Aviso enviado pro Discord (" .. tostring(code) .. ")",
+                    Color3.fromRGB(255, 120, 80))
+            end)
             return
         end
 
@@ -575,5 +627,14 @@ task.spawn(function()
         local dexText = formatDexByName()
         ui.setTexts(remotesText, dexText, formatSuspicious())
         ui.preview.Text = remotesText
+        -- Avisa no Discord sobre o erro (tela + webhook)
+        local trace = debug.traceback(tostring(err), 2)
+        task.spawn(function()
+            ui.setStatus("ERRO capturado. Enviando aviso pro Discord...",
+                Color3.fromRGB(255, 160, 80))
+            local res = notifyError(err, trace)
+            ui.setStatus("ERRO: " .. scanError .. "\n" .. res,
+                Color3.fromRGB(255, 80, 80))
+        end)
     end)
 end)
