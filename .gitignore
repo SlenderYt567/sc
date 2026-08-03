@@ -152,6 +152,31 @@ local function sendChunked(text, label)
     return okCount
 end
 
+-- 1 request unico (anexo): muito mais leve que chunked - evita travar
+-- o jogo com N requests síncronos em sequencia
+local function sendFile(filename, content, msg)
+    if not reqFn then return -1 end
+    local boundary = "----PS99Cap" .. tostring(os.clock()):gsub("%.", "") .. "7xK"
+    local body = ""
+    if msg and #tostring(msg) > 0 then
+        body = body .. "--" .. boundary .. "\r\nContent-Disposition: form-data; name=\"content\"\r\n\r\n" .. tostring(msg) .. "\r\n"
+    end
+    body = body .. "--" .. boundary
+        .. "\r\nContent-Disposition: form-data; name=\"file1\"; filename=\"" .. filename .. "\""
+        .. "\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+        .. tostring(content)
+        .. "\r\n--" .. boundary .. "--\r\n"
+    local ok, res = pcall(function()
+        return reqFn({
+            Url = WEBHOOK_URL,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "multipart/form-data; boundary=" .. boundary },
+            Body = body,
+        })
+    end)
+    if ok and res then return tonumber(res.StatusCode) or 0 else return -1 end
+end
+
 --//==============================[ 3. SERIALIZADOR SEGURO ]==============================//--
 -- FIX: gsub retorna 2 valores -> NUNCA usar em return direto nem em table.insert
 local function sanitize(v)
@@ -224,9 +249,16 @@ local function captureText(remoteName, direction, args)
 end
 
 --//==============================[ 4. CAPTURA + FLUSH ]==============================//--
+-- REGRA CRITICA (fix trava): hooks de __namecall e callbacks de OnClientEvent
+-- rodam NO THREAD PRINCIPAL do jogo. Qualquer request()/I/O aqui CONGELA o
+-- jogo. Entao:
+--   [A] addCapture()  -> SO enfileira (custo O(1), sem I/O)
+--   [B] flushCaptures() -> chamado SOMENTE pelo loop dedicado (thread de
+--       task.spawn) e pelo botao. Faz task.wait antes de enviar.
 local captures = {}
 local captureCount = 0
 local lastFlush = os.clock()
+local forceFlushPending = false
 -- contadores globais do script (declarados ANTES de flushCaptures usá-los)
 local totalLogged = 0
 local interestCount = 0
@@ -242,6 +274,8 @@ local function flushCaptures(force)
     local byTime = (os.clock() - lastFlush) >= FLUSH_SECONDS
     if not force and captureCount < FLUSH_EVERY and not byTime then return end
 
+    -- copia o lote e limpa ANTES do request (evita reentrada se o envio
+    -- demorar - novas capturas entram no proximo lote)
     local text = table.concat(captures, "\n\n")
     local lote = #captures
     captures = {}
@@ -253,16 +287,22 @@ local function flushCaptures(force)
         .. "Total: " .. tostring(totalLogged) .. " | Interesse: " .. tostring(interestCount)
         .. " | Honeypots ignorados: " .. tostring(honeypotCount)
 
+    -- thread dedicada: NAO roda no thread do jogo
     task.spawn(function()
-        local ok1 = sendChunked(header .. "\n\n" .. text, "CAPTURAS")
-        if ok1 == 0 then
-            -- fallback: arquivo local
-            if saveFile then
-                saveFile("capture_" .. os.date("%Y%m%d_%H%M%S") .. ".txt", text)
-                logMsg("Webhook falhou - salvo em PS99Capture/")
-            else
-                copy(text)
-                logMsg("Webhook falhou - copiado pro clipboard")
+        -- respiro antes do request (evita travar frame atual)
+        task.wait(0.1)
+        local c = sendFile("capture_" .. os.date("%Y%m%d_%H%M%S") .. ".txt", text, header)
+        if not (c >= 200 and c < 300) then
+            -- fallback: chunks (so se o anexo falhar)
+            local ok1 = sendChunked(header .. "\n\n" .. text, "CAPTURAS")
+            if ok1 == 0 then
+                if saveFile then
+                    saveFile("capture_" .. os.date("%Y%m%d_%H%M%S") .. ".txt", text)
+                    logMsg("Webhook falhou - salvo em PS99Capture/")
+                else
+                    copy(text)
+                    logMsg("Webhook falhou - copiado pro clipboard")
+                end
             end
         end
     end)
@@ -314,7 +354,7 @@ local function installNamecallHook()
             if not isHoneypot(name) and isInteresting(name) then
                 addCapture(captureText(name, "C->S", extra))
                 interestCount = interestCount + 1
-                flushCaptures(false)
+                -- SEM flush aqui: thread principal do jogo
             else
                 honeypotCount = honeypotCount + 1
             end
@@ -343,7 +383,7 @@ local function hookRemote(remote)
                 local args = { ... }
                 addCapture(captureText(name, "S->C", args))
                 totalLogged = totalLogged + 1
-                flushCaptures(false)
+                -- SEM flush aqui: thread principal do jogo
             end)
         end)
         if ok and conn then hookedEvents = hookedEvents + 1 end
@@ -354,7 +394,7 @@ local function hookRemote(remote)
                 local args = { ... }
                 addCapture(captureText(name, "S->C(Invoke)", args))
                 totalLogged = totalLogged + 1
-                flushCaptures(false)
+                -- SEM flush aqui: thread principal do jogo
                 if orig then return orig(...) end
                 return nil
             end
@@ -390,7 +430,7 @@ local function hookLoop()
     while true do
         task.wait(45)
         scanAndHook()
-        flushCaptures(true)
+        -- SEM flush direto aqui: deixa o flushLoop cuidar (thread proprio)
     end
 end
 
@@ -468,8 +508,8 @@ local function makeUI()
         corner.Parent = flushBtn
     end)
     flushBtn.Activated:Connect(function()
-        flushCaptures(true)
-        status.Text = "Flush forcado enviado!"
+        forceFlushPending = true
+        status.Text = "Flush agendado... (loop envia)"
     end)
 
     return {
@@ -567,6 +607,19 @@ local function statsLoop()
     end
 end
 
+local function flushLoop()
+    while true do
+        task.wait(1)
+        local doFlush = forceFlushPending
+        forceFlushPending = false
+        if doFlush then
+            flushCaptures(true)
+        else
+            flushCaptures(false)
+        end
+    end
+end
+
 local function mainFlow()
     sendTestPing()
     installNamecallHook()
@@ -574,11 +627,8 @@ local function mainFlow()
     ui.setStatus("Recon passivo ativo!\nJogue normal: eggs, hatch, farm, auction...", Color3.fromRGB(80, 230, 120))
     task.spawn(hookLoop)
     task.spawn(statsLoop)
-    -- flush final garantido (loop mantem vivo)
-    while true do
-        task.wait(FLUSH_SECONDS)
-        flushCaptures(true)
-    end
+    task.spawn(flushLoop)
+    -- mainFlow termina; os loops dedicados mantem o script vivo
 end
 
 safeSpawn(mainFlow)
