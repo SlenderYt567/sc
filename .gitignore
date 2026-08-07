@@ -1,6 +1,6 @@
 --[[
     SlenderHub | Animal Hospital (Anomaly) — Script Premium
-    Versão: 4.0.1 (UI NATIVA ScreenGui — Corrigido)
+    Versão: 4.1.0 (UI NATIVA + Aba Farm: Slime/Diagnose/Atendimento)
 ]]
 
 -- =====================================
@@ -429,6 +429,184 @@ local function SetAutoInteract(enabled)
 end
 
 -- =====================================
+-- FARM ENGINE (Slime / Diagnose / Atendimento)
+-- =====================================
+-- Mecânica real do jogo (do dump):
+--   * Slime (Grime): tag "Grime", limpa com extintor. O servidor spawna bolhas
+--     (tag "SprayingBubbles") quando o jogador USA o extintor; as bolhas ao tocar
+--     no slime disparam FireServer("ExtinguisherBubbleHitGrime") que paga cash.
+--   * Diagnose/Atendimento: server-side via ProximityPrompts (sem remote dedicado).
+--     "Inspect" = inspecionar; NPCs com PP = atender.
+local FarmOn = false
+local DiagnoseOn = false
+local AttendOn = false
+local FarmTargetPos = nil -- ESP/indicador do alvo atual (opcional)
+
+local function FindAllPrompts()
+    local list = {}
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("ProximityPrompt") then
+            table.insert(list, desc)
+        end
+    end
+    return list
+end
+
+local function PromptPos(prompt)
+    local p = prompt.Parent
+    if not p then return nil end
+    if p:IsA("BasePart") then return p.Position end
+    if p.PrimaryPart then return p.PrimaryPart.Position end
+    return nil
+end
+
+local function FirePrompt(prompt)
+    if FirePromptFn then
+        pcall(FirePromptFn, prompt)
+    else
+        -- Fallback: simula o input (métodos públicos do ProximityPrompt)
+        pcall(function() prompt:InputHoldBegin() end)
+        task.wait(0.15)
+        pcall(function() prompt:InputHoldEnd() end)
+    end
+end
+
+local function TeleportNear(pos, dist)
+    local root = GetRoot()
+    if not root or not pos then return end
+    local delta = pos - root.Position
+    local mag = delta.Magnitude
+    if mag < (dist or 6) then return end
+    root.CFrame = CFrame.new(root.Position + delta.Unit * (mag - (dist or 6)))
+end
+
+-- Extintor: procura Tool no inventário (nome/atributo genérico)
+local function FindExtinguisher()
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            local n = string.lower(tool.Name)
+            if string.find(n, "extinguisher") or string.find(n, "fire") or string.find(n, "extintor")
+                or tool:GetAttribute("FireExtinguisher") or tool:GetAttribute("IsFireExtinguisher") then
+                return tool
+            end
+        end
+    end
+    return nil
+end
+
+local function FindActiveGrime()
+    local best, bestDist = nil, math.huge
+    local root = GetRoot()
+    for _, m in ipairs(CollectionService:GetTagged("Grime")) do
+        if m:IsA("Model") and m.PrimaryPart and m:GetAttribute("Enabled") ~= false then
+            local d = root and (root.Position - m.PrimaryPart.Position).Magnitude or 0
+            if d < bestDist then
+                best, bestDist = m, d
+            end
+        end
+    end
+    return best
+end
+
+local function UseExtinguisher(tool)
+    local hum = GetHumanoid()
+    if not hum or not tool then return end
+    pcall(function() hum:EquipTool(tool) end)
+    task.wait(0.15)
+    pcall(function() tool:Activate() end)
+end
+
+-- AUTO FARM: limpa slime com o extintor (teleporta até o alvo)
+local function SetAutoFarm(enabled)
+    FarmOn = enabled
+    if not enabled then
+        SafeNotify("Auto Farm", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local warnedNoTool = false
+        while FarmOn and task.wait(1.4) do
+            pcall(function()
+                local tool = FindExtinguisher()
+                if not tool then
+                    if not warnedNoTool then
+                        SafeNotify("Auto Farm", "Extintor não encontrado no inventário", 4)
+                        warnedNoTool = true
+                    end
+                    return
+                end
+                warnedNoTool = false
+                local grime = FindActiveGrime()
+                if not grime then return end
+                FarmTargetPos = grime.PrimaryPart.Position
+                TeleportNear(grime.PrimaryPart.Position, 4)
+                UseExtinguisher(tool)
+                task.wait(0.6)
+                UseExtinguisher(tool)
+            end)
+        end
+    end)
+end
+
+-- AUTO DIAGNOSE: dispara prompts de inspeção (tag Inspect)
+local function SetAutoDiagnose(enabled)
+    DiagnoseOn = enabled
+    if not enabled then
+        SafeNotify("Auto Diagnose", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local last = {}
+        while DiagnoseOn and task.wait(1.2) do
+            pcall(function()
+                local now = os.clock()
+                for _, prompt in ipairs(FindAllPrompts()) do
+                    if prompt:HasTag("Inspect") then
+                        local pos = PromptPos(prompt)
+                        if pos and (not last[prompt] or now - last[prompt] > 5) then
+                            TeleportNear(pos, 4)
+                            FirePrompt(prompt)
+                            last[prompt] = now
+                            task.wait(0.5)
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO ATENDIMENTO: dispara qualquer PP em NPCs (pacientes) e promps de tarefa
+local function SetAutoAttend(enabled)
+    AttendOn = enabled
+    if not enabled then
+        SafeNotify("Auto Atendimento", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local last = {}
+        while AttendOn and task.wait(1.2) do
+            pcall(function()
+                local now = os.clock()
+                for _, prompt in ipairs(FindAllPrompts()) do
+                    local parent = prompt.Parent
+                    local isNpc = prompt:HasTag("NPC") or (parent and (parent:HasTag("NPC") or parent:IsA("Model") and parent.Parent and parent.Parent:HasTag("NPC")))
+                    if isNpc and not prompt:HasTag("Inspect") then
+                        local pos = PromptPos(prompt)
+                        if pos and (not last[prompt] or now - last[prompt] > 5) then
+                            TeleportNear(pos, 4)
+                            FirePrompt(prompt)
+                            last[prompt] = now
+                            task.wait(0.5)
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
 -- MOVEMENT
 -- =====================================
 local NoclipOn = false
@@ -620,6 +798,7 @@ local TabDefs = {
     { Name = "Main",     Icon = "👤" },
     { Name = "Sanidade", Icon = "❤️" },
     { Name = "Auto",     Icon = "⚡" },
+    { Name = "Farm",     Icon = "🧹" },
     { Name = "Visual",   Icon = "👁" },
     { Name = "Movimento", Icon = "🎮" },
     { Name = "Settings", Icon = "⚙️" },
@@ -647,20 +826,20 @@ end
 for i, def in ipairs(TabDefs) do
     local btn = Mk("TextButton", {
         Parent = TabsBar, BackgroundColor3 = ThemeUI.Card, Text = "",
-        Position = UDim2.fromOffset(0, (i-1) * 62), Size = UDim2.fromOffset(150, 54),
+        Position = UDim2.fromOffset(0, (i-1) * 50), Size = UDim2.fromOffset(150, 44),
         ZIndex = 2,
     })
     Corner(btn, 8)
     Stroke(btn, ThemeUI.Line, 1)
     Mk("TextLabel", {
         Parent = btn, Name = "Icon", BackgroundTransparency = 1, Font = Enum.Font.Gotham,
-        Text = def.Icon, TextColor3 = ThemeUI.Text, TextSize = 18,
-        Position = UDim2.fromOffset(10, 4), Size = UDim2.fromOffset(30, 30),
+        Text = def.Icon, TextColor3 = ThemeUI.Text, TextSize = 16,
+        Position = UDim2.fromOffset(8, 3), Size = UDim2.fromOffset(28, 28),
     })
     Mk("TextLabel", {
         Parent = btn, Name = "Label", BackgroundTransparency = 1, Font = Enum.Font.GothamBold,
-        Text = def.Name, TextColor3 = ThemeUI.Sub, TextSize = 15,
-        Position = UDim2.fromOffset(44, 0), Size = UDim2.fromOffset(100, 54),
+        Text = def.Name, TextColor3 = ThemeUI.Sub, TextSize = 14,
+        Position = UDim2.fromOffset(40, 0), Size = UDim2.fromOffset(104, 44),
         TextXAlignment = Enum.TextXAlignment.Left,
     })
     btn.MouseButton1Click:Connect(function() ShowTab(i) end)
@@ -827,24 +1006,36 @@ Section(P[3], "Tarefas")
 Spacer(P[3], 26)
 Toggle(P[3], "Auto Interagir", "Inspect/Shop", false, SetAutoInteract)
 
--- VISUAL
-Section(P[4], "ESP")
+-- FARM
+Section(P[4], "Automações de Farm")
 Spacer(P[4], 26)
-Toggle(P[4], "ESP por tags", "NPC/Anomalia/Grime/Door", false, SetESP)
+Toggle(P[4], "Auto Farm (Slime)", "Equipa extintor e limpa Grime", false, SetAutoFarm)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Diagnose", "Dispara prompts Inspect", false, SetAutoDiagnose)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Atendimento", "Dispara PPs em NPCs", false, SetAutoAttend)
+Spacer(P[4], 6)
+Button(P[4], "Informação: requer extintor no inventário",
+    function() SafeNotify("Auto Farm", "Farm de slime = limpar Grime com extintor (cash). Sem remote direto no cliente.", 6) end)
+
+-- VISUAL
+Section(P[5], "ESP")
+Spacer(P[5], 26)
+Toggle(P[5], "ESP por tags", "NPC/Anomalia/Grime/Door", false, SetESP)
 
 -- MOVIMENTO
-Section(P[5], "Locomoção")
-Spacer(P[5], 26)
-Slider(P[5], "WalkSpeed", 10, 200, Config.WalkSpeed, SetWalkSpeed)
-Spacer(P[5], 6)
-Toggle(P[5], "Noclip", "", false, SetNoclip)
-Spacer(P[5], 6)
-Toggle(P[5], "Fly (Space/Shift)", "", false, SetFly)
+Section(P[6], "Locomoção")
+Spacer(P[6], 26)
+Slider(P[6], "WalkSpeed", 10, 200, Config.WalkSpeed, SetWalkSpeed)
+Spacer(P[6], 6)
+Toggle(P[6], "Noclip", "", false, SetNoclip)
+Spacer(P[6], 6)
+Toggle(P[6], "Fly (Space/Shift)", "", false, SetFly)
 
 -- SETTINGS
-Section(P[6], "Informações")
-Spacer(P[6], 26)
-Button(P[6], "Esconder UI (Atalho: RCTRL)", function() UiGui.Enabled = false end)
+Section(P[7], "Informações")
+Spacer(P[7], 26)
+Button(P[7], "Esconder UI (Atalho: RCTRL)", function() UiGui.Enabled = false end)
 
 ShowTab(1)
 
