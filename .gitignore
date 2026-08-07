@@ -1,6 +1,6 @@
 --[[
     SlenderHub | Animal Hospital (Anomaly) — Script Premium
-    Versão: 4.2.0 (Farm estilo OP: Auto Interact ALL + Slime/Fogo + Revive + Café)
+    Versão: 4.3.0 (Farm OP v2: Shift Loop, Objetivo HUD/TP, Carry, Café TP, prioridade)
 ]]
 
 -- =====================================
@@ -641,7 +641,7 @@ end
 
 -- AUTO ATENDIMENTO: dispara QUALQUER PP/ClickDetector do mapa (check-in,
 -- badges, máquinas, tratamento, pacientes). Técnica "Auto-Interact ALL"
--- dos hubs OP: teleporta para cada prompt e dispara.
+-- dos hubs OP: prioriza os mais próximos, teleporta e dispara.
 local function SetAutoAttend(enabled)
     AttendOn = enabled
     if not enabled then
@@ -653,16 +653,27 @@ local function SetAutoAttend(enabled)
         while AttendOn and task.wait(1.0) do
             pcall(function()
                 local now = os.clock()
-                -- PPs
-                for _, prompt in ipairs(FindAllPrompts()) do
+                local root = GetRoot()
+                -- PPs ordenados por proximidade (mais próximo primeiro)
+                local prompts = FindAllPrompts()
+                local sorted = {}
+                for _, prompt in ipairs(prompts) do
                     if prompt.Enabled and not prompt:HasTag("Inspect") then
                         local pos = PromptPos(prompt)
-                        if pos and (not last[prompt] or now - last[prompt] > 4) then
-                            TeleportNear(pos, 3)
-                            FirePrompt(prompt)
-                            last[prompt] = now
-                            task.wait(0.35)
+                        if pos then
+                            table.insert(sorted, { prompt = prompt, pos = pos,
+                                d = root and (root.Position - pos).Magnitude or math.huge })
                         end
+                    end
+                end
+                table.sort(sorted, function(a, b) return a.d < b.d end)
+                for _, item in ipairs(sorted) do
+                    local prompt, pos = item.prompt, item.pos
+                    if not last[prompt] or now - last[prompt] > 4 then
+                        TeleportNear(pos, 3)
+                        FirePrompt(prompt)
+                        last[prompt] = now
+                        task.wait(0.35)
                     end
                 end
                 -- ClickDetectors (algumas máquinas usam CD em vez de PP)
@@ -712,6 +723,24 @@ local function SetAutoRevive(enabled)
 end
 
 -- AUTO CAFÉ: usa item de café quando a sanidade está baixa
+-- AUTO CAFÉ com teleporte para a máquina: se não há café no inventário,
+-- procura a máquina de café no mapa (nome contém coffee/café), teleporta e
+-- interage com o prompt dela para pegar um café.
+local function FindCoffeeMachine()
+    local root = GetRoot()
+    local best, bestD = nil, math.huge
+    for _, part in ipairs(workspace:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local n = string.lower(part.Name)
+            if string.find(n, "coffee") or string.find(n, "café") then
+                local d = root and (root.Position - part.Position).Magnitude or 0
+                if d < bestD then best, bestD = part, d end
+            end
+        end
+    end
+    return best
+end
+
 local function SetAutoCoffee(enabled)
     CoffeeOn = enabled
     if not enabled then
@@ -724,6 +753,7 @@ local function SetAutoCoffee(enabled)
             pcall(function()
                 local sanity = LocalPlayer:GetAttribute("Sanity") or 100
                 if sanity > 60 then return end
+                -- 1) tenta café no inventário
                 for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
                     if tool:IsA("Tool") then
                         local n = string.lower(tool.Name)
@@ -738,9 +768,162 @@ local function SetAutoCoffee(enabled)
                         end
                     end
                 end
+                -- 2) fallback: teleporta para a máquina e interage
+                local machine = FindCoffeeMachine()
+                if machine then
+                    TeleportNear(machine.Position, 3)
+                    task.wait(0.3)
+                    for _, prompt in ipairs(FindAllPrompts()) do
+                        if prompt.Parent == machine or (prompt.Parent and prompt.Parent:IsDescendantOf(machine)) then
+                            FirePrompt(prompt)
+                            break
+                        end
+                    end
+                    warnedNoCoffee = false
+                    task.wait(2)
+                    return
+                end
                 if not warnedNoCoffee then
-                    SafeNotify("Auto Café", "Nenhum café no inventário", 4)
+                    SafeNotify("Auto Café", "Nenhum café no inventário/máquina", 4)
                     warnedNoCoffee = true
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO SHIFT LOOP: detecta o fim do turno (UI RoundStatsDetailed visível,
+-- evento DisplayRoundStats) e vota replay automaticamente = turnos infinitos.
+local ShiftLoopOn = false
+
+local function RoundStatsVisible()
+    pcall(function()
+        if not (Lib and Lib.UI and Lib.UI.Get) then return false end
+        local ui = Lib.UI.Get("RoundStatsDetailed")
+        return ui and ui.Visible == true
+    end)
+end
+
+local function SetAutoShiftLoop(enabled)
+    ShiftLoopOn = enabled
+    if not enabled then
+        SafeNotify("Auto Shift Loop", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local votedAt = 0
+        while ShiftLoopOn and task.wait(1.0) do
+            pcall(function()
+                if RoundStatsVisible() then
+                    local now = os.clock()
+                    if now - votedAt > 8 then
+                        votedAt = now
+                        NetFire("PlayAgainVote")
+                        SafeNotify("Auto Shift", "Voto em jogar novamente enviado", 3)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- HUD DE OBJETIVO: mostra o objetivo atual (UI Objective) em toast e
+-- (se ativo) teleporta até o alvo apontado pelo objetivo.
+local ObjHudOn = false
+local ObjTpOn = false
+
+local function GetObjectiveText()
+    pcall(function()
+        if not (Lib and Lib.UI and Lib.UI.Get) then return nil end
+        local ui = Lib.UI.Get("Objective")
+        if not ui then return nil end
+        local f = ui:FindFirstChild("Frame")
+        local t = f and f:FindFirstChild("objective")
+        return t and t.Text or nil
+    end)
+end
+
+local function SetObjHud(enabled)
+    ObjHudOn = enabled
+    if not enabled then
+        SafeNotify("HUD Objetivo", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local lastText = ""
+        while ObjHudOn and task.wait(1.5) do
+            pcall(function()
+                local txt = GetObjectiveText()
+                if txt and txt ~= lastText then
+                    lastText = txt
+                    SafeNotify("Objetivo", txt, 4)
+                end
+            end)
+        end
+    end)
+end
+
+local function SetObjTeleport(enabled)
+    ObjTpOn = enabled
+    if not enabled then
+        SafeNotify("TP Objetivo", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local lastTarget = nil
+        while ObjTpOn and task.wait(1.0) do
+            pcall(function()
+                -- alvo do ponteiro (SetPointerTarget) — procura o mais próximo
+                -- de uma instância marcada como objetivo pelo servidor
+                local root = GetRoot()
+                if not root then return end
+                local best, bestD = nil, 45
+                for _, part in ipairs(workspace:GetDescendants()) do
+                    if part:IsA("BasePart") and part:HasTag("ObjectiveTarget") then
+                        local d = (root.Position - part.Position).Magnitude
+                        if d < bestD then best, bestD = part, d end
+                    end
+                end
+                if best then
+                    TeleportNear(best.Position, 4)
+                    lastTarget = best
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO PACIENTES CAÍDOS: acha NPCs desmaiados (Humanoid.Health <= 0 que não
+-- são jogadores) e teleporta perto para o prompt de carregar aparecer/ser disparado.
+local CarryOn = false
+
+local function SetAutoCarry(enabled)
+    CarryOn = enabled
+    if not enabled then
+        SafeNotify("Auto Carregar", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while CarryOn and task.wait(1.5) do
+            pcall(function()
+                local root = GetRoot()
+                if not root then return end
+                local best, bestD = nil, math.huge
+                for _, model in ipairs(workspace:GetDescendants()) do
+                    if model:IsA("Model") and model ~= LocalPlayer.Character then
+                        local hum = model:FindFirstChildOfClass("Humanoid")
+                        if hum and hum.Health <= 0 and hum.MaxHealth > 0 then
+                            local prim = model.PrimaryPart
+                            if prim then
+                                local d = (root.Position - prim.Position).Magnitude
+                                if d < bestD then best, bestD = model, d end
+                            end
+                        end
+                    end
+                end
+                if best and best.PrimaryPart then
+                    FarmTargetPos = best.PrimaryPart.Position
+                    TeleportNear(best.PrimaryPart.Position, 4)
                 end
             end)
         end
@@ -1159,6 +1342,14 @@ Spacer(P[4], 6)
 Toggle(P[4], "Auto Revive", "Revive jogadores caídos (DeadPlayer)", false, SetAutoRevive)
 Spacer(P[4], 6)
 Toggle(P[4], "Auto Café", "Usa café quando sanidade < 60%", false, SetAutoCoffee)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Shift Loop", "Vota replay no fim do turno (turnos infinitos)", false, SetAutoShiftLoop)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Carregar Caídos", "Vai até NPCs desmaiados (carry)", false, SetAutoCarry)
+Spacer(P[4], 6)
+Toggle(P[4], "HUD Objetivo", "Mostra o objetivo atual em toast", false, SetObjHud)
+Spacer(P[4], 6)
+Toggle(P[4], "TP Objetivo", "Teleporta para alvo do objetivo", false, SetObjTeleport)
 Spacer(P[4], 6)
 Section(P[4], "Geral")
 Spacer(P[4], 26)
