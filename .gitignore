@@ -1,16 +1,16 @@
 --[[
     SlenderHub | Animal Hospital (Anomaly) — Script Premium
     Dev: SlenderHub Team
-    Versão: 2.0.0 (recalibrado com dump 07/08/2026)
+    Versão: 3.0.0 (UI Fluent + recalibração dump 07/08/2026)
 
     Feito para executors PC (Wave/Codex/Delta/etc.) com matriz de fallback.
-    UI padrão SlenderWind (embutida, enxuta).
+    UI: Fluent (dawid-scripts) — mesmo padrão do Horse Race.
     Key system: verificação via API do SlenderHub (pluggável).
 
     CALIBRAÇÃO REAL (dump SlenderHub_GameDumper — 07/08/2026):
-    - O jogo NÃO expõe remotes diretos: todo o tráfego passa pelo módulo
-      ReplicatedStorage/Lib com wrapper Network:FireServer(nome, ...) que
-      roteia para RE/RequestRemoteEvent. Este script usa o PRÓPRIO Lib.
+    - Todo o tráfego passa por ReplicatedStorage/Lib com wrapper
+      Network:FireServer(nome, ...) → roteia para RE/RequestRemoteEvent.
+      Este script usa o PRÓPRIO Lib do jogo (require direto).
     - Sanidade: toda perda é client-side via Lib.PlayerLostSanity(amount, reason).
       Bloquear no wrapper = sanidade infinita de verdade (servidor nunca recebe).
     - Morte: atributos DeathCount/MAX_DeathCount em game.Players (replicados);
@@ -20,57 +20,73 @@
     - HONEYPOTS confirmados (NÃO FIRE): RE/ScannerKillGhost, RE/DialogDecision.
 ]]
 
-local SlenderHub = {}
-
----------------------------------------------------------------------------
--- CONFIG (valores reais do jogo — dump 07/08/2026)
----------------------------------------------------------------------------
-SlenderHub.Config = {
-    -- API de verificação de key (mesmo endpoint do loader do site)
+-- =====================================
+-- CONFIG
+-- =====================================
+local Config = {
     VerifyUrl  = "https://www.slenderhub.shop/api/exec",
     AllowTrial = true,
-
-    -- Módulo central do jogo (ReplicatedStorage/Lib) — detectado automaticamente
-    -- Atributos reais de sanidade no LocalPlayer
-    SanityAttr = "Sanity",
-    SanityMultAttr = "SanityImpactMultiplier",
-
-    -- Tags reais do CollectionService (ESP/automação)
-    EspTags = {
-        Good   = { "NPC" },                                   -- pacientes/visitantes
-        Danger = { "Anomaly", "StalkerMonster", "TallMonsterSpawn", "Shadow", "DontLookUp" },
-        Task   = { "Grime", "EmergencyEventCounter" },        -- sujeira / eventos ativos
-        Door   = { "Door" },
-    },
-
-    -- Tags de ProximityPrompt úteis para automação
-    PromptTags = { "Inspect", "ShopItemPP" },
-
-    -- GUIs reais usadas em sustos/efeitos (anti-jumpscare por nome)
-    ScareGuis = { "Jumpscare", "static", "DontLookUp", "EmergencyCounter" },
-
-    -- Jogabilidade
-    WalkSpeed     = 22,
-    SanityFloor   = 100,
-    EspColorGood  = Color3.fromRGB(60, 255, 120),
-    EspColorDanger= Color3.fromRGB(255, 60, 60),
-    EspColorTask  = Color3.fromRGB(250, 180, 60),
-    EspColorDoor  = Color3.fromRGB(60, 130, 250),
+    WalkSpeed  = 22,
+    SanityFloor = 100,
+    EspGood    = Color3.fromRGB(60, 255, 120),
+    EspDanger  = Color3.fromRGB(255, 60, 60),
+    EspTask    = Color3.fromRGB(250, 180, 60),
+    EspDoor    = Color3.fromRGB(60, 130, 250),
+    ScareGuis  = { "Jumpscare", "static", "DontLookUp", "EmergencyCounter" },
 }
 
----------------------------------------------------------------------------
--- SERVICES + UTILS
----------------------------------------------------------------------------
-local RunService   = game:GetService("RunService")
-local Players      = game:GetService("Players")
+-- =====================================
+-- LOAD FLUENT (fallback: aviso claro se falhar)
+-- =====================================
+local Fluent = nil
+local LoadError = nil
+
+local okL, errL = pcall(function()
+    return loadstring(game:HttpGet(
+        "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"
+    ))()
+end)
+if okL and type(errL) == "table" and errL.CreateWindow then
+    Fluent = errL
+else
+    LoadError = "Fluent: " .. tostring(okL and "retorno inválido (nil/loadstring)" or errL)
+end
+
+local SaveManager, InterfaceManager
+if Fluent then
+    pcall(function()
+        SaveManager = loadstring(game:HttpGet(
+            "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"
+        ))()
+    end)
+    pcall(function()
+        InterfaceManager = loadstring(game:HttpGet(
+            "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"
+        ))()
+    end)
+end
+
+-- Notificação segura (funciona mesmo antes da janela existir)
+local function SafeNotify(title, content, duration)
+    if Fluent and Fluent.Notify then
+        pcall(function() Fluent:Notify({ Title = title, Content = content, Duration = duration or 4 }) end)
+    else
+        warn("[SlenderHub] " .. tostring(title) .. " — " .. tostring(content))
+    end
+end
+
+-- =====================================
+-- SERVICES
+-- =====================================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local HttpService  = game:GetService("HttpService")
-local CoreGui      = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
 local CollectionService = game:GetService("CollectionService")
+local CoreGui = game:GetService("CoreGui")
 
-local LocalPlayer  = Players.LocalPlayer
-local Camera       = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
 
 local function GetHumanoid()
     local char = LocalPlayer.Character
@@ -84,342 +100,221 @@ local function GetRoot()
     return char:FindFirstChild("HumanoidRootPart")
 end
 
-local function Tween(obj, props, dur)
-    dur = dur or 0.25
-    local tween = TweenService:Create(obj, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props)
-    tween:Play()
-    return tween
-end
-
-local function Notify(title, text, dur, type)
-    if SlenderHub.UI and SlenderHub.UI.Notify then
-        SlenderHub.UI.Notify(title, text, dur, type)
-    end
-end
-
----------------------------------------------------------------------------
--- MATRIZ DE EXECUTORES (fallbacks — nunca assuma que a função existe)
----------------------------------------------------------------------------
+-- =====================================
+-- MATRIZ DE EXECUTORES
+-- =====================================
 local Env = getgenv and getgenv() or _G
 
-local FunctionMap = {
-    CheckCaller       = function() return type(checkcaller) == "function" and checkcaller or nil end,
-    NewCClosure       = function() return type(newcclosure) == "function" and newcclosure or nil end,
-    HookMetaMethod    = function() return type(hookmetamethod) == "function" and hookmetamethod or nil end,
-    HookFunction      = function() return type(hookfunction) == "function" and hookfunction or nil end,
-    GetRawMetaTable   = function() return type(getrawmetatable) == "function" and getrawmetatable or nil end,
-    SetReadOnly       = function() return type(setreadonly) == "function" and setreadonly or nil end,
-    FirePrompt        = function() return type(fireproximityprompt) == "function" and fireproximityprompt or nil end,
-    FireClick         = function() return type(fireclickdetector) == "function" and fireclickdetector or nil end,
-    GetGC             = function() return type(getgc) == "function" and getgc or nil end,
-    GetReg            = function() return type(getreg) == "function" and getreg or nil end,
-    IdentifyExecutor  = function()
-        local names = { "getexecutorname", "identifyexecutor", "get_identify" }
-        for _, n in ipairs(names) do
-            if type(Env[n]) == "function" then return Env[n]() end
+local function ExecFn(name)
+    if type(Env[name]) == "function" then return Env[name] end
+    return nil
+end
+
+local function Fn2(tbl)
+    local ok, v = pcall(function() return tbl() end)
+    return ok and v or nil
+end
+
+local CheckCaller = Fn2(function()
+    return type(checkcaller) == "function" and checkcaller or nil
+end)
+local FirePromptFn = Fn2(function()
+    return type(fireproximityprompt) == "function" and fireproximityprompt or nil
+end)
+local FireClickFn = Fn2(function()
+    return type(fireclickdetector) == "function" and fireclickdetector or nil
+end)
+local GetRawMeta = Fn2(function()
+    return type(getrawmetatable) == "function" and getrawmetatable or nil
+end)
+local NewCClosure = Fn2(function()
+    return type(newcclosure) == "function" and newcclosure or nil
+end)
+local HookMeta = Fn2(function()
+    return type(hookmetamethod) == "function" and hookmetamethod or nil
+end)
+
+local function IdentifyExecutor()
+    local names = { "getexecutorname", "identifyexecutor", "get_identify" }
+    for _, n in ipairs(names) do
+        if type(Env[n]) == "function" then
+            local ok, name = pcall(Env[n])
+            if ok then return tostring(name) end
         end
-        return "unknown"
-    end,
-}
-
-local function Fn(name)
-    local ok, val = pcall(FunctionMap[name])
-    return ok and val or nil
-end
-
---// HWID (pluggável: cada executor expõe de um jeito)
-local HWID
-do
-    local ok, h = pcall(function()
-        local exec = Fn("IdentifyExecutor") or "unknown"
-        if type(Env["get_hwid"]) == "function" then return tostring(Env.get_hwid()) end
-        local base = tostring(LocalPlayer.UserId) .. ":" .. exec
-        return HttpService:GenerateGUID(false)
-    end)
-    HWID = ok and h or "unknown"
-end
-
----------------------------------------------------------------------------
--- KEY SYSTEM (pluggável — mesma resposta JSON do loader: {success, tier, message})
----------------------------------------------------------------------------
-function SlenderHub.VerifyKey(key)
-    local ok, res = pcall(function()
-        local url = SlenderHub.Config.VerifyUrl
-            .. "?key=" .. HttpService:UrlEncode(key)
-            .. "&hwid=" .. HttpService:UrlEncode(HWID)
-        return HttpService:JSONDecode(game:HttpGet(url))
-    end)
-    if not ok or not res then
-        return false, "Falha na conexão com o servidor"
     end
-    if not res.success then
-        return false, res.message or "Key inválida"
-    end
-    return true, res
+    return "unknown"
 end
 
-function SlenderHub.Authenticate(key)
-    local ok, data = SlenderHub.VerifyKey(key)
-    if not ok then return false, data end
-    local tier = data.tier or data.type or "basic"
-    return true, tier
-end
-
----------------------------------------------------------------------------
--- LIB INTEGRATION (o coração do jogo: ReplicatedStorage/Lib)
----------------------------------------------------------------------------
-SlenderHub.Lib = nil
-SlenderHub.LibReady = false
-SlenderHub.Data = nil  -- dados do jogador (Lib.data)
+-- =====================================
+-- LIB INTEGRATION (ReplicatedStorage/Lib — coração do jogo)
+-- =====================================
+local Lib = nil
+local LibReady = false
+local Data = nil
 
 do
     local ok, lib = pcall(function()
         return require(game.ReplicatedStorage:WaitForChild("Lib", 10))
     end)
     if ok and lib then
-        SlenderHub.Lib = lib
-        SlenderHub.LibReady = true
-        -- Hook do Network para capturar dados/eventos sem quebrar o jogo
-        pcall(function()
-            if lib.Network and lib.Network.BindEvents then
-                local oldBind = lib.Network.BindEvents
-                lib.Network.BindEvents = function(self, events)
-                    if type(events) == "table" then
-                        if SlenderHub.OnServerEvents then
-                            SlenderHub.OnServerEvents(events)
-                        end
-                    end
-                    return oldBind(self, events)
-                end
-            end
-        end)
-        pcall(function()
-            if lib.Inject then
-                local oldInject = lib.Inject
-                -- O jogo chama com DOT: lib.Inject("Nome", fn)
-                lib.Inject = function(name, fn, ...)
-                    if SlenderHub.OnInject then
-                        SlenderHub.OnInject(name, fn)
-                    end
-                    return oldInject(name, fn, ...)
-                end
-            end
-        end)
-        -- Atualiza dados quando o jogo sincronizar
-        pcall(function()
-            if lib.dHandler and lib.dHandler.UpdateData then
-                lib.dHandler.UpdateData.Event:Connect(function()
-                    SlenderHub.Data = lib.data
-                end)
-            end
-        end)
-        pcall(function()
-            if lib.DS and lib.DS.RequestData then
-                task.spawn(function()
-                    local ok2, data = pcall(lib.DS.RequestData)
-                    if ok2 then SlenderHub.Data = lib.data or data end
-                end)
-            end
-        end)
+        Lib = lib
+        LibReady = true
     end
 end
 
--- Fire seguro por nome (usa o wrapper do jogo; fallback: remote direto por heurística)
-function SlenderHub.NetFire(name, ...)
-    local lib = SlenderHub.Lib
-    if lib and lib.Network and lib.Network.FireServer then
-        local ok = pcall(lib.Network.FireServer, lib.Network, name, ...)
+if Lib then
+    -- Hook BindEvents: captura handlers do servidor sem quebrar nada
+    pcall(function()
+        if Lib.Network and Lib.Network.BindEvents then
+            local old = Lib.Network.BindEvents
+            Lib.Network.BindEvents = function(self, events)
+                if type(events) == "table" and OnServerEvents then
+                    OnServerEvents(events)
+                end
+                return old(self, events)
+            end
+        end
+    end)
+    -- Hook Inject: captura handlers injetados (dot call!)
+    pcall(function()
+        if Lib.Inject then
+            local old = Lib.Inject
+            Lib.Inject = function(name, fn, ...)
+                if OnInject then OnInject(name, fn) end
+                return old(name, fn, ...)
+            end
+        end
+    end)
+    -- Sincronização de dados
+    pcall(function()
+        if Lib.dHandler and Lib.dHandler.UpdateData then
+            Lib.dHandler.UpdateData.Event:Connect(function()
+                Data = Lib.data
+            end)
+        end
+    end)
+    pcall(function()
+        if Lib.DS and Lib.DS.RequestData then
+            task.spawn(function()
+                local ok2, d = pcall(Lib.DS.RequestData)
+                if ok2 then Data = Lib.data or d end
+            end)
+        end
+    end)
+end
+
+local ServerEventHooks = {}
+local InjectHooks = {}
+
+local function OnServerEvents(events)
+    for name, handler in pairs(events or {}) do
+        if ServerEventHooks[name] then
+            for _, cb in ipairs(ServerEventHooks[name]) do
+                pcall(cb, handler, name)
+            end
+        end
+    end
+end
+
+local function OnInject(name, fn)
+    if name and InjectHooks[name] then
+        for _, cb in ipairs(InjectHooks[name]) do
+            pcall(cb, fn)
+        end
+    end
+end
+
+-- Fire seguro por nome (wrapper do jogo; fallback direto no gateway)
+local function NetFire(name, ...)
+    if Lib and Lib.Network and Lib.Network.FireServer then
+        local ok = pcall(Lib.Network.FireServer, Lib.Network, name, ...)
         if ok then return true end
     end
-    -- fallback: procura RE/RequestRemoteEvent e fire com o nome como primeiro arg
     pcall(function()
-        local re = game.ReplicatedStorage:FindFirstChild("Util") and game.ReplicatedStorage.Util:FindFirstChild("Net")
-            and game.ReplicatedStorage.Util.Net:FindFirstChild("RE") and game.ReplicatedStorage.Util.Net.RE:FindFirstChild("RequestRemoteEvent")
-        if re and re:IsA("RemoteEvent") then
-            re:FireServer(name, ...)
+        local util = game.ReplicatedStorage:FindFirstChild("Util")
+        local net = util and util:FindFirstChild("Net")
+        local re = net and net:FindFirstChild("RE")
+        local gw = re and re:FindFirstChild("RequestRemoteEvent")
+        if gw and gw:IsA("RemoteEvent") then
+            gw:FireServer(name, ...)
         end
     end)
     return true
 end
 
--- Leitor de dados seguros
-function SlenderHub.GetData()
-    local lib = SlenderHub.Lib
-    if lib and lib.data then return lib.data end
-    return SlenderHub.Data
+local function GetData()
+    if Lib and Lib.data then return Lib.data end
+    return Data
 end
 
--- Hook de eventos do servidor (registra handlers; features podem escutar)
-SlenderHub.ServerEventHooks = {}
-function SlenderHub.OnServerEvents(events)
-    for name, handler in pairs(events) do
-        if SlenderHub.ServerEventHooks[name] then
-            for _, cb in ipairs(SlenderHub.ServerEventHooks[name]) do
-                local ok, err = pcall(cb, handler, name)
-                if not ok then warn("[SlenderHub] hook error: " .. tostring(err)) end
-            end
-        end
+-- =====================================
+-- INF SANITY REAL (hook no PlayerLostSanity — causa raiz)
+-- =====================================
+local InfSanityOn = false
+local OrigPlayerLostSanity = Lib and Lib.PlayerLostSanity or nil
+
+local function SetInfSanity(enabled)
+    InfSanityOn = enabled
+    if not Lib then
+        SafeNotify("Lib", "Lib não encontrado — Inf Sanity indisponível", 4)
+        return
     end
-end
-function SlenderHub.OnInject(name, fn)
-    if name and SlenderHub.InjectHooks and SlenderHub.InjectHooks[name] then
-        for _, cb in ipairs(SlenderHub.InjectHooks[name]) do
-            pcall(cb, fn)
-        end
-    end
-end
-SlenderHub.InjectHooks = {}
-
----------------------------------------------------------------------------
--- INF SANITY REAL (hook no wrapper Lib.PlayerLostSanity — causa raiz)
----------------------------------------------------------------------------
-SlenderHub.InfSanity = { Enabled = false }
-
-local OrigPlayerLostSanity = SlenderHub.Lib and SlenderHub.Lib.PlayerLostSanity
-
-function SlenderHub.SetInfSanity(enabled)
-    SlenderHub.InfSanity.Enabled = enabled
-    local lib = SlenderHub.Lib
-    if not lib then return end
-
     if enabled then
-        if not lib.PlayerLostSanity then return end
-        -- preserva o original na primeira ativação
-        if not OrigPlayerLostSanity then OrigPlayerLostSanity = lib.PlayerLostSanity end
-        lib.PlayerLostSanity = function(amount, reason)
-            -- amount > 0 = PERDA de sanidade → bloqueia
-            -- amount <= 0 = ganho (fotos queimadas) → deixa passar
-            if SlenderHub.InfSanity.Enabled and (not amount or amount > 0) then
+        if not Lib.PlayerLostSanity then
+            SafeNotify("Lib", "PlayerLostSanity não existe no Lib", 4)
+            return
+        end
+        if not OrigPlayerLostSanity then OrigPlayerLostSanity = Lib.PlayerLostSanity end
+        Lib.PlayerLostSanity = function(amount, reason)
+            if InfSanityOn and (not amount or amount > 0) then
                 return
             end
             return OrigPlayerLostSanity(amount, reason)
         end
-        -- Loop de backup: mantém os atributos no teto
         task.spawn(function()
-            while SlenderHub.InfSanity.Enabled and task.wait(0.3) do
+            while InfSanityOn and task.wait(0.3) do
                 pcall(function()
-                    LocalPlayer:SetAttribute(SlenderHub.Config.SanityAttr, SlenderHub.Config.SanityFloor)
-                    LocalPlayer:SetAttribute(SlenderHub.Config.SanityMultAttr, 0)
+                    LocalPlayer:SetAttribute("Sanity", Config.SanityFloor)
+                    LocalPlayer:SetAttribute("SanityImpactMultiplier", 0)
                 end)
             end
         end)
     else
-        -- restaura o original se existir
-        if OrigPlayerLostSanity and lib.PlayerLostSanity then
-            lib.PlayerLostSanity = OrigPlayerLostSanity
+        if OrigPlayerLostSanity and Lib.PlayerLostSanity then
+            Lib.PlayerLostSanity = OrigPlayerLostSanity
         end
     end
 end
 
----------------------------------------------------------------------------
--- AUTO HEARTBEAT (auto-completa o minigame de coração do revive)
----------------------------------------------------------------------------
-SlenderHub.AutoHeartbeat = { Enabled = false }
+-- =====================================
+-- AUTO HEARTBEAT (auto-completa minigame de coração)
+-- =====================================
+local AutoHeartbeatOn = false
 
 do
-    local state
-    -- Hook: quando o jogo registrar o handler do minigame, embrulha para
-    -- capturar o estado (state) enviado pelo servidor no StartHeartbeatMinigame
-    local function setup()
-        local lib = SlenderHub.Lib
-        if not lib or not lib.Network or not lib.Network.BindEvents then return end
-        local oldBind = lib.Network.BindEvents
-        lib.Network.BindEvents = function(self, events)
-            if type(events) == "table" and events.StartHeartbeatMinigame then
-                local orig = events.StartHeartbeatMinigame
-                events.StartHeartbeatMinigame = function(p34, p35, p36)
-                    state = p34
-                    if SlenderHub.AutoHeartbeat.Enabled then
-                        task.defer(function()
-                            pcall(function()
-                                if lib.HeartMinigameComplete then
-                                    lib.HeartMinigameComplete(true)
-                                end
-                            end)
-                        end)
-                    end
-                    return orig and orig(p34, p35, p36) or nil
-                end
-            end
-            return oldBind(self, events)
-        end
-    end
-    setup()
-
-    function SlenderHub.SetAutoHeartbeat(enabled)
-        SlenderHub.AutoHeartbeat.Enabled = enabled
-        if not enabled then return end
-        task.spawn(function()
-            -- Loop de vigilância: se o minigame abrir na UI, completa na hora.
-            -- Fallback para quando o BindEvents já rodou antes do hook.
-            while SlenderHub.AutoHeartbeat.Enabled and task.wait(0.25) do
-                pcall(function()
-                    local lib = SlenderHub.Lib
-                    if not lib then return end
-                    local ui = lib.UI and lib.UI.Get and lib.UI.Get("HeartbeatMinigameUI")
-                    if ui then
-                        local frame = ui:FindFirstChild("Frame")
-                        if frame and frame.Visible and lib.HeartMinigameComplete then
-                            lib.HeartMinigameComplete(true)
-                        end
-                    end
+    ServerEventHooks["StartHeartbeatMinigame"] = {
+        function()
+            if AutoHeartbeatOn and Lib and Lib.HeartMinigameComplete then
+                task.defer(function()
+                    pcall(Lib.HeartMinigameComplete, true)
                 end)
             end
-        end)
-    end
+        end
+    }
 end
 
----------------------------------------------------------------------------
--- ANTI JUMPSCARE (GUIs reais + hooks nos handlers de susto)
----------------------------------------------------------------------------
-SlenderHub.AntiJumpscare = { Enabled = false, Done = {} }
-
-do
-    -- Substitui handlers de susto registrados via Network:BindEvents
-    local scareNames = { "Jumpscare", "JumpscareHollow", "JumpscareShadow", "JumpscareShadowWithEyesIMG", "JumpscareStalker" }
-    local function blockIfScare(name)
-        for _, n in ipairs(scareNames) do
-            if name == n then return true end
-        end
-        return false
-    end
-
-    local function setup()
-        local lib = SlenderHub.Lib
-        if not lib or not lib.Network or not lib.Network.BindEvents then return end
-        local oldBind = lib.Network.BindEvents
-        lib.Network.BindEvents = function(self, events)
-            if type(events) == "table" and SlenderHub.AntiJumpscare.Enabled then
-                for name in pairs(events) do
-                    if blockIfScare(name) then
-                        events[name] = function() end -- no-op
-                    end
-                end
-            end
-            return oldBind(self, events)
-        end
-    end
-    setup()
-end
-
-function SlenderHub.SetAntiJumpscare(enabled)
-    SlenderHub.AntiJumpscare.Enabled = enabled
+local function SetAutoHeartbeat(enabled)
+    AutoHeartbeatOn = enabled
     if not enabled then return end
     task.spawn(function()
-        while SlenderHub.AntiJumpscare.Enabled and task.wait(0.3) do
+        while AutoHeartbeatOn and task.wait(0.25) do
             pcall(function()
-                -- Desabilita GUIs de susto por nome real
-                for _, guiName in ipairs(SlenderHub.Config.ScareGuis) do
-                    local pg = LocalPlayer:FindFirstChild("PlayerGui")
-                    if pg then
-                        local gui = pg:FindFirstChild(guiName)
-                        if gui and gui:IsA("ScreenGui") and gui.Enabled then
-                            gui.Enabled = false
-                        end
-                        local cg = game:GetService("CoreGui"):FindFirstChild(guiName)
-                        if cg and cg:IsA("ScreenGui") and cg.Enabled then
-                            cg.Enabled = false
-                        end
+                if not (Lib and Lib.HeartMinigameComplete) then return end
+                local ui = Lib.UI and Lib.UI.Get and Lib.UI.Get("HeartbeatMinigameUI")
+                if ui then
+                    local frame = ui:FindFirstChild("Frame")
+                    if frame and frame.Visible then
+                        Lib.HeartMinigameComplete(true)
                     end
                 end
             end)
@@ -427,41 +322,100 @@ function SlenderHub.SetAntiJumpscare(enabled)
     end)
 end
 
----------------------------------------------------------------------------
--- ESP REAL (por tags do CollectionService)
----------------------------------------------------------------------------
-SlenderHub.ESP = { Enabled = false }
+-- =====================================
+-- ANTI JUMPSCARE (handlers + GUIs reais)
+-- =====================================
+local AntiJumpscareOn = false
 
-local function Highlight(inst, color)
-    if inst:FindFirstChildOfClass("Highlight") then return end
+do
+    local scareNames = {
+        "Jumpscare", "JumpscareHollow", "JumpscareShadow",
+        "JumpscareShadowWithEyesIMG", "JumpscareStalker",
+    }
+    local function IsScare(name)
+        for _, n in ipairs(scareNames) do
+            if name == n then return true end
+        end
+        return false
+    end
+
+    local function HookBindEventsForScares()
+        local lib = Lib
+        if not (lib and lib.Network and lib.Network.BindEvents) then return end
+        local old = lib.Network.BindEvents
+        lib.Network.BindEvents = function(self, events)
+            if type(events) == "table" and AntiJumpscareOn then
+                for name in pairs(events) do
+                    if IsScare(name) then
+                        events[name] = function() end
+                    end
+                end
+            end
+            if OnServerEvents then OnServerEvents(events) end
+            return old(self, events)
+        end
+    end
+    HookBindEventsForScares()
+end
+
+local function SetAntiJumpscare(enabled)
+    AntiJumpscareOn = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while AntiJumpscareOn and task.wait(0.3) do
+            pcall(function()
+                local pg = LocalPlayer:FindFirstChild("PlayerGui")
+                if pg then
+                    for _, guiName in ipairs(Config.ScareGuis) do
+                        local gui = pg:FindFirstChild(guiName)
+                        if gui and gui:IsA("ScreenGui") and gui.Enabled then
+                            gui.Enabled = false
+                        end
+                    end
+                end
+                local cg = game:GetService("CoreGui")
+                for _, guiName in ipairs(Config.ScareGuis) do
+                    local gui = cg:FindFirstChild(guiName)
+                    if gui and gui:IsA("ScreenGui") and gui.Enabled then
+                        gui.Enabled = false
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- ESP REAL (tags CollectionService)
+-- =====================================
+local ESPOn = false
+
+local function ColorFor(model)
+    if model:HasTag("NPC") then return Config.EspGood end
+    if model:HasTag("Anomaly") or model:HasTag("StalkerMonster") or model:HasTag("TallMonsterSpawn")
+        or model:HasTag("Shadow") or model:HasTag("DontLookUp") then
+        return Config.EspDanger
+    end
+    if model:HasTag("Grime") or model:HasTag("EmergencyEventCounter") then return Config.EspTask end
+    if model:HasTag("Door") then return Config.EspDoor end
+    return nil
+end
+
+local function AddHighlight(m)
+    if m:FindFirstChildOfClass("Highlight") then return end
+    local color = ColorFor(m)
+    if not color then return end
     local hl = Instance.new("Highlight")
     hl.Name = "SlenderHubESP"
     hl.FillColor = color
     hl.FillTransparency = 0.6
     hl.OutlineColor = color
     hl.OutlineTransparency = 0
-    hl.Parent = inst
+    hl.Parent = m
 end
 
-local function ColorFor(model)
-    local c = SlenderHub.Config
-    for _, tag in ipairs(c.EspTags.Good) do
-        if model:HasTag(tag) then return c.EspColorGood end
-    end
-    for _, tag in ipairs(c.EspTags.Danger) do
-        if model:HasTag(tag) then return c.EspColorDanger end
-    end
-    for _, tag in ipairs(c.EspTags.Task) do
-        if model:HasTag(tag) then return c.EspColorTask end
-    end
-    for _, tag in ipairs(c.EspTags.Door) do
-        if model:HasTag(tag) then return c.EspColorDoor end
-    end
-    return nil
-end
-
-function SlenderHub.SetESP(enabled)
-    SlenderHub.ESP.Enabled = enabled
+local function SetESP(enabled)
+    ESPOn = enabled
     if not enabled then
         for _, hl in ipairs(workspace:GetDescendants()) do
             if hl:IsA("Highlight") and hl.Name == "SlenderHubESP" then hl:Destroy() end
@@ -469,12 +423,11 @@ function SlenderHub.SetESP(enabled)
         return
     end
     task.spawn(function()
-        while SlenderHub.ESP.Enabled and task.wait(0.5) do
+        while ESPOn and task.wait(0.5) do
             pcall(function()
                 for _, m in ipairs(workspace:GetDescendants()) do
-                    if m:IsA("Model") and m.PrimaryPart and not m:FindFirstChildOfClass("Highlight") then
-                        local color = ColorFor(m)
-                        if color then Highlight(m, color) end
+                    if m:IsA("Model") and m.PrimaryPart then
+                        AddHighlight(m)
                     end
                 end
             end)
@@ -482,21 +435,18 @@ function SlenderHub.SetESP(enabled)
     end)
 end
 
----------------------------------------------------------------------------
--- AUTO INTERACT (fire de ProximityPrompts por tags reais)
----------------------------------------------------------------------------
-SlenderHub.AutoInteract = { Enabled = false }
+-- =====================================
+-- AUTO INTERACT (prompts por tags reais)
+-- =====================================
+local AutoInteractOn = false
 
 local function FindPrompts()
     local list = {}
-    local fp = Fn("FirePrompt")
-    if not fp then return list end
-    for _, tag in ipairs(SlenderHub.Config.PromptTags) do
+    for _, tag in ipairs({ "Inspect", "ShopItemPP" }) do
         for _, inst in ipairs(CollectionService:GetTagged(tag)) do
             if inst:IsA("ProximityPrompt") then
                 table.insert(list, inst)
             else
-                -- prompt filho do modelo com tag
                 for _, desc in ipairs(inst:GetDescendants()) do
                     if desc:IsA("ProximityPrompt") then
                         table.insert(list, desc)
@@ -508,23 +458,25 @@ local function FindPrompts()
     return list
 end
 
-function SlenderHub.SetAutoInteract(enabled)
-    SlenderHub.AutoInteract.Enabled = enabled
+local function SetAutoInteract(enabled)
+    AutoInteractOn = enabled
     if not enabled then return end
+    if not FirePromptFn then
+        SafeNotify("Executor", "fireproximityprompt não disponível", 4)
+        return
+    end
     task.spawn(function()
         local last = {}
-        while SlenderHub.AutoInteract.Enabled and task.wait(0.8) do
+        while AutoInteractOn and task.wait(0.8) do
             pcall(function()
-                local fp = Fn("FirePrompt")
-                if not fp then return end
+                local root = GetRoot()
                 for _, prompt in ipairs(FindPrompts()) do
                     if not last[prompt] or task.time() - last[prompt] > 6 then
-                        -- só interage se estiver razoavelmente perto
-                        local root = GetRoot()
                         local parent = prompt.Parent
-                        local pos = parent and (parent:IsA("BasePart") and parent.Position or (parent.PrimaryPart and parent.PrimaryPart.Position)) or nil
+                        local pos = parent and (parent:IsA("BasePart") and parent.Position
+                            or (parent.PrimaryPart and parent.PrimaryPart.Position)) or nil
                         if root and pos and (root.Position - pos).Magnitude < 40 then
-                            pcall(fp, prompt)
+                            FirePromptFn(prompt)
                             last[prompt] = task.time()
                         end
                     end
@@ -534,26 +486,26 @@ function SlenderHub.SetAutoInteract(enabled)
     end)
 end
 
----------------------------------------------------------------------------
--- MOVEMENT (walkspeed / noclip / fly / teleport p/ prompt)
----------------------------------------------------------------------------
-SlenderHub.Movement = { Noclip = false, Fly = false }
+-- =====================================
+-- MOVEMENT
+-- =====================================
+local NoclipOn = false
+local FlyOn = false
+local NoclipConn = nil
 
-local NoclipConn
-
-function SlenderHub.SetWalkSpeed(v)
+local function SetWalkSpeed(v)
     local hum = GetHumanoid()
     if hum then hum.WalkSpeed = v end
 end
 
-function SlenderHub.SetNoclip(enabled)
-    SlenderHub.Movement.Noclip = enabled
+local function SetNoclip(enabled)
+    NoclipOn = enabled
     if not enabled then
         if NoclipConn then NoclipConn:Disconnect() NoclipConn = nil end
         return
     end
     if NoclipConn then NoclipConn:Disconnect() end
-    NoclipConn = RunService.Stepped:Connect(function(_, dt)
+    NoclipConn = RunService.Stepped:Connect(function()
         local hum = GetHumanoid()
         if not hum then return end
         hum:ChangeState(Enum.HumanoidStateType.Physics)
@@ -562,11 +514,11 @@ function SlenderHub.SetNoclip(enabled)
     end)
 end
 
-function SlenderHub.SetFly(enabled)
-    SlenderHub.Movement.Fly = enabled
+local function SetFly(enabled)
+    FlyOn = enabled
     if not enabled then return end
     task.spawn(function()
-        while SlenderHub.Movement.Fly and task.wait() do
+        while FlyOn and task.wait() do
             local hum = GetHumanoid()
             local root = GetRoot()
             if not hum or not root then break end
@@ -578,343 +530,144 @@ function SlenderHub.SetFly(enabled)
     end)
 end
 
----------------------------------------------------------------------------
--- MISC (lobby / votação / stats)
----------------------------------------------------------------------------
-function SlenderHub.TeleportToLobby()
-    SlenderHub.NetFire("TeleportToLobby")
-    Notify("SlenderHub", "Teleportando para o lobby...", 2, "Info")
+-- =====================================
+-- MISC
+-- =====================================
+local function TeleportToLobby()
+    NetFire("TeleportToLobby")
+    SafeNotify("SlenderHub", "Teleportando para o lobby...", 2)
 end
 
-function SlenderHub.VotePlayAgain()
-    SlenderHub.NetFire("PlayAgainVote")
-    Notify("SlenderHub", "Voto em jogar novamente enviado", 2, "Success")
+local function VotePlayAgain()
+    NetFire("PlayAgainVote")
+    SafeNotify("SlenderHub", "Voto em jogar novamente enviado", 2)
 end
 
-function SlenderHub.ReviveOther(player)
-    if player and player ~= LocalPlayer then
-        SlenderHub.NetFire("ReviveOther", player)
-        Notify("SlenderHub", "Revive enviado para " .. player.Name, 2, "Success")
-    end
-end
-
--- Mostra os dados reais (LocalCash etc.) no hub
-function SlenderHub.GetStats()
-    local data = SlenderHub.GetData()
-    if not data or not data.Stats then return nil end
-    return {
-        Cash = data.Stats.LocalCash,
-        Class = data.Stats.Class,
-    }
-end
-
----------------------------------------------------------------------------
--- UI SLENDERWIND (embutida, enxuta — padrão visual do hub)
----------------------------------------------------------------------------
-SlenderHub.UI = {}
-
-local function CreateUI()
-    local theme = {
-        MainBg   = Color3.fromRGB(18, 18, 22),
-        Sidebar  = Color3.fromRGB(23, 23, 27),
-        Element  = Color3.fromRGB(30, 30, 36),
-        Text     = Color3.fromRGB(240, 240, 240),
-        SubText  = Color3.fromRGB(160, 160, 160),
-        Accent   = Color3.fromRGB(60, 130, 250),
-        Stroke   = Color3.fromRGB(45, 45, 50),
-        Success  = Color3.fromRGB(60, 250, 100),
-        Warning  = Color3.fromRGB(250, 180, 60),
-        Error    = Color3.fromRGB(255, 85, 85),
-    }
-
-    local parent = CoreGui
-    if parent:FindFirstChild("SlenderHub") then parent.SlenderHub:Destroy() end
-
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "SlenderHub"
-    sg.ResetOnSpawn = false
-    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    sg.Parent = parent
-
-    local main = Instance.new("Frame")
-    main.BackgroundColor3 = theme.MainBg
-    main.Size = UDim2.new(0, 420, 0, 560)
-    main.Position = UDim2.new(0.5, -210, 0.5, -280)
-    main.Parent = sg
-    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 10); corner.Parent = main
-    local stroke = Instance.new("UIStroke"); stroke.Color = theme.Stroke; stroke.Parent = main
-
-    -- topbar
-    local topbar = Instance.new("Frame")
-    topbar.BackgroundTransparency = 1
-    topbar.Size = UDim2.new(1, 0, 0, 36)
-    topbar.Parent = main
-
-    local title = Instance.new("TextLabel")
-    title.Text = "SlenderHub | Animal Hospital"
-    title.TextColor3 = theme.Text
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 15
-    title.BackgroundTransparency = 1
-    title.Position = UDim2.new(0, 14, 0, 0)
-    title.Size = UDim2.new(1, -60, 1, 0)
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = topbar
-
-    local libBadge = Instance.new("TextLabel")
-    libBadge.Text = SlenderHub.LibReady and "LIB ✓" or "LIB ✗"
-    libBadge.TextColor3 = SlenderHub.LibReady and theme.Success or theme.Error
-    libBadge.Font = Enum.Font.GothamBold
-    libBadge.TextSize = 11
-    libBadge.BackgroundTransparency = 1
-    libBadge.Position = UDim2.new(1, -64, 0, 0)
-    libBadge.Size = UDim2.new(0, 50, 1, 0)
-    libBadge.TextXAlignment = Enum.TextXAlignment.Right
-    libBadge.Parent = topbar
-
-    -- drag
-    local dragging, dragInput, startPos
-    topbar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; startPos = input.Position; dragInput = input
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - startPos
-            main.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset + delta.X, main.Position.Y.Scale, main.Position.Y.Offset + delta.Y)
-        end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input == dragInput then dragging = false end
-    end)
-
-    -- toggle
-    local openBtn = Instance.new("TextButton")
-    openBtn.Text = "SH"
-    openBtn.TextColor3 = theme.Accent
-    openBtn.BackgroundColor3 = theme.Sidebar
-    openBtn.Size = UDim2.new(0, 44, 0, 44)
-    openBtn.Position = UDim2.new(0, 20, 0.5, 0)
-    openBtn.Font = Enum.Font.GothamBlack
-    openBtn.TextSize = 16
-    openBtn.Visible = false
-    openBtn.Parent = sg
-    local oc = Instance.new("UICorner"); oc.CornerRadius = UDim.new(0, 12); oc.Parent = openBtn
-    local toggle = function()
-        main.Visible = not main.Visible
-        openBtn.Visible = not main.Visible
-    end
-    openBtn.MouseButton1Click:Connect(toggle)
-
-    -- content
-    local content = Instance.new("ScrollingFrame")
-    content.BackgroundTransparency = 1
-    content.Position = UDim2.new(0, 12, 0, 44)
-    content.Size = UDim2.new(1, -24, 1, -56)
-    content.ScrollBarThickness = 3
-    content.ScrollBarImageColor3 = theme.Accent
-    content.CanvasSize = UDim2.new(0, 0, 0, 0)
-    content.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    content.Parent = main
-
-    local list = Instance.new("UIListLayout")
-    list.Padding = UDim.new(0, 8)
-    list.SortOrder = Enum.SortOrder.LayoutOrder
-    list.Parent = content
-
-    local notifyContainer = Instance.new("Frame")
-    notifyContainer.BackgroundTransparency = 1
-    notifyContainer.Position = UDim2.new(1, -310, 1, -20)
-    notifyContainer.Size = UDim2.new(0, 290, 1, 0)
-    notifyContainer.AnchorPoint = Vector2.new(0, 1)
-    notifyContainer.Parent = sg
-    local nlist = Instance.new("UIListLayout")
-    nlist.Padding = UDim.new(0, 6)
-    nlist.VerticalAlignment = Enum.VerticalAlignment.Bottom
-    nlist.Parent = notifyContainer
-
-    SlenderHub.UI.Notify = function(titleText, body, dur, type)
-        local typeColor = theme.Accent
-        if type == "Success" then typeColor = theme.Success
-        elseif type == "Warning" then typeColor = theme.Warning
-        elseif type == "Error" then typeColor = theme.Error end
-
-        local frame = Instance.new("Frame")
-        frame.BackgroundColor3 = theme.Sidebar
-        frame.Size = UDim2.new(1, 0, 0, 56)
-        frame.Parent = notifyContainer
-        local fcorner = Instance.new("UICorner"); fcorner.CornerRadius = UDim.new(0, 8); fcorner.Parent = frame
-        local fstroke = Instance.new("UIStroke"); fstroke.Color = typeColor; fstroke.Parent = frame
-
-        local t1 = Instance.new("TextLabel")
-        t1.Text = titleText; t1.TextColor3 = typeColor; t1.Font = Enum.Font.GothamBold; t1.TextSize = 14
-        t1.BackgroundTransparency = 1; t1.Position = UDim2.new(0, 10, 0, 6); t1.Size = UDim2.new(1, -20, 0, 20)
-        t1.TextXAlignment = Enum.TextXAlignment.Left; t1.Parent = frame
-        local t2 = Instance.new("TextLabel")
-        t2.Text = body or ""; t2.TextColor3 = theme.Text; t2.Font = Enum.Font.Gotham; t2.TextSize = 12
-        t2.BackgroundTransparency = 1; t2.Position = UDim2.new(0, 10, 0, 26); t2.Size = UDim2.new(1, -20, 0, 22)
-        t2.TextXAlignment = Enum.TextXAlignment.Left; t2.TextWrapped = true; t2.Parent = frame
-
-        task.delay(dur or 3, function()
-            frame:Destroy()
-        end)
-    end
-
-    local function Section(text)
-        local s = Instance.new("TextLabel")
-        s.Text = text; s.TextColor3 = theme.SubText; s.Font = Enum.Font.GothamBold; s.TextSize = 11
-        s.BackgroundTransparency = 1; s.Size = UDim2.new(1, 0, 0, 22); s.TextXAlignment = Enum.TextXAlignment.Left
-        s.Parent = content
-    end
-
-    local function Row(text, desc)
-        local frame = Instance.new("Frame")
-        frame.BackgroundColor3 = theme.Element
-        frame.Size = UDim2.new(1, 0, 0, 40)
-        frame.Parent = content
-        local rcorner = Instance.new("UICorner"); rcorner.CornerRadius = UDim.new(0, 6); rcorner.Parent = frame
-        local rstroke = Instance.new("UIStroke"); rstroke.Color = theme.Stroke; rstroke.Parent = frame
-        local l = Instance.new("TextLabel")
-        l.Text = text; l.TextColor3 = theme.Text; l.Font = Enum.Font.GothamMedium; l.TextSize = 13
-        l.BackgroundTransparency = 1; l.Position = UDim2.new(0, 12, 0, 0); l.Size = UDim2.new(1, -50, 1, 0)
-        l.TextXAlignment = Enum.TextXAlignment.Left; l.Parent = frame
-        if desc then
-            local d = Instance.new("TextLabel")
-            d.Text = desc; d.TextColor3 = theme.SubText; d.Font = Enum.Font.Gotham; d.TextSize = 10
-            d.BackgroundTransparency = 1; d.Position = UDim2.new(0, 12, 0, 18); d.Size = UDim2.new(1, -50, 0, 20)
-            d.TextXAlignment = Enum.TextXAlignment.Left; d.Parent = frame
-        end
-        return frame, l
-    end
-
-    local function Button(text, callback)
-        local btn = Instance.new("TextButton")
-        btn.Text = text; btn.TextColor3 = theme.Text; btn.Font = Enum.Font.GothamBold; btn.TextSize = 13
-        btn.BackgroundColor3 = theme.Accent; btn.Size = UDim2.new(1, 0, 0, 36)
-        btn.Parent = content
-        local bcorner = Instance.new("UICorner"); bcorner.CornerRadius = UDim.new(0, 6); bcorner.Parent = btn
-        btn.MouseButton1Click:Connect(function()
-            pcall(callback)
-        end)
-    end
-
-    local function Toggle(text, default, callback)
-        local frame, label = Row(text)
-        local sw = Instance.new("Frame")
-        sw.BackgroundColor3 = default and theme.Accent or Color3.fromRGB(50, 50, 55)
-        sw.Size = UDim2.new(0, 36, 0, 20); sw.Position = UDim2.new(1, -46, 0.5, -10)
-        sw.Parent = frame
-        local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(1, 0); sc.Parent = sw
-        local knob = Instance.new("Frame")
-        knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        knob.Size = UDim2.new(0, 16, 0, 16); knob.Position = UDim2.new(0, default and 18 or 2, 0.5, -8)
-        knob.Parent = sw
-        local kc = Instance.new("UICorner"); kc.CornerRadius = UDim.new(1, 0); kc.Parent = knob
-
-        local enabled = default
-        local function update(val)
-            enabled = val
-            Tween(sw, { BackgroundColor3 = enabled and theme.Accent or Color3.fromRGB(50, 50, 55) }, 0.15)
-            Tween(knob, { Position = UDim2.new(0, enabled and 18 or 2, 0.5, -8) }, 0.15)
-            pcall(callback, enabled)
-        end
-        frame.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                update(not enabled)
-            end
-        end)
-        return {
-            Set = update,
-        }
-    end
-
-    return {
-        Section = Section,
-        Button = Button,
-        Toggle = Toggle,
-    }
-end
-
----------------------------------------------------------------------------
--- BOOT
----------------------------------------------------------------------------
-local function Boot()
-    CreateUI()
-
-    local tier = nil
-    local function StartFeatures(freeTier)
-        tier = freeTier
-        Notify("SlenderHub", "Acesso liberado (tier: " .. (tier or "trial") .. ")", 3, "Success")
-
-        local ui = SlenderHub.UI
-
-        ui.Section("Dados (reais)")
-        ui.Button("Atualizar dados do jogador", function()
-            local s = SlenderHub.GetStats()
-            if s then
-                Notify("SlenderHub", "Cash: $" .. tostring(s.Cash or 0) .. " | Classe: " .. tostring(s.Class or "?"), 4, "Success")
-            else
-                Notify("SlenderHub", "Dados indisponíveis (jogo não sincronizou)", 3, "Warning")
-            end
-        end)
-
-        ui.Section("ESP")
-        ui.Toggle("ESP por tags (NPC/Anomalia/Grime/Door)", false, function(v)
-            SlenderHub.SetESP(v)
-        end)
-
-        ui.Section("Sanidade")
-        ui.Toggle("Sanidade Infinita (hook PlayerLostSanity)", false, function(v)
-            SlenderHub.SetInfSanity(v)
-        end)
-        ui.Toggle("Anti-Jumpscare (GUIs + handlers)", false, function(v)
-            SlenderHub.SetAntiJumpscare(v)
-        end)
-
-        ui.Section("Revive / Sobrevivência")
-        ui.Toggle("Auto Heartbeat (completa minigame)", false, function(v)
-            SlenderHub.SetAutoHeartbeat(v)
-        end)
-
-        ui.Section("Automação")
-        ui.Toggle("Auto Interagir (prompts Inspect/Shop)", false, function(v)
-            SlenderHub.SetAutoInteract(v)
-        end)
-
-        ui.Section("Jogo")
-        ui.Button("Votar jogar novamente", function()
-            SlenderHub.VotePlayAgain()
-        end)
-        ui.Button("Teleportar para o lobby", function()
-            SlenderHub.TeleportToLobby()
-        end)
-
-        ui.Section("Movimento")
-        ui.Toggle("Noclip", false, function(v)
-            SlenderHub.SetNoclip(v)
-        end)
-        ui.Toggle("Fly (Space/Shift)", false, function(v)
-            SlenderHub.SetFly(v)
-        end)
-
-        ui.Section("Sistema")
-        ui.Button("Fechar Hub", function()
-            local pg = CoreGui:FindFirstChild("SlenderHub")
-            if pg then pg:Destroy() end
-        end)
-    end
-
-    if SlenderHub.Config.AllowTrial then
-        StartFeatures("trial")
+local function ShowStats()
+    local data = GetData()
+    if data and data.Stats then
+        SafeNotify("Dados", "Cash: $" .. tostring(data.Stats.LocalCash or 0)
+            .. " | Classe: " .. tostring(data.Stats.Class or "?"), 5)
     else
-        StartFeatures("premium")
+        SafeNotify("Dados", "Dados indisponíveis (jogo não sincronizou)", 4)
     end
 end
 
-local ok, err = pcall(Boot)
-if not ok then
-    warn("[SlenderHub] Erro no boot: " .. tostring(err))
+-- =====================================
+-- UI FLUENT
+-- =====================================
+if not Fluent then
+    -- Sem Fluent: aviso mínimo e sai (sem pcall silencioso)
+    warn("[SlenderHub] Falha ao carregar Fluent: " .. tostring(LoadError))
+    error("[SlenderHub] Falha ao carregar Fluent — verifique internet/executor. " .. tostring(LoadError), 0)
 end
 
-return SlenderHub
+local Window = Fluent:CreateWindow({
+    Title = "SlenderHub | Animal Hospital",
+    SubTitle = "By Slender  (LIB " .. (LibReady and "OK" or "FAIL") .. ")",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 480),
+    Theme = "Aqua",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    Main     = Window:AddTab({ Title = "Main",     Icon = "home" }),
+    Sanidade = Window:AddTab({ Title = "Sanidade", Icon = "heart" }),
+    Auto     = Window:AddTab({ Title = "Auto",     Icon = "zap" }),
+    Visual   = Window:AddTab({ Title = "Visual",   Icon = "eye" }),
+    Move     = Window:AddTab({ Title = "Movimento", Icon = "gamepad" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
+}
+
+-- ===== TAB MAIN =====
+local SMain = Tabs.Main:AddSection("Jogador")
+Tabs.Main:AddButton({
+    Title = "Mostrar dados (Cash/Classe)",
+    Callback = ShowStats
+})
+Tabs.Main:AddButton({
+    Title = "Votar jogar novamente",
+    Callback = VotePlayAgain
+})
+Tabs.Main:AddButton({
+    Title = "Teleportar para o lobby",
+    Callback = TeleportToLobby
+})
+
+-- ===== TAB SANIDADE =====
+local SSan = Tabs.Sanidade:AddSection("Proteção")
+Tabs.Sanidade:AddToggle("InfSanity", {
+    Title = "Sanidade Infinita (hook PlayerLostSanity)",
+    Default = false,
+    Callback = SetInfSanity
+})
+Tabs.Sanidade:AddToggle("AntiJumpscare", {
+    Title = "Anti-Jumpscare (handlers + GUIs)",
+    Default = false,
+    Callback = SetAntiJumpscare
+})
+
+-- ===== TAB AUTO =====
+local SAuto = Tabs.Auto:AddSection("Sobrevivência")
+Tabs.Auto:AddToggle("AutoHeartbeat", {
+    Title = "Auto Heartbeat (completa minigame)",
+    Default = false,
+    Callback = SetAutoHeartbeat
+})
+local SAuto2 = Tabs.Auto:AddSection("Tarefas")
+Tabs.Auto:AddToggle("AutoInteract", {
+    Title = "Auto Interagir (Inspect/Shop)",
+    Default = false,
+    Callback = SetAutoInteract
+})
+
+-- ===== TAB VISUAL =====
+local SVis = Tabs.Visual:AddSection("ESP")
+Tabs.Visual:AddToggle("ESP", {
+    Title = "ESP por tags (NPC/Anomalia/Grime/Door)",
+    Default = false,
+    Callback = SetESP
+})
+
+-- ===== TAB MOVIMENTO =====
+local SMove = Tabs.Move:AddSection("Locomoção")
+Tabs.Move:AddSlider("WalkSpeed", {
+    Title = "WalkSpeed",
+    Min = 10, Max = 200, Default = Config.WalkSpeed, Rounding = 1,
+    Callback = SetWalkSpeed
+})
+Tabs.Move:AddToggle("Noclip", {
+    Title = "Noclip",
+    Default = false,
+    Callback = SetNoclip
+})
+Tabs.Move:AddToggle("Fly", {
+    Title = "Fly (Space/Shift)",
+    Default = false,
+    Callback = SetFly
+})
+
+-- ===== TAB SETTINGS =====
+local SSettings = Tabs.Settings:AddSection("Configurações")
+if SaveManager then
+    SaveManager:SetLibrary(Fluent)
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:BuildConfigSection(Tabs.Settings)
+end
+if InterfaceManager then
+    InterfaceManager:SetLibrary(Fluent)
+    InterfaceManager:SetFolder("SlenderHub_AnimalHospital")
+    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+    InterfaceManager:SetTheme("Aqua")
+end
+
+-- =====================================
+-- BOOT / FINALIZAÇÃO
+-- =====================================
+Window:SelectTab(1)
+if SaveManager then SaveManager:LoadAutoloadConfig() end
+if InterfaceManager then InterfaceManager:LoadInterfaceConfig() end
+
+SafeNotify("SlenderHub", "Carregado! LIB " .. (LibReady and "OK" or "FAIL")
+    .. " | Executor: " .. IdentifyExecutor(), 4)
