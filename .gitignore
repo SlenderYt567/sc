@@ -1,131 +1,693 @@
 --[[
-    SlenderHub | Diagnóstico de Ambiente
-    Rode DENTRO do jogo (The Animal Hospital) antes do hub.
-    Escreve o resultado em slenderhub_diag.txt (pasta do executor Wave)
-    e também printa no console. Envie o conteúdo de volta.
+    SlenderHub | Animal Hospital (Anomaly) — Script Premium
+    Dev: SlenderHub Team
+    Versão: 3.0.0 (UI Fluent + recalibração dump 07/08/2026)
+
+    Feito para executors PC (Wave/Codex/Delta/etc.) com matriz de fallback.
+    UI: Fluent (dawid-scripts) — mesmo padrão do Horse Race.
+    Key system: verificação via API do SlenderHub (pluggável).
+
+    CALIBRAÇÃO REAL (dump SlenderHub_GameDumper — 07/08/2026):
+    - Todo o tráfego passa por ReplicatedStorage/Lib com wrapper
+      Network:FireServer(nome, ...) → roteia para RE/RequestRemoteEvent.
+      Este script usa o PRÓPRIO Lib do jogo (require direto).
+    - Sanidade: toda perda é client-side via Lib.PlayerLostSanity(amount, reason).
+      Bloquear no wrapper = sanidade infinita de verdade (servidor nunca recebe).
+    - Morte: atributos DeathCount/MAX_DeathCount em game.Players (replicados);
+      revive via minigame de coração HeartbeatMinigameComplete(state, true).
+    - Tags CollectionService: NPC, Anomaly, Door, Inspect, Grime, ShopItemPP,
+      EmergencyEventCounter, StalkerMonster, TallMonsterSpawn, Shadow.
+    - HONEYPOTS confirmados (NÃO FIRE): RE/ScannerKillGhost, RE/DialogDecision.
 ]]
 
-local log = {}
+-- =====================================
+-- CONFIG
+-- =====================================
+local Config = {
+    VerifyUrl  = "https://www.slenderhub.shop/api/exec",
+    AllowTrial = true,
+    WalkSpeed  = 22,
+    SanityFloor = 100,
+    EspGood    = Color3.fromRGB(60, 255, 120),
+    EspDanger  = Color3.fromRGB(255, 60, 60),
+    EspTask    = Color3.fromRGB(250, 180, 60),
+    EspDoor    = Color3.fromRGB(60, 130, 250),
+    ScareGuis  = { "Jumpscare", "static", "DontLookUp", "EmergencyCounter" },
+}
 
-local function add(msg)
-    table.insert(log, tostring(msg))
-    print("[DIAG] " .. tostring(msg))
+-- =====================================
+-- LOAD FLUENT (fallback: aviso claro se falhar)
+-- =====================================
+local Fluent = nil
+local LoadError = nil
+
+local okL, errL = pcall(function()
+    return loadstring(game:HttpGet(
+        "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"
+    ))()
+end)
+if okL and type(errL) == "table" and errL.CreateWindow then
+    Fluent = errL
+else
+    LoadError = "Fluent: " .. tostring(okL and "retorno inválido (nil/loadstring)" or errL)
 end
 
-local function findFirst(container, name, className)
-    if not container then return nil end
-    local f = container:FindFirstChild(name)
-    if f and (not className or f:IsA(className)) then return f end
+local SaveManager, InterfaceManager
+if Fluent then
+    pcall(function()
+        SaveManager = loadstring(game:HttpGet(
+            "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"
+        ))()
+    end)
+    pcall(function()
+        InterfaceManager = loadstring(game:HttpGet(
+            "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"
+        ))()
+    end)
+end
+
+-- Notificação segura (funciona mesmo antes da janela existir)
+local function SafeNotify(title, content, duration)
+    if Fluent and Fluent.Notify then
+        pcall(function() Fluent:Notify({ Title = title, Content = content, Duration = duration or 4 }) end)
+    else
+        warn("[SlenderHub] " .. tostring(title) .. " — " .. tostring(content))
+    end
+end
+
+-- =====================================
+-- SERVICES
+-- =====================================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local CollectionService = game:GetService("CollectionService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+
+local function GetHumanoid()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+local function GetRoot()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+-- =====================================
+-- MATRIZ DE EXECUTORES
+-- =====================================
+local Env = getgenv and getgenv() or _G
+
+local function ExecFn(name)
+    if type(Env[name]) == "function" then return Env[name] end
     return nil
 end
 
-add("=== SlenderHub Diagnostico ===")
-add("Data: " .. tostring(os.date("%Y-%m-%d %H:%M:%S")))
-add("PlaceId: " .. tostring(game.PlaceId))
-add("GameId: " .. tostring(game.GameId))
-add("Place: " .. tostring(game.Name))
+local function Fn2(tbl)
+    local ok, v = pcall(function() return tbl() end)
+    return ok and v or nil
+end
 
--- Executor
-add("--- Executor ---")
-local execName = "unknown"
-pcall(function()
-    if identifyexecutor then execName = identifyexecutor()
-    elseif getexecutorname then execName = getexecutorname()
-    elseif get_identify then execName = get_identify() end
+local CheckCaller = Fn2(function()
+    return type(checkcaller) == "function" and checkcaller or nil
 end)
-add("Executor: " .. tostring(execName))
-add("getgenv: " .. tostring(getgenv ~= nil))
-add("loadstring: " .. tostring(loadstring ~= nil))
-add("writefile: " .. tostring(writefile ~= nil))
-add("getrawmetatable: " .. tostring(getrawmetatable ~= nil))
-add("fireproximityprompt: " .. tostring(fireproximityprompt ~= nil))
-add("task: " .. tostring(task ~= nil))
-add("task.time: " .. tostring(task ~= nil and task.time ~= nil))
-
--- Jogador
-add("--- Jogador ---")
-add("LocalPlayer: " .. tostring(game:GetService("Players").LocalPlayer))
-add("Character: " .. tostring(game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer.Character))
-
--- Fluent (mesma URL do Horse Race)
-add("--- Fluent ---")
-local fluentOk, fluentRes = pcall(function()
-    local src = game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua")
-    return #src, src
+local FirePromptFn = Fn2(function()
+    return type(fireproximityprompt) == "function" and fireproximityprompt or nil
 end)
-if fluentOk then
-    add("HttpGet Fluent: OK (" .. tostring(fluentRes) .. " bytes)")
-    local lsOk, lsRes = pcall(loadstring, fluentRes)
-    if lsOk and lsRes then
-        local runOk, runRes = pcall(lsRes)
-        if runOk then
-            add("loadstring+exec Fluent: OK (" .. type(runRes) .. ")")
-        else
-            add("loadstring+exec Fluent: FAIL ao executar: " .. tostring(runRes))
+local FireClickFn = Fn2(function()
+    return type(fireclickdetector) == "function" and fireclickdetector or nil
+end)
+local GetRawMeta = Fn2(function()
+    return type(getrawmetatable) == "function" and getrawmetatable or nil
+end)
+local NewCClosure = Fn2(function()
+    return type(newcclosure) == "function" and newcclosure or nil
+end)
+local HookMeta = Fn2(function()
+    return type(hookmetamethod) == "function" and hookmetamethod or nil
+end)
+
+local function IdentifyExecutor()
+    local names = { "getexecutorname", "identifyexecutor", "get_identify" }
+    for _, n in ipairs(names) do
+        if type(Env[n]) == "function" then
+            local ok, name = pcall(Env[n])
+            if ok then return tostring(name) end
         end
-    else
-        add("loadstring Fluent: FAIL: " .. tostring(lsRes))
     end
-else
-    add("HttpGet Fluent: FAIL: " .. tostring(fluentRes))
+    return "unknown"
 end
 
--- Lib do jogo
-add("--- Lib do jogo ---")
-local libInst = game.ReplicatedStorage:FindFirstChild("Lib")
-add("ReplicatedStorage/Lib existe: " .. tostring(libInst ~= nil))
-if libInst then
-    add("Lib class: " .. libInst.ClassName)
-    local reqOk, lib = pcall(require, libInst)
-    add("require Lib: " .. (reqOk and "OK (" .. type(lib) .. ")" or "FAIL: " .. tostring(lib)))
-    if reqOk and lib then
-        add("lib.Network: " .. tostring(lib.Network ~= nil))
-        add("lib.Network.FireServer: " .. tostring(lib.Network and lib.Network.FireServer ~= nil))
-        add("lib.PlayerLostSanity: " .. tostring(lib.PlayerLostSanity ~= nil))
-        add("lib.Inject: " .. tostring(lib.Inject ~= nil))
-        add("lib.HeartMinigameComplete: " .. tostring(lib.HeartMinigameComplete ~= nil))
-        add("lib.DS: " .. tostring(lib.DS ~= nil))
-        add("lib.dHandler: " .. tostring(lib.dHandler ~= nil))
-        add("lib.data: " .. tostring(lib.data ~= nil))
-        add("lib.data.Stats: " .. tostring(lib.data and lib.data.Stats ~= nil))
+-- =====================================
+-- LIB INTEGRATION (ReplicatedStorage/Lib — coração do jogo)
+-- =====================================
+local Lib = nil
+local LibReady = false
+local Data = nil
+
+do
+    local ok, lib = pcall(function()
+        return require(game.ReplicatedStorage:WaitForChild("Lib", 10))
+    end)
+    if ok and lib then
+        Lib = lib
+        LibReady = true
     end
 end
 
--- Remotes do jogo
-add("--- Remotes ---")
-local util = game.ReplicatedStorage:FindFirstChild("Util")
-local net = util and util:FindFirstChild("Net")
-local re = net and net:FindFirstChild("RE")
-local rf = net and net:FindFirstChild("RF")
-add("Util/Net: " .. tostring(net ~= nil))
-add("RE/RequestRemoteEvent: " .. tostring(re and re:FindFirstChild("RequestRemoteEvent") ~= nil))
-add("RE/RequestRemoteFunction: " .. tostring(re and re:FindFirstChild("RequestRemoteFunction") ~= nil))
-add("RF/RequestData: " .. tostring(rf and rf:FindFirstChild("RequestData") ~= nil))
-add("RE/PlayerLostSanity: " .. tostring(re and re:FindFirstChild("PlayerLostSanity") ~= nil))
-add("RE/Touch: " .. tostring(re and re:FindFirstChild("Touch") ~= nil))
-add("RE/HeartbeatMinigameComplete: " .. tostring(re and re:FindFirstChild("HeartbeatMinigameComplete") ~= nil))
-add("HONEYPOT RE/ScannerKillGhost: " .. tostring(re and re:FindFirstChild("ScannerKillGhost") ~= nil))
-add("HONEYPOT RE/DialogDecision: " .. tostring(re and re:FindFirstChild("DialogDecision") ~= nil))
+if Lib then
+    -- Hook BindEvents: captura handlers do servidor sem quebrar nada
+    pcall(function()
+        if Lib.Network and Lib.Network.BindEvents then
+            local old = Lib.Network.BindEvents
+            Lib.Network.BindEvents = function(self, events)
+                if type(events) == "table" and OnServerEvents then
+                    OnServerEvents(events)
+                end
+                return old(self, events)
+            end
+        end
+    end)
+    -- Hook Inject: captura handlers injetados (dot call!)
+    pcall(function()
+        if Lib.Inject then
+            local old = Lib.Inject
+            Lib.Inject = function(name, fn, ...)
+                if OnInject then OnInject(name, fn) end
+                return old(name, fn, ...)
+            end
+        end
+    end)
+    -- Sincronização de dados
+    pcall(function()
+        if Lib.dHandler and Lib.dHandler.UpdateData then
+            Lib.dHandler.UpdateData.Event:Connect(function()
+                Data = Lib.data
+            end)
+        end
+    end)
+    pcall(function()
+        if Lib.DS and Lib.DS.RequestData then
+            task.spawn(function()
+                local ok2, d = pcall(Lib.DS.RequestData)
+                if ok2 then Data = Lib.data or d end
+            end)
+        end
+    end)
+end
 
--- Teste rápido de sintaxe do próprio hub (se existir)
-add("--- Hub file test ---")
-pcall(function()
-    if isfile and isfile("SlenderHub_AnimalHospital.lua") then
-        local hubSrc = readfile("SlenderHub_AnimalHospital.lua")
-        add("Hub file: OK (" .. #hubSrc .. " bytes) - file no executor")
-        local hOk, hRes = pcall(loadstring, hubSrc)
-        add("loadstring hub: " .. (hOk and hRes and "OK" or "FAIL: " .. tostring(hRes)))
+local ServerEventHooks = {}
+local InjectHooks = {}
+
+local function OnServerEvents(events)
+    for name, handler in pairs(events or {}) do
+        if ServerEventHooks[name] then
+            for _, cb in ipairs(ServerEventHooks[name]) do
+                pcall(cb, handler, name)
+            end
+        end
+    end
+end
+
+local function OnInject(name, fn)
+    if name and InjectHooks[name] then
+        for _, cb in ipairs(InjectHooks[name]) do
+            pcall(cb, fn)
+        end
+    end
+end
+
+-- Fire seguro por nome (wrapper do jogo; fallback direto no gateway)
+local function NetFire(name, ...)
+    if Lib and Lib.Network and Lib.Network.FireServer then
+        local ok = pcall(Lib.Network.FireServer, Lib.Network, name, ...)
+        if ok then return true end
+    end
+    pcall(function()
+        local util = game.ReplicatedStorage:FindFirstChild("Util")
+        local net = util and util:FindFirstChild("Net")
+        local re = net and net:FindFirstChild("RE")
+        local gw = re and re:FindFirstChild("RequestRemoteEvent")
+        if gw and gw:IsA("RemoteEvent") then
+            gw:FireServer(name, ...)
+        end
+    end)
+    return true
+end
+
+local function GetData()
+    if Lib and Lib.data then return Lib.data end
+    return Data
+end
+
+-- =====================================
+-- INF SANITY REAL (hook no PlayerLostSanity — causa raiz)
+-- =====================================
+local InfSanityOn = false
+local OrigPlayerLostSanity = Lib and Lib.PlayerLostSanity or nil
+
+local function SetInfSanity(enabled)
+    InfSanityOn = enabled
+    if not Lib then
+        SafeNotify("Lib", "Lib não encontrado — Inf Sanity indisponível", 4)
+        return
+    end
+    if enabled then
+        if not Lib.PlayerLostSanity then
+            SafeNotify("Lib", "PlayerLostSanity não existe no Lib", 4)
+            return
+        end
+        if not OrigPlayerLostSanity then OrigPlayerLostSanity = Lib.PlayerLostSanity end
+        Lib.PlayerLostSanity = function(amount, reason)
+            if InfSanityOn and (not amount or amount > 0) then
+                return
+            end
+            return OrigPlayerLostSanity(amount, reason)
+        end
+        task.spawn(function()
+            while InfSanityOn and task.wait(0.3) do
+                pcall(function()
+                    LocalPlayer:SetAttribute("Sanity", Config.SanityFloor)
+                    LocalPlayer:SetAttribute("SanityImpactMultiplier", 0)
+                end)
+            end
+        end)
     else
-        add("Hub file: nao encontrado no executor (sem isfile/readfile)")
+        if OrigPlayerLostSanity and Lib.PlayerLostSanity then
+            Lib.PlayerLostSanity = OrigPlayerLostSanity
+        end
     end
-end)
+end
 
-local content = table.concat(log, "\n")
-pcall(function()
-    if writefile then
-        writefile("slenderhub_diag.txt", content)
-        add("Log salvo em slenderhub_diag.txt")
+-- =====================================
+-- AUTO HEARTBEAT (auto-completa minigame de coração)
+-- =====================================
+local AutoHeartbeatOn = false
+
+do
+    ServerEventHooks["StartHeartbeatMinigame"] = {
+        function()
+            if AutoHeartbeatOn and Lib and Lib.HeartMinigameComplete then
+                task.defer(function()
+                    pcall(Lib.HeartMinigameComplete, true)
+                end)
+            end
+        end
+    }
+end
+
+local function SetAutoHeartbeat(enabled)
+    AutoHeartbeatOn = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while AutoHeartbeatOn and task.wait(0.25) do
+            pcall(function()
+                if not (Lib and Lib.HeartMinigameComplete) then return end
+                local ui = Lib.UI and Lib.UI.Get and Lib.UI.Get("HeartbeatMinigameUI")
+                if ui then
+                    local frame = ui:FindFirstChild("Frame")
+                    if frame and frame.Visible then
+                        Lib.HeartMinigameComplete(true)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- ANTI JUMPSCARE (handlers + GUIs reais)
+-- =====================================
+local AntiJumpscareOn = false
+
+do
+    local scareNames = {
+        "Jumpscare", "JumpscareHollow", "JumpscareShadow",
+        "JumpscareShadowWithEyesIMG", "JumpscareStalker",
+    }
+    local function IsScare(name)
+        for _, n in ipairs(scareNames) do
+            if name == n then return true end
+        end
+        return false
     end
-end)
 
-warn("\n" .. content .. "\n")
+    local function HookBindEventsForScares()
+        local lib = Lib
+        if not (lib and lib.Network and lib.Network.BindEvents) then return end
+        local old = lib.Network.BindEvents
+        lib.Network.BindEvents = function(self, events)
+            if type(events) == "table" and AntiJumpscareOn then
+                for name in pairs(events) do
+                    if IsScare(name) then
+                        events[name] = function() end
+                    end
+                end
+            end
+            if OnServerEvents then OnServerEvents(events) end
+            return old(self, events)
+        end
+    end
+    HookBindEventsForScares()
+end
+
+local function SetAntiJumpscare(enabled)
+    AntiJumpscareOn = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while AntiJumpscareOn and task.wait(0.3) do
+            pcall(function()
+                local pg = LocalPlayer:FindFirstChild("PlayerGui")
+                if pg then
+                    for _, guiName in ipairs(Config.ScareGuis) do
+                        local gui = pg:FindFirstChild(guiName)
+                        if gui and gui:IsA("ScreenGui") and gui.Enabled then
+                            gui.Enabled = false
+                        end
+                    end
+                end
+                local cg = game:GetService("CoreGui")
+                for _, guiName in ipairs(Config.ScareGuis) do
+                    local gui = cg:FindFirstChild(guiName)
+                    if gui and gui:IsA("ScreenGui") and gui.Enabled then
+                        gui.Enabled = false
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- ESP REAL (tags CollectionService)
+-- =====================================
+local ESPOn = false
+
+local function ColorFor(model)
+    if model:HasTag("NPC") then return Config.EspGood end
+    if model:HasTag("Anomaly") or model:HasTag("StalkerMonster") or model:HasTag("TallMonsterSpawn")
+        or model:HasTag("Shadow") or model:HasTag("DontLookUp") then
+        return Config.EspDanger
+    end
+    if model:HasTag("Grime") or model:HasTag("EmergencyEventCounter") then return Config.EspTask end
+    if model:HasTag("Door") then return Config.EspDoor end
+    return nil
+end
+
+local function AddHighlight(m)
+    if m:FindFirstChildOfClass("Highlight") then return end
+    local color = ColorFor(m)
+    if not color then return end
+    local hl = Instance.new("Highlight")
+    hl.Name = "SlenderHubESP"
+    hl.FillColor = color
+    hl.FillTransparency = 0.6
+    hl.OutlineColor = color
+    hl.OutlineTransparency = 0
+    hl.Parent = m
+end
+
+local function SetESP(enabled)
+    ESPOn = enabled
+    if not enabled then
+        for _, hl in ipairs(workspace:GetDescendants()) do
+            if hl:IsA("Highlight") and hl.Name == "SlenderHubESP" then hl:Destroy() end
+        end
+        return
+    end
+    task.spawn(function()
+        while ESPOn and task.wait(0.5) do
+            pcall(function()
+                for _, m in ipairs(workspace:GetDescendants()) do
+                    if m:IsA("Model") and m.PrimaryPart then
+                        AddHighlight(m)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- AUTO INTERACT (prompts por tags reais)
+-- =====================================
+local AutoInteractOn = false
+
+local function FindPrompts()
+    local list = {}
+    for _, tag in ipairs({ "Inspect", "ShopItemPP" }) do
+        for _, inst in ipairs(CollectionService:GetTagged(tag)) do
+            if inst:IsA("ProximityPrompt") then
+                table.insert(list, inst)
+            else
+                for _, desc in ipairs(inst:GetDescendants()) do
+                    if desc:IsA("ProximityPrompt") then
+                        table.insert(list, desc)
+                    end
+                end
+            end
+        end
+    end
+    return list
+end
+
+local function SetAutoInteract(enabled)
+    AutoInteractOn = enabled
+    if not enabled then return end
+    if not FirePromptFn then
+        SafeNotify("Executor", "fireproximityprompt não disponível", 4)
+        return
+    end
+    task.spawn(function()
+        local last = {}
+        while AutoInteractOn and task.wait(0.8) do
+            pcall(function()
+                local root = GetRoot()
+                for _, prompt in ipairs(FindPrompts()) do
+                    if not last[prompt] or task.time() - last[prompt] > 6 then
+                        local parent = prompt.Parent
+                        local pos = parent and (parent:IsA("BasePart") and parent.Position
+                            or (parent.PrimaryPart and parent.PrimaryPart.Position)) or nil
+                        if root and pos and (root.Position - pos).Magnitude < 40 then
+                            FirePromptFn(prompt)
+                            last[prompt] = task.time()
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- MOVEMENT
+-- =====================================
+local NoclipOn = false
+local FlyOn = false
+local NoclipConn = nil
+
+local function SetWalkSpeed(v)
+    local hum = GetHumanoid()
+    if hum then hum.WalkSpeed = v end
+end
+
+local function SetNoclip(enabled)
+    NoclipOn = enabled
+    if not enabled then
+        if NoclipConn then NoclipConn:Disconnect() NoclipConn = nil end
+        return
+    end
+    if NoclipConn then NoclipConn:Disconnect() end
+    NoclipConn = RunService.Stepped:Connect(function()
+        local hum = GetHumanoid()
+        if not hum then return end
+        hum:ChangeState(Enum.HumanoidStateType.Physics)
+        local root = GetRoot()
+        if root then root.Velocity = Vector3.new(0, 0, 0) end
+    end)
+end
+
+local function SetFly(enabled)
+    FlyOn = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while FlyOn and task.wait() do
+            local hum = GetHumanoid()
+            local root = GetRoot()
+            if not hum or not root then break end
+            local vel = root.AssemblyLinearVelocity or Vector3.new(0, 0, 0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0, 60, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then vel = vel - Vector3.new(0, 60, 0) end
+            root.AssemblyLinearVelocity = Vector3.new(vel.X, vel.Y, vel.Z)
+        end
+    end)
+end
+
+-- =====================================
+-- MISC
+-- =====================================
+local function TeleportToLobby()
+    NetFire("TeleportToLobby")
+    SafeNotify("SlenderHub", "Teleportando para o lobby...", 2)
+end
+
+local function VotePlayAgain()
+    NetFire("PlayAgainVote")
+    SafeNotify("SlenderHub", "Voto em jogar novamente enviado", 2)
+end
+
+local function ShowStats()
+    local data = GetData()
+    if data and data.Stats then
+        SafeNotify("Dados", "Cash: $" .. tostring(data.Stats.LocalCash or 0)
+            .. " | Classe: " .. tostring(data.Stats.Class or "?"), 5)
+    else
+        SafeNotify("Dados", "Dados indisponíveis (jogo não sincronizou)", 4)
+    end
+end
+
+-- =====================================
+-- UI FLUENT
+-- =====================================
+if not Fluent then
+    local msg = "[SlenderHub] Falha ao carregar Fluent: " .. tostring(LoadError)
+    pcall(function()
+        if writefile then
+            writefile("slenderhub_hub_err.txt", msg .. "\n" .. tostring(debug and debug.traceback and debug.traceback() or ""))
+        end
+    end)
+    warn(msg)
+    error(msg, 0)
+end
+
+-- Toda a UI fica em pcall: qualquer erro de runtime grava arquivo de log
+local uiOk, uiErr = pcall(function()
+
+local Window = Fluent:CreateWindow({
+    Title = "SlenderHub | Animal Hospital",
+    SubTitle = "By Slender  (LIB " .. (LibReady and "OK" or "FAIL") .. ")",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 480),
+    Theme = "Aqua",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    Main     = Window:AddTab({ Title = "Main",     Icon = "home" }),
+    Sanidade = Window:AddTab({ Title = "Sanidade", Icon = "heart" }),
+    Auto     = Window:AddTab({ Title = "Auto",     Icon = "zap" }),
+    Visual   = Window:AddTab({ Title = "Visual",   Icon = "eye" }),
+    Move     = Window:AddTab({ Title = "Movimento", Icon = "gamepad" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
+}
+
+-- ===== TAB MAIN =====
+local SMain = Tabs.Main:AddSection("Jogador")
+Tabs.Main:AddButton({
+    Title = "Mostrar dados (Cash/Classe)",
+    Callback = ShowStats
+})
+Tabs.Main:AddButton({
+    Title = "Votar jogar novamente",
+    Callback = VotePlayAgain
+})
+Tabs.Main:AddButton({
+    Title = "Teleportar para o lobby",
+    Callback = TeleportToLobby
+})
+
+-- ===== TAB SANIDADE =====
+local SSan = Tabs.Sanidade:AddSection("Proteção")
+Tabs.Sanidade:AddToggle("InfSanity", {
+    Title = "Sanidade Infinita (hook PlayerLostSanity)",
+    Default = false,
+    Callback = SetInfSanity
+})
+Tabs.Sanidade:AddToggle("AntiJumpscare", {
+    Title = "Anti-Jumpscare (handlers + GUIs)",
+    Default = false,
+    Callback = SetAntiJumpscare
+})
+
+-- ===== TAB AUTO =====
+local SAuto = Tabs.Auto:AddSection("Sobrevivência")
+Tabs.Auto:AddToggle("AutoHeartbeat", {
+    Title = "Auto Heartbeat (completa minigame)",
+    Default = false,
+    Callback = SetAutoHeartbeat
+})
+local SAuto2 = Tabs.Auto:AddSection("Tarefas")
+Tabs.Auto:AddToggle("AutoInteract", {
+    Title = "Auto Interagir (Inspect/Shop)",
+    Default = false,
+    Callback = SetAutoInteract
+})
+
+-- ===== TAB VISUAL =====
+local SVis = Tabs.Visual:AddSection("ESP")
+Tabs.Visual:AddToggle("ESP", {
+    Title = "ESP por tags (NPC/Anomalia/Grime/Door)",
+    Default = false,
+    Callback = SetESP
+})
+
+-- ===== TAB MOVIMENTO =====
+local SMove = Tabs.Move:AddSection("Locomoção")
+Tabs.Move:AddSlider("WalkSpeed", {
+    Title = "WalkSpeed",
+    Min = 10, Max = 200, Default = Config.WalkSpeed, Rounding = 1,
+    Callback = SetWalkSpeed
+})
+Tabs.Move:AddToggle("Noclip", {
+    Title = "Noclip",
+    Default = false,
+    Callback = SetNoclip
+})
+Tabs.Move:AddToggle("Fly", {
+    Title = "Fly (Space/Shift)",
+    Default = false,
+    Callback = SetFly
+})
+
+-- ===== TAB SETTINGS =====
+local SSettings = Tabs.Settings:AddSection("Configurações")
+if SaveManager then
+    SaveManager:SetLibrary(Fluent)
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:BuildConfigSection(Tabs.Settings)
+end
+if InterfaceManager then
+    InterfaceManager:SetLibrary(Fluent)
+    InterfaceManager:SetFolder("SlenderHub_AnimalHospital")
+    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+    InterfaceManager:SetTheme("Aqua")
+end
+
+-- =====================================
+-- BOOT / FINALIZAÇÃO
+-- =====================================
+Window:SelectTab(1)
+if SaveManager then SaveManager:LoadAutoloadConfig() end
+if InterfaceManager then InterfaceManager:LoadInterfaceConfig() end
+
+SafeNotify("SlenderHub", "Carregado! LIB " .. (LibReady and "OK" or "FAIL")
+    .. " | Executor: " .. IdentifyExecutor(), 4)
+
+end) -- pcall da UI
+
+if not uiOk then
+    local msg = "[SlenderHub] Erro de runtime na UI: " .. tostring(uiErr)
+    pcall(function()
+        if writefile then
+            writefile("slenderhub_hub_err.txt", msg .. "\n" .. tostring(debug and debug.traceback and debug.traceback() or ""))
+        end
+    end)
+    warn(msg)
+end
