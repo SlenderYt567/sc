@@ -1,886 +1,1069 @@
---[[
-    SlenderHub | Game Dumper Universal — v1.0.0
-    Dev: SlenderHub Team
+-- =====================================
+-- HORSE RACE - SLENDERHUB (CORRIGIDO)
+-- =====================================
 
-    Dump automático estilo Dex, universal (Delta/Wave/Codex/Synapse/Fluxus...):
-      • Scripts (closures Luau) separados por PASTA e NOME
-      • Remotes catalogados (RemoteEvent/RemoteFunction/UnreliableRemoteEvent)
-      • Honeypot / backdoor detection (nomes suspeitos + sem handler)
-      • Export em disco: slenderhub_dumps/<jogo>/
-          scripts/<pasta>/<nome>.lua
-          scripts/_closures/*.lua        (closures extras do mesmo source)
-          remotes/remotes.txt            (catálogo completo)
-          remotes/honeypots.txt          (suspeitos)
-          remotes/connections.txt        (quem escuta cada remote)
-          remotes/runtime_log.txt        (chamadas FireServer/InvokeServer, se ativado)
-          metadata.json                  (resumo estruturado)
+-- SERVICES BÁSICOS
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
+local LocalPlayer = Players.LocalPlayer
 
-    IMPORTANTE:
-    • "Scripts" aqui = código do CLIENTE (LocalScripts/Módulos). Código
-      server-side não sai pelo cliente — isso é limitação do Roblox, não do script.
-    • decompile() reconstrói o código (variáveis viram v1/v2...). Se o jogo
-      for ofuscado (Luraph/MoonSec), o resultado sai ilegível — aí use a
-      pipeline de desofuscação do SlenderHub.
-    • Tudo roda com pcall + matriz de fallback: nada quebra em executor fraco,
-      só perde recursos.
-]]
+-- =====================================
+-- ANTI AFK
+-- =====================================
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
 
-local SlenderHub = {}
-
---------------------------------------------------------------------------------
--- CONFIG
---------------------------------------------------------------------------------
-SlenderHub.Config = {
-    OutputRoot   = "slenderhub_dumps",   -- pasta raiz (dentro da pasta do executor)
-    Sanitize     = true,                 -- remove caracteres inválidos de nomes de arquivo
-    WriteExtra   = true,                 -- salva closures extras do mesmo source
-    KeyMode      = "none",               -- "none" = livre; "api" = pluga VerifyKey depois
+-- =====================================
+-- FLAGS GLOBAIS
+-- =====================================
+local Flags = {
+    -- Main
+    AutoWin = false,
+    AutoRebirth = false,
+    AutoSuper = false,
+    InfMoney = false,
+    InfGems = false,
+    -- Misc
+    Diamonds = false,
+    Halloween = false,
+    Christmas = false,
+    AutoGifts = false,
+    InfinitePotion = false,
+    AutoCrate1 = false,
+    AutoCrate2 = false,
+    EggGhost = false,
+    AutoRandomPotion = false,
+    AutoUsePotion = false,
+    -- Train
+    TrainWorld = "1",
+    TrainMachine = "1",
+    AutoTrain = false,
+    -- Pet
+    AutoEquipBestPets = false,
+    AutoCraftPets = false,
+    -- Event
+    FarmCandy = false,
+    EggChristmas = false,
+    -- Claims
+    AutoDaily = false,
+    AutoLongDaily = false,
+    AutoOfflineWins = false,
+    AutoEventReward = false,
+    AutoQuest = false,
+    AutoAchievement = false,
+    AutoSeason = false,
+    AutoPrincess = false,
+    AutoSpinWheel = false,
+    AutoChallenge = false,
+    AutoDailyChest = false,
+    AutoNativeTrain = false,
+    AutoNativeFight = false,
+    -- Egg (dinâmico)
+    EggToggles = {},
+    FruitToggles = {}
 }
 
---------------------------------------------------------------------------------
--- SERVICES + UTILS
---------------------------------------------------------------------------------
-local Players        = game:GetService("Players")
-local RunService     = game:GetService("RunService")
-local HttpService    = game:GetService("HttpService")
-local MarketplaceService = game:GetService("MarketplaceService")
-local CoreGui        = game:GetService("CoreGui")
-local LocalPlayer    = Players.LocalPlayer
+-- =====================================
+-- LOAD FLUENT
+-- =====================================
+local Fluent = loadstring(game:HttpGet(
+    "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"
+))()
 
-local function Notify(title, text, dur, type)
-    if SlenderHub.UI and SlenderHub.UI.Notify then
-        SlenderHub.UI.Notify(title, text, dur, type)
-    end
-end
+local SaveManager = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"
+))()
 
---------------------------------------------------------------------------------
--- MATRIZ DE EXECUTORES (universal — nunca assuma que a função existe)
---------------------------------------------------------------------------------
-local Env = getgenv and getgenv() or _G
+local InterfaceManager = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"
+))()
 
-local FunctionMap = {
-    CheckCaller     = function() return type(checkcaller) == "function" and checkcaller or nil end,
-    NewCClosure     = function() return type(newcclosure) == "function" and newcclosure or nil end,
-    HookMetaMethod  = function() return type(hookmetamethod) == "function" and hookmetamethod or nil end,
-    GetNamecall     = function() return type(getnamecallmethod) == "function" and getnamecallmethod or nil end,
-    GetGC           = function() return type(getgc) == "function" and getgc or nil end,
-    GetReg          = function() return type(getreg) == "function" and getreg or nil end,
-    GetNilInstances = function() return type(getnilinstances) == "function" and getnilinstances or nil end,
-    GetRunning      = function() return type(getrunningscripts) == "function" and getrunningscripts or nil end,
-    GetConnections  = function() return type(getconnections) == "function" and getconnections or nil end,
-    Decompile       = function() return type(decompile) == "function" and decompile or nil end,
-    ScriptBytecode  = function() return type(getscriptbytecode) == "function" and getscriptbytecode or nil end,
-    DumpString      = function() return type(dumpstring) == "function" and dumpstring or nil end,
-    WriteFile       = function() return type(writefile) == "function" and writefile or nil end,
-    MakeFolder      = function() return type(makefolder) == "function" and makefolder or nil end,
-    IsFolder        = function() return type(isfolder) == "function" and isfolder or nil end,
-    IsFile          = function() return type(isfile) == "function" and isfile or nil end,
-    ListFiles       = function() return type(listfiles) == "function" and listfiles or nil end,
-    Identify        = function()
-        local names = { "getexecutorname", "identifyexecutor", "get_identify" }
-        for _, n in ipairs(names) do
-            if type(Env[n]) == "function" then
-                local ok, v = pcall(Env[n])
-                if ok and v then return tostring(v) end
+-- =====================================
+-- WINDOW
+-- =====================================
+local Window = Fluent:CreateWindow({
+    Title = "SlenderHub",
+    SubTitle = "By Slender",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Theme = "Aqua",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+-- =====================================
+-- TABS
+-- =====================================
+local Tabs = {
+    Main   = Window:AddTab({ Title = "Main",   Icon = "home" }),
+    Train  = Window:AddTab({ Title = "Train",  Icon = "power" }),
+    Misc   = Window:AddTab({ Title = "Misc",   Icon = "box" }),
+    Teleport = Window:AddTab({ Title = "Teleport", Icon = "map" }),
+    Pet    = Window:AddTab({ Title = "Pet",    Icon = "paw-print" }),
+    Egg    = Window:AddTab({ Title = "Egg",    Icon = "egg" }),
+    Event  = Window:AddTab({ Title = "Event",  Icon = "sparkles" }),
+    Claims = Window:AddTab({ Title = "Claims", Icon = "gift" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+-- =====================================
+-- KNIT (CARREGAMENTO SEGURO COM TIMEOUT)
+-- =====================================
+local KnitLoaded = false
+local Services = {}
+local Knit = nil  -- Referência direta ao Knit
+
+task.spawn(function()
+    -- Timeout de 15 segundos
+    local timeout = 15
+    local start = tick()
+    
+    repeat
+        task.wait(0.5)
+        if tick() - start > timeout then
+            warn("[SlenderHub] Knit timeout - Packages não encontrado")
+            return
+        end
+    until ReplicatedStorage:FindFirstChild("Packages")
+    
+    local ok, result = pcall(function()
+        local packages = ReplicatedStorage.Packages
+        -- Procura qualquer versão do Knit (não hardcoded)
+        local index = packages:FindFirstChild("_Index")
+        if not index then return nil end
+        
+        for _, folder in pairs(index:GetChildren()) do
+            if folder.Name:find("sleitnick_knit") then
+                local knit = folder:FindFirstChild("knit")
+                if knit then
+                    Knit = knit
+                    return knit:FindFirstChild("Services")
+                end
             end
         end
-        return "unknown"
-    end,
-}
-
-local function Fn(name)
-    local ok, val = pcall(FunctionMap[name])
-    return ok and val or nil
-end
-
-local ExecutorName = Fn("Identify")
-
---------------------------------------------------------------------------------
--- NOME DO JOGO (com cache — GetProductInfo tem rate limit)
---------------------------------------------------------------------------------
-local GameNameCache
-
-local function GetGameName()
-    if GameNameCache then return GameNameCache end
-    local ok, info = pcall(function()
-        return MarketplaceService:GetProductInfo(game.PlaceId).Name
+        return nil
     end)
-    local name = ok and info or ("place_" .. tostring(game.PlaceId))
-    name = (name or ""):gsub("[<>:\"/\\|?*]", "_")
-    GameNameCache = name ~= "" and name or ("place_" .. tostring(game.PlaceId))
-    return GameNameCache
-end
-
---------------------------------------------------------------------------------
--- FILESYSTEM (writefile/makefolder com fallback)
---------------------------------------------------------------------------------
-local HasWrite = Fn("WriteFile") ~= nil
-
-local function SanitizeName(name)
-    if not SlenderHub.Config.Sanitize then return name end
-    name = name:gsub("[<>:\"/\\|?*%c]", "_")
-    name = name:gsub("^_+", ""):gsub("_+$", "")
-    return name ~= "" and name or "unnamed"
-end
-
-local function EnsureFolder(path)
-    local mk = Fn("MakeFolder")
-    local isf = Fn("IsFolder")
-    if not mk then return false end
-    local cur = ""
-    for _, part in ipairs(string.split(path, "/")) do
-        cur = cur .. part
-        local exists = false
-        if isf then
-            local ok, e = pcall(isf, cur)
-            exists = ok and e == true
-        end
-        if not exists then
-            local ok = pcall(mk, cur)
-            if not ok then return false end
-        end
-        cur = cur .. "/"
-    end
-    return true
-end
-
-local function WriteUniqueFile(path, content)
-    local wf = Fn("WriteFile")
-    local isf = Fn("IsFile")
-    if not wf then return nil end
-    local final = path
-    local n = 1
-    while isf do
-        local ok, e = pcall(isf, final)
-        if not (ok and e) then break end
-        n = n + 1
-        final = path:gsub("(.+)%.(lua|txt|json|bin)$", "%1_" .. n .. ".%2")
-        if final == path then final = path .. "_" .. n end
-    end
-    local ok = pcall(wf, final, content)
-    return ok and final or nil
-end
-
---------------------------------------------------------------------------------
--- COLETA DE REMOTES
---------------------------------------------------------------------------------
-local REMOTE_CLASSES = {
-    "RemoteEvent", "RemoteFunction", "UnreliableRemoteEvent",
-}
-
-local SUSPICIOUS_WORDS = {
-    "ban", "admin", "detect", "cheat", "exploit", "check", "verify", "kick",
-    "anti", "honeypot", "log", "report", "ac", "detection", "flag", "punish",
-    "moderation", "security", "backdoor",
-}
-
-local SECURITY_FOLDERS = { "anticheat", "anti-cheat", "ac", "security", "moderation", "detection" }
-
-local function IsSuspiciousName(name)
-    local n = name:lower()
-    for _, w in ipairs(SUSPICIOUS_WORDS) do
-        if n:find(w, 1, true) then return true end
-    end
-    return false
-end
-
-local function IsInsideSecurityFolder(inst)
-    local cur = inst.Parent
-    while cur do
-        local cname = cur.Name:lower()
-        for _, f in ipairs(SECURITY_FOLDERS) do
-            if cname == f then return true end
-        end
-        cur = cur.Parent
-    end
-    return false
-end
-
-local function GetRemotePath(inst)
-    local parts = {}
-    local cur = inst
-    while cur and cur ~= game do
-        table.insert(parts, 1, cur.Name)
-        cur = cur.Parent
-    end
-    return table.concat(parts, "/")
-end
-
-local function CollectRemotes()
-    local remotes = {}
-    local seen = {}
-
-    local function Add(inst)
-        if seen[inst] then return end
-        seen[inst] = true
-        table.insert(remotes, inst)
-    end
-
-    -- 1) árvore visível
-    for _, desc in ipairs(game:GetDescendants()) do
-        for _, cls in ipairs(REMOTE_CLASSES) do
-            if desc:IsA(cls) then Add(desc) end
-        end
-        if desc:IsA("BindableEvent") or desc:IsA("BindableFunction") then
-            Add(desc) -- informativo (não fireável pelo cliente)
-        end
-    end
-
-    -- 2) heap (remotes não expostos na árvore pública)
-    local gc = Fn("GetGC")
-    if gc then
-        pcall(function()
-            for _, v in ipairs(gc()) do
-                if type(v) == "userdata" and typeof(v) == "Instance" then
-                    for _, cls in ipairs(REMOTE_CLASSES) do
-                        if v:IsA(cls) then Add(v) end
-                    end
-                end
-            end
-        end)
-    end
-
-    -- 3) instâncias ocultas
-    local nilInst = Fn("GetNilInstances")
-    if nilInst then
-        pcall(function()
-            for _, v in ipairs(nilInst()) do
-                if typeof(v) == "Instance" then
-                    for _, cls in ipairs(REMOTE_CLASSES) do
-                        if v:IsA(cls) then Add(v) end
-                    end
-                end
-            end
-        end)
-    end
-
-    return remotes
-end
-
-local function CountConnections(remote)
-    local gc = Fn("GetConnections")
-    if not gc then return nil end
-    local ok, cons = pcall(gc, remote)
-    if not ok or type(cons) ~= "table" then return nil end
-    return #cons
-end
-
---------------------------------------------------------------------------------
--- COLETA DE SCRIPTS
---------------------------------------------------------------------------------
-local ScriptStore = {}   -- { path = caminho no disco, content = string, kind = "code"|"bytecode"|"note" }
-local ExtraStore = {}    -- closures extras por source
-local SeenSources = {}
-local Stats = { scripts = 0, closures = 0, extras = 0, errors = 0 }
-
-local function SourceToPath(source)
-    -- source: "@ReplicatedStorage/ModuleScript:42" | "@ModuleScript:42"
-    local s = source:gsub("^@", ""):gsub(":%d+$", "")
-    local parts = {}
-    for part in s:gmatch("[^/]+") do
-        table.insert(parts, part)
-    end
-    local folder, name
-    if #parts == 0 then
-        folder, name = "unknown", "unknown"
-    elseif #parts == 1 then
-        folder, name = "unknown", parts[1]
-    else
-        folder, name = parts[1], parts[#parts]
-    end
-    return SanitizeName(folder), SanitizeName(name)
-end
-
-local function DecompileOne(closure)
-    local dc = Fn("Decompile")
-    if dc then
-        local ok, code = pcall(dc, closure)
-        if ok and type(code) == "string" and #code > 0 then
-            return code, "code"
-        end
-    end
-    local sb = Fn("ScriptBytecode") or Fn("DumpString")
-    if sb then
-        local ok, bin = pcall(sb, closure)
-        if ok and type(bin) == "string" and #bin > 0 then
-            return bin, "bytecode"
-        end
-    end
-    return nil, nil
-end
-
-local function AddClosure(closure, info)
-    info = info or debug.getinfo(closure)
-    if not info or type(info.source) ~= "string" then return end
-    local src = info.source
-    if src == "=[C]" or not src:find("^@") then return end -- C closure / builtin
-
-    Stats.closures = Stats.closures + 1
-    if SeenSources[src] then
-        if SlenderHub.Config.WriteExtra then
-            table.insert(ExtraStore, { source = src, closure = closure, info = info })
-        end
+    
+    if not ok or not result then
+        warn("[SlenderHub] Knit não encontrado")
         return
     end
-    SeenSources[src] = true
-
-    local folder, name = SourceToPath(src)
-    local content, kind = DecompileOne(closure)
-    local note
-    if not content then
-        kind = "note"
-        note = string.format("-- Closure sem decompilador disponível.\n-- Executor: %s\n-- source: %s\n", tostring(ExecutorName), tostring(src))
-    end
-    local filePath = string.format("scripts/%s/%s.lua", folder, name)
-    table.insert(ScriptStore, {
-        path = filePath,
-        folder = folder,
-        name = name,
-        content = content,
-        kind = kind,
-        note = note,
-        source = src,
+    
+    Services = result
+    KnitLoaded = true
+    
+    Fluent:Notify({
+        Title = "Knit",
+        Content = "Knit carregado com sucesso!",
+        Duration = 4
     })
-    Stats.scripts = Stats.scripts + 1
+end)
+
+-- =====================================
+-- FUNÇÕES AUXILIARES
+-- =====================================
+
+-- Acessa serviço do Knit por nome
+local function GetKnitService(serviceName)
+    if not KnitLoaded then return nil end
+    return Services:FindFirstChild(serviceName)
 end
 
-local function CollectScripts()
-    -- A) scripts rodando (instâncias) — melhor precisão de nome/pasta
-    local running = Fn("GetRunning")
-    if running then
-        pcall(function()
-            for _, inst in ipairs(running()) do
-                if typeof(inst) == "Instance" then
-                    local okClass = pcall(function() return inst:IsA("LuaSourceContainer") end)
-                    if okClass then
-                        local content, kind
-                        local okSrc, src = pcall(function() return inst.Source end)
-                        if okSrc and type(src) == "string" and #src > 0 then
-                            content, kind = src, "code"
-                        else
-                            local dc = Fn("Decompile")
-                            if dc then
-                                local ok2, code = pcall(dc, inst)
-                                if ok2 and type(code) == "string" and #code > 0 then
-                                    content, kind = code, "code"
+-- Acessa RemoteEvent/RemoteFunction por caminho (com fallback direto pelo Knit)
+local function GetKnitRemote(serviceName, remoteType, remoteName)
+    local service = GetKnitService(serviceName)
+    if service then
+        local container = service:FindFirstChild(remoteType)
+        if container then
+            local r = container:FindFirstChild(remoteName)
+            if r then return r end
+        end
+    end
+    -- Fallback: caminho direto ReplicatedStorage/Packages/_Index/sleitnick_knit@x/knit/Services/<svc>/<RE|RF>/<name>
+    -- (não depende do Knit carregar; caminho confirmado pelo dump SlenderHub)
+    local packages = ReplicatedStorage:FindFirstChild("Packages")
+    if packages then
+        local index = packages:FindFirstChild("_Index")
+        if index then
+            for _, folder in ipairs(index:GetChildren()) do
+                if folder.Name:find("sleitnick_knit") then
+                    local knit = folder:FindFirstChild("knit")
+                    if knit then
+                        local services = knit:FindFirstChild("Services")
+                        if services then
+                            local svc = services:FindFirstChild(serviceName)
+                            if svc then
+                                local cont = svc:FindFirstChild(remoteType)
+                                if cont then
+                                    local r = cont:FindFirstChild(remoteName)
+                                    if r then return r end
                                 end
                             end
                         end
-                        local folder, name = "scripts_rodando", SanitizeName(inst.Name)
-                        local filePath = string.format("scripts/%s/%s.lua", folder, name)
-                        table.insert(ScriptStore, {
-                            path = filePath, folder = folder, name = name,
-                            content = content, kind = kind or "note",
-                            note = kind and nil or ("-- Script sem código recuperável: " .. tostring(inst:GetFullName())),
-                            source = inst:GetFullName(),
-                        })
-                        Stats.scripts = Stats.scripts + 1
-                    end
-                end
-            end
-        end)
-    end
-
-    -- B) heap scan (closures vivas)
-    local gc = Fn("GetGC")
-    if gc then
-        pcall(function()
-            for _, v in ipairs(gc()) do
-                if type(v) == "function" then
-                    local ok, info = pcall(debug.getinfo, v, "S")
-                    if ok and info then AddClosure(v, info) end
-                end
-            end
-        end)
-    end
-
-    -- C) instâncias ocultas
-    local nilInst = Fn("GetNilInstances")
-    if nilInst then
-        pcall(function()
-            for _, v in ipairs(nilInst()) do
-                if typeof(v) == "Instance" and pcall(function() return v:IsA("LuaSourceContainer") end) then
-                    local content
-                    local okSrc, src = pcall(function() return v.Source end)
-                    if okSrc and type(src) == "string" and #src > 0 then
-                        content = src
-                    else
-                        local dc = Fn("Decompile")
-                        if dc then
-                            local ok2, code = pcall(dc, v)
-                            if ok2 and type(code) == "string" and #code > 0 then content = code end
-                        end
-                    end
-                    local folder, name = "ocultos", SanitizeName(v.Name)
-                    local filePath = string.format("scripts/%s/%s.lua", folder, name)
-                    table.insert(ScriptStore, {
-                        path = filePath, folder = folder, name = name,
-                        content = content or ("-- Instância oculta (sem código): " .. tostring(v:GetFullName())),
-                        kind = content and "code" or "note",
-                        source = v:GetFullName(),
-                    })
-                    Stats.scripts = Stats.scripts + 1
-                end
-            end
-        end)
-    end
-end
-
---------------------------------------------------------------------------------
--- LOG RUNTIME DE REMOTES (feature premium — off por padrão, hook detectável)
---------------------------------------------------------------------------------
-SlenderHub.RemoteLog = { Enabled = false, Buffer = {}, Hooked = false, OldNamecall = nil }
-
-local function FlushRemoteLog()
-    local base = string.format("%s/%s/remotes/runtime_log.txt", SlenderHub.Config.OutputRoot, GetGameName())
-    EnsureFolder(SlenderHub.Config.OutputRoot .. "/" .. GetGameName() .. "/remotes")
-    local content = table.concat(SlenderHub.RemoteLog.Buffer, "\n")
-    WriteUniqueFile(base, content)
-end
-
-local function EnableRemoteLog()
-    local hook = Fn("HookMetaMethod")
-    local nm   = Fn("GetNamecall")
-    local cc   = Fn("CheckCaller")
-    local ncc  = Fn("NewCClosure")
-    if not hook or not nm then
-        Notify("SlenderHub", "Executor sem hookmetamethod — log runtime indisponível", 3, "Error")
-        return false
-    end
-    local old = hook(game, "__namecall")
-    SlenderHub.RemoteLog.OldNamecall = old
-    local function callback(self, ...)
-        local method = nm()
-        if (method == "FireServer" or method == "InvokeServer") and typeof(self) == "Instance" then
-            if not (cc and cc()) then
-                local args = { ... }
-                local argStr = {}
-                for i = 1, math.min(6, #args) do
-                    local v = args[i]
-                    local str
-                    if typeof(v) == "Instance" then
-                        str = "Inst:" .. v.ClassName .. ":" .. v.Name
-                    elseif typeof(v) == "Vector3" or typeof(v) == "CFrame" or typeof(v) == "Color3" then
-                        str = tostring(v)
-                    else
-                        str = string.format("%q", tostring(v))
-                    end
-                    table.insert(argStr, str)
-                end
-                local line = string.format("[%s] %s %s(%s)",
-                    os.clock() > 0 and tostring(os.clock()) or tostring(0),
-                    self.ClassName, self.Name, table.concat(argStr, ", "))
-                table.insert(SlenderHub.RemoteLog.Buffer, line)
-            end
-        end
-        return old(self, ...)
-    end
-    local hookedFn = ncc and ncc(callback) or callback
-    hook(game, "__namecall", hookedFn)
-    SlenderHub.RemoteLog.Hooked = true
-    return true
-end
-
-local function DisableRemoteLog()
-    if SlenderHub.RemoteLog.Hooked then
-        if SlenderHub.RemoteLog.OldNamecall then
-            pcall(hookmetamethod, game, "__namecall", SlenderHub.RemoteLog.OldNamecall)
-        else
-            pcall(hookmetamethod, game, "__namecall", nil)
-        end
-        SlenderHub.RemoteLog.Hooked = false
-    end
-    FlushRemoteLog()
-end
-
---------------------------------------------------------------------------------
--- DUMP COMPLETO
---------------------------------------------------------------------------------
-local function BuildMetadata(remotes, honeypots)
-    local meta = {
-        tool = "SlenderHub Game Dumper",
-        version = "1.0.0",
-        game = GetGameName(),
-        placeId = tostring(game.PlaceId),
-        executor = tostring(ExecutorName),
-        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
-        stats = {
-            scripts = Stats.scripts,
-            closures_scanned = Stats.closures,
-            extra_closures = Stats.extras,
-            remotes = #remotes,
-            honeypots = #honeypots,
-            errors = Stats.errors,
-        },
-        remotes_summary = {},
-    }
-    for _, r in ipairs(remotes) do
-        table.insert(meta.remotes_summary, {
-            name = r.Name,
-            className = r.ClassName,
-            path = GetRemotePath(r),
-            bindable = r:IsA("BindableEvent") or r:IsA("BindableFunction"),
-        })
-    end
-    return HttpService:JSONEncode(meta)
-end
-
-local function RunDump()
-    Stats = { scripts = 0, closures = 0, extras = 0, errors = 0 }
-    ScriptStore = {}
-    ExtraStore = {}
-    SeenSources = {}
-
-    local gameName = GetGameName()
-    local root = string.format("%s/%s", SlenderHub.Config.OutputRoot, gameName)
-
-    if not HasWrite then
-        Notify("SlenderHub", "Executor sem writefile — só exibindo na tela", 4, "Warning")
-    end
-
-    Notify("SlenderHub", "Coletando remotes...", 2, nil)
-    local remotes = CollectRemotes()
-
-    Notify("SlenderHub", "Coletando scripts (heap scan)...", 3, nil)
-    CollectScripts()
-
-    -- honeypots
-    local honeypots = {}
-    local connectionInfo = {}
-    for _, r in ipairs(remotes) do
-        local cons = CountConnections(r)
-        local susp = IsSuspiciousName(r.Name) or IsInsideSecurityFolder(r)
-        connectionInfo[r] = cons
-        if susp then
-            table.insert(honeypots, r)
-        end
-    end
-
-    -- export
-    local okWrite = HasWrite
-    if okWrite then
-        EnsureFolder(root .. "/scripts")
-        EnsureFolder(root .. "/remotes")
-    end
-
-    local written = 0
-    local failed = 0
-    if okWrite then
-        for _, s in ipairs(ScriptStore) do
-            local full = string.format("%s/%s", root, s.path)
-            EnsureFolder(root .. "/scripts/" .. s.folder)
-            local content = s.content
-            if s.kind == "bytecode" then
-                content = "-- BYTECODE (use descompilador externo)\n" .. content
-            elseif s.kind == "note" then
-                content = s.note
-            else
-                content = "--// SlenderHub Dump | " .. gameName .. " | source: " .. (s.source or "") .. "\n\n" .. content
-            end
-            local ok = WriteUniqueFile(full, content)
-            if ok then written = written + 1 else failed = failed + 1 end
-        end
-        -- extras
-        if SlenderHub.Config.WriteExtra then
-            local done = {}
-            for _, ex in ipairs(ExtraStore) do
-                local folder, name = SourceToPath(ex.source)
-                local content, kind = DecompileOne(ex.closure)
-                if content then
-                    local n = (done[ex.source] or 0) + 1
-                    done[ex.source] = n
-                    local full = string.format("%s/scripts/_closures/%s_%d.lua", root, name, n)
-                    EnsureFolder(root .. "/scripts/_closures")
-                    WriteUniqueFile(full, "--// SlenderHub Dump (closure extra)\n" .. content)
-                end
-            end
-            Stats.extras = done and #ExtraStore or 0
-        end
-
-        -- remotes.txt
-        local lines = { string.format("REMOTES — %s (%s)", gameName, tostring(game.PlaceId)) }
-        for _, r in ipairs(remotes) do
-            local bind = r:IsA("BindableEvent") or r:IsA("BindableFunction")
-            local cons = connectionInfo[r]
-            local consStr = cons and tostring(cons) or "?"
-            table.insert(lines, string.format("[%s] %s | caminho: %s | handlers: %s%s",
-                r.ClassName, r.Name, GetRemotePath(r), consStr,
-                bind and " | BINDABLE (local, não fireável)" or ""))
-        end
-        WriteUniqueFile(root .. "/remotes/remotes.txt", table.concat(lines, "\n"))
-
-        -- honeypots.txt
-        local hl = { "HONEYPOTS / SUSPEITOS — NÃO FIRE sem investigar", "" }
-        for _, r in ipairs(honeypots) do
-            local reason = {}
-            if IsSuspiciousName(r.Name) then table.insert(reason, "nome suspeito") end
-            if IsInsideSecurityFolder(r) then table.insert(reason, "dentro de pasta de segurança") end
-            table.insert(hl, string.format("[%s] %s (%s) | %s",
-                r.ClassName, r.Name, GetRemotePath(r), table.concat(reason, ", ")))
-        end
-        table.insert(hl, "")
-        table.insert(hl, "OBS: remote SEM handlers no cliente não é necessariamente honeypot —")
-        table.insert(hl, "o handler pode estar no servidor. Sempre teste com conta descartável.")
-        WriteUniqueFile(root .. "/remotes/honeypots.txt", table.concat(hl, "\n"))
-
-        -- connections.txt
-        local cl = { "CONEXÕES (quem escuta no cliente)", "" }
-        for _, r in ipairs(remotes) do
-            local gc = Fn("GetConnections")
-            if gc then
-                local ok, cons = pcall(gc, r)
-                if ok and type(cons) == "table" and #cons > 0 then
-                    table.insert(cl, string.format("[%s] %s — %d conexão(ões)", r.ClassName, r.Name, #cons))
-                    for i, c in ipairs(cons) do
-                        local fn = type(c) == "table" and c.Function
-                        local loc
-                        if type(fn) == "function" then
-                            local ok2, info = pcall(debug.getinfo, fn, "S")
-                            loc = ok2 and info and tostring(info.source) or "?"
-                        end
-                        table.insert(cl, string.format("    %d. handler em %s", i, loc or "?"))
                     end
                 end
             end
         end
-        WriteUniqueFile(root .. "/remotes/connections.txt", table.concat(cl, "\n"))
-
-        -- metadata.json
-        WriteUniqueFile(root .. "/metadata.json", BuildMetadata(remotes, honeypots))
     end
-
-    -- resumo
-    local cons = Fn("GetConnections")
-    local handlersCount = 0
-    if cons then
-        pcall(function()
-            for _, r in ipairs(remotes) do
-                local c = CountConnections(r)
-                if c then handlersCount = handlersCount + c end
-            end
-        end)
-    end
-
-    local summary = string.format(
-        "DUMP CONCLUÍDO\nJogo: %s (%s)\nExecutor: %s\n\nPasta: %s\n  • Scripts: %d (falhas: %d)\n  • Closures no heap: %d\n  • Closures extras: %d\n  • Remotes: %d (honeypots: %d)\n  • Handlers no cliente: %d",
-        gameName, tostring(game.PlaceId), tostring(ExecutorName),
-        root, written, failed,
-        Stats.closures, Stats.extras,
-        #remotes, #honeypots, handlersCount)
-
-    if SlenderHub.UI and SlenderHub.UI.SetResult then
-        SlenderHub.UI.SetResult(summary)
-    end
-    Notify("SlenderHub", "Dump salvo em " .. root, 6, "Success")
+    return nil
 end
 
---------------------------------------------------------------------------------
--- UI SLENDERWIND (enxuta — mesma identidade do hub)
---------------------------------------------------------------------------------
-SlenderHub.UI = {}
+-- =====================================
+-- MAIN TAB
+-- =====================================
 
-local function CreateUI()
-    local theme = {
-        MainBg  = Color3.fromRGB(18, 18, 22),
-        Sidebar = Color3.fromRGB(23, 23, 27),
-        Element = Color3.fromRGB(30, 30, 36),
-        Text    = Color3.fromRGB(240, 240, 240),
-        SubText = Color3.fromRGB(160, 160, 160),
-        Accent  = Color3.fromRGB(60, 130, 250),
-        Stroke  = Color3.fromRGB(45, 45, 50),
-        Success = Color3.fromRGB(60, 250, 100),
-        Warning = Color3.fromRGB(250, 180, 60),
-        Error   = Color3.fromRGB(255, 85, 85),
-    }
-
-    local parent = CoreGui
-    if parent:FindFirstChild("SlenderHubDumper") then parent.SlenderHubDumper:Destroy() end
-
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "SlenderHubDumper"
-    sg.ResetOnSpawn = false
-    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    sg.Parent = parent
-
-    local main = Instance.new("Frame")
-    main.BackgroundColor3 = theme.MainBg
-    main.Size = UDim2.new(0, 460, 0, 460)
-    main.Position = UDim2.new(0.5, -230, 0.5, -230)
-    main.Parent = sg
-    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 10); corner.Parent = main
-    local stroke = Instance.new("UIStroke"); stroke.Color = theme.Stroke; stroke.Parent = main
-
-    -- topbar (drag)
-    local topbar = Instance.new("Frame")
-    topbar.BackgroundTransparency = 1
-    topbar.Size = UDim2.new(1, 0, 0, 36)
-    topbar.Parent = main
-
-    local title = Instance.new("TextLabel")
-    title.Text = "SlenderHub | Game Dumper"
-    title.TextColor3 = theme.Text
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 15
-    title.BackgroundTransparency = 1
-    title.Position = UDim2.new(0, 14, 0, 0)
-    title.Size = UDim2.new(1, -60, 1, 0)
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = topbar
-
-    local dragging, dragInput, startPos
-    topbar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; startPos = input.Position; dragInput = input
-        end
-    end)
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - startPos
-            main.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset + delta.X, main.Position.Y.Scale, main.Position.Y.Offset + delta.Y)
-        end
-    end)
-    game:GetService("UserInputService").InputEnded:Connect(function(input)
-        if input == dragInput then dragging = false end
-    end)
-
-    local close = Instance.new("TextButton")
-    close.Text = "X"
-    close.TextColor3 = theme.SubText
-    close.BackgroundTransparency = 1
-    close.Size = UDim2.new(0, 32, 0, 32)
-    close.Position = UDim2.new(1, -36, 0, 2)
-    close.Font = Enum.Font.GothamBold
-    close.TextSize = 14
-    close.Parent = topbar
-    close.MouseButton1Click:Connect(function() sg:Destroy() end)
-
-    -- corpo
-    local body = Instance.new("Frame")
-    body.BackgroundTransparency = 1
-    body.Position = UDim2.new(0, 12, 0, 44)
-    body.Size = UDim2.new(1, -24, 1, -56)
-    body.Parent = main
-
-    local info = Instance.new("TextLabel")
-    info.Text = string.format("Jogo: %s | Executor: %s", GetGameName(), tostring(ExecutorName))
-    info.TextColor3 = theme.SubText
-    info.Font = Enum.Font.Gotham
-    info.TextSize = 12
-    info.BackgroundTransparency = 1
-    info.Size = UDim2.new(1, 0, 0, 24)
-    info.TextXAlignment = Enum.TextXAlignment.Left
-    info.Parent = body
-
-    local btnDump = Instance.new("TextButton")
-    btnDump.Text = "▶  DUMPAR JOGO"
-    btnDump.TextColor3 = theme.Text
-    btnDump.Font = Enum.Font.GothamBold
-    btnDump.TextSize = 14
-    btnDump.BackgroundColor3 = theme.Accent
-    btnDump.Size = UDim2.new(1, 0, 0, 40)
-    btnDump.Position = UDim2.new(0, 0, 0, 30)
-    btnDump.Parent = body
-    local bcorner = Instance.new("UICorner"); bcorner.CornerRadius = UDim.new(0, 6); bcorner.Parent = btnDump
-
-    local btnLog = Instance.new("TextButton")
-    btnLog.Text = "●  LOG DE REMOTES (runtime)"
-    btnLog.TextColor3 = theme.Text
-    btnLog.Font = Enum.Font.GothamBold
-    btnLog.TextSize = 13
-    btnLog.BackgroundColor3 = theme.Element
-    btnLog.Size = UDim2.new(1, 0, 0, 36)
-    btnLog.Position = UDim2.new(0, 0, 0, 78)
-    btnLog.Parent = body
-    local bcorner2 = Instance.new("UICorner"); bcorner2.CornerRadius = UDim.new(0, 6); bcorner2.Parent = btnLog
-
-    local logActive = false
-    btnLog.MouseButton1Click:Connect(function()
-        logActive = not logActive
-        if logActive then
-            local ok = EnableRemoteLog()
-            if ok then
-                btnLog.Text = "●  LOG DE REMOTES (runtime) — ATIVO"
-                btnLog.BackgroundColor3 = theme.Success
-            else
-                logActive = false
-            end
-        else
-            DisableRemoteLog()
-            btnLog.Text = "●  LOG DE REMOTES (runtime)"
-            btnLog.BackgroundColor3 = theme.Element
-        end
-    end)
-
-    btnDump.MouseButton1Click:Connect(function()
+-- AUTO WIN (versão com áreas dinâmicas)
+Tabs.Main:AddToggle("AutoWin", {
+    Title = "Auto Win Contest",
+    Callback = function(v)
+        Flags.AutoWin = v
         task.spawn(function()
-            btnDump.Text = "⏳  Dumpando... (não feche)"
-            btnDump.BackgroundColor3 = theme.Warning
-            RunDump()
-            btnDump.Text = "▶  DUMPAR JOGO"
-            btnDump.BackgroundColor3 = theme.Accent
+            while Flags.AutoWin do
+                local fightService = GetKnitService("FightService")
+                if fightService then
+                    local joinRemote = fightService:FindFirstChild("RE"):FindFirstChild("JoinContest")
+                    local winRemote  = fightService:FindFirstChild("RE"):FindFirstChild("GetWinsEvent")
+                    local quitRemote = fightService:FindFirstChild("RE"):FindFirstChild("QuitContestEvent")
+                    
+                    if joinRemote and winRemote and quitRemote then
+                        local areas = Workspace:FindFirstChild("Areas")
+                        if areas then
+                            for _, area in pairs(areas:GetChildren()) do
+                                pcall(function()
+                                    joinRemote:FireServer(area.Name)
+                                    task.wait(0.1)
+                                    local winGates = area:FindFirstChild("WinGates")
+                                    if winGates then
+                                        for i, gate in pairs(winGates:GetChildren()) do
+                                            local gatePos = gate:FindFirstChild("gate")
+                                            if gatePos then
+                                                winRemote:FireServer("WinGate_" .. i, gatePos.Position)
+                                            end
+                                        end
+                                    end
+                                    quitRemote:FireServer(area.Name)
+                                end)
+                            end
+                        end
+                    end
+                end
+                task.wait(1)
+            end
         end)
-    end)
-
-    local result = Instance.new("TextLabel")
-    result.Text = "Clique em DUMPAR JOGO.\nO dump será salvo em: " .. SlenderHub.Config.OutputRoot .. "/<nome_do_jogo>/"
-    result.TextColor3 = theme.Text
-    result.Font = Enum.Font.Gotham
-    result.TextSize = 12
-    result.TextWrapped = true
-    result.TextXAlignment = Enum.TextXAlignment.Left
-    result.TextYAlignment = Enum.TextYAlignment.Top
-    result.BackgroundColor3 = theme.Element
-    result.Size = UDim2.new(1, 0, 1, -124)
-    result.Position = UDim2.new(0, 0, 0, 122)
-    result.Parent = body
-    local rcorner = Instance.new("UICorner"); rcorner.CornerRadius = UDim.new(0, 6); rcorner.Parent = result
-    local padding = Instance.new("UIPadding"); padding.PaddingLeft = UDim.new(0, 10); padding.PaddingTop = UDim.new(0, 8); padding.Parent = result
-
-    -- notificações
-    local notifyContainer = Instance.new("Frame")
-    notifyContainer.BackgroundTransparency = 1
-    notifyContainer.AnchorPoint = Vector2.new(0, 1)
-    notifyContainer.Position = UDim2.new(1, -300, 1, -16)
-    notifyContainer.Size = UDim2.new(0, 280, 1, 0)
-    notifyContainer.Parent = sg
-    local nlist = Instance.new("UIListLayout"); nlist.Padding = UDim.new(0, 6); nlist.VerticalAlignment = Enum.VerticalAlignment.Bottom; nlist.Parent = notifyContainer
-
-    SlenderHub.UI.Notify = function(titleText, text, dur, type)
-        local typeColor = theme.Accent
-        if type == "Success" then typeColor = theme.Success
-        elseif type == "Warning" then typeColor = theme.Warning
-        elseif type == "Error" then typeColor = theme.Error end
-        local frame = Instance.new("Frame")
-        frame.BackgroundColor3 = theme.Sidebar
-        frame.Size = UDim2.new(1, 0, 0, 48)
-        frame.Parent = notifyContainer
-        local fcorner = Instance.new("UICorner"); fcorner.CornerRadius = UDim.new(0, 8); fcorner.Parent = frame
-        local fstroke = Instance.new("UIStroke"); fstroke.Color = typeColor; fstroke.Parent = frame
-        local t1 = Instance.new("TextLabel")
-        t1.Text = titleText; t1.TextColor3 = typeColor; t1.Font = Enum.Font.GothamBold; t1.TextSize = 13
-        t1.BackgroundTransparency = 1; t1.Position = UDim2.new(0, 10, 0, 5); t1.Size = UDim2.new(1, -20, 0, 18)
-        t1.TextXAlignment = Enum.TextXAlignment.Left; t1.Parent = frame
-        local t2 = Instance.new("TextLabel")
-        t2.Text = text or ""; t2.TextColor3 = theme.Text; t2.Font = Enum.Font.Gotham; t2.TextSize = 11
-        t2.BackgroundTransparency = 1; t2.Position = UDim2.new(0, 10, 0, 23); t2.Size = UDim2.new(1, -20, 0, 18)
-        t2.TextXAlignment = Enum.TextXAlignment.Left; t2.TextWrapped = true; t2.Parent = frame
-        task.delay(dur or 3, function() frame:Destroy() end)
     end
+})
 
-    SlenderHub.UI.SetResult = function(text)
-        result.Text = text
+-- AUTO REBIRTH
+Tabs.Main:AddToggle("AutoRebirth", {
+    Title = "Auto Rebirth",
+    Callback = function(v)
+        Flags.AutoRebirth = v
+        task.spawn(function()
+            while Flags.AutoRebirth do
+                local rf = GetKnitRemote("RebirthService", "RF", "Rebirth")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(0.1)
+            end
+        end)
+    end
+})
+
+-- AUTO SUPER REBIRTH
+Tabs.Main:AddToggle("AutoSuper", {
+    Title = "Auto Super Rebirth",
+    Callback = function(v)
+        Flags.AutoSuper = v
+        task.spawn(function()
+            while Flags.AutoSuper do
+                local rf = GetKnitRemote("RebirthService", "RF", "SuperRebirth")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(0.3)
+            end
+        end)
+    end
+})
+
+-- INFINITE MONEY
+Tabs.Main:AddToggle("InfMoney", {
+    Title = "Infinite Money",
+    Callback = function(v)
+        Flags.InfMoney = v
+        task.spawn(function()
+            while Flags.InfMoney do
+                local re = GetKnitRemote("RandomPotionService", "RE", "BuyPotionEvent")
+                if re then
+                    pcall(function()
+                        re:FireServer(-70e+70, {}, true, "yippie!")
+                    end)
+                end
+                task.wait(0.1)
+            end
+        end)
+    end
+})
+
+-- INFINITE GEMS (payload negativo — mesma técnica do InfMoney, alvos do dump)
+Tabs.Main:AddToggle("InfGems", {
+    Title = "Infinite Gems",
+    Callback = function(v)
+        Flags.InfGems = v
+        task.spawn(function()
+            while Flags.InfGems do
+                -- DungeonService/RE/BuyCystal (cristais — typo "Cystal" do jogo)
+                local buyCystal = GetKnitRemote("DungeonService", "RE", "BuyCystal")
+                if buyCystal then
+                    pcall(function()
+                        buyCystal:FireServer(-70e+70, {})
+                    end)
+                end
+                -- TrainService/RE/DropDiamonds (diamantes)
+                local dropDia = GetKnitRemote("TrainService", "RE", "DropDiamonds")
+                if dropDia then
+                    pcall(function()
+                        dropDia:FireServer(-70e+70)
+                    end)
+                end
+                -- FightService/RE/DropDiamonds (diamantes via contest)
+                local dropDiaFight = GetKnitRemote("FightService", "RE", "DropDiamonds")
+                if dropDiaFight then
+                    pcall(function()
+                        dropDiaFight:FireServer(-70e+70)
+                    end)
+                end
+                task.wait(0.15)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- TRAIN TAB
+-- =====================================
+
+Tabs.Train:AddSection("Auto Train")
+
+Tabs.Train:AddDropdown("TrainWorld", {
+    Title = "World",
+    Values = {"1", "2", "3", "4"},
+    Default = "1",
+    Callback = function(value)
+        Flags.TrainWorld = value
+    end
+})
+
+Tabs.Train:AddDropdown("TrainMachine", {
+    Title = "Treadmill",
+    Values = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"},
+    Default = "1",
+    Callback = function(value)
+        Flags.TrainMachine = value
+    end
+})
+
+local AutoTrainRunning = false
+
+Tabs.Train:AddToggle("AutoTrainToggle", {
+    Title = "Auto Train",
+    Default = false,
+    Callback = function(state)
+        Flags.AutoTrain = state
+        if state and not AutoTrainRunning then
+            AutoTrainRunning = true
+            task.spawn(function()
+                while Flags.AutoTrain do
+                    local trainRE = Knit and Knit:FindFirstChild("Services"):FindFirstChild("TrainService"):FindFirstChild("RE"):FindFirstChild("RunTrain")
+                    if trainRE then
+                        pcall(function()
+                            trainRE:FireServer("Treadmill_" .. Flags.TrainWorld .. "_" .. Flags.TrainMachine)
+                        end)
+                    end
+                    task.wait(1)
+                end
+                AutoTrainRunning = false
+            end)
+        end
+    end
+})
+
+-- AUTO STAR COLLECTOR (dump: TrainService/RE/HitStar + GetStar — é o que dá força de verdade)
+Tabs.Train:AddToggle("AutoStar", {
+    Title = "Auto Star Collector",
+    Default = false,
+    Callback = function(state)
+        Flags.AutoStar = state
+        task.spawn(function()
+            while Flags.AutoStar do
+                local hitStar = GetKnitRemote("TrainService", "RE", "HitStar")
+                local getStar = GetKnitRemote("TrainService", "RE", "GetStar")
+                if hitStar then
+                    -- procura estrelas geradas no Workspace (nome típico "Star"/"StarPart")
+                    local stars = Workspace:FindFirstChild("Stars") or Workspace:FindFirstChild("StarParts")
+                    if stars then
+                        for _, star in ipairs(stars:GetChildren()) do
+                            pcall(function()
+                                if star:IsA("BasePart") then
+                                    hitStar:FireServer(star.Position)
+                                    task.wait(0.05)
+                                end
+                            end)
+                        end
+                    end
+                    -- fallback: tenta fire direto com posição da raiz
+                    if not stars then
+                        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if root then
+                            pcall(function() hitStar:FireServer(root.Position) end)
+                        end
+                    end
+                end
+                if getStar then
+                    pcall(function() getStar:FireServer() end)
+                end
+                task.wait(0.4)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- MISC TAB
+-- =====================================
+
+Tabs.Misc:AddToggle("Diamonds", {
+    Title = "Diamonds Upgrade",
+    Callback = function(v)
+        Flags.Diamonds = v
+        task.spawn(function()
+            while Flags.Diamonds do
+                local rf = GetKnitRemote("RebirthService", "RF", "SuperRebirthUpgrade")
+                if rf then pcall(function() rf:InvokeServer("Diamonds") end) end
+                task.wait(1)
+            end
+        end)
+    end
+})
+
+-- HALLOWEEN GUI
+Tabs.Misc:AddToggle("Halloween", {
+    Title = "Open Halloween GUI",
+    Callback = function(v)
+        Flags.Halloween = v
+        local gui = LocalPlayer.PlayerGui:FindFirstChild("HalloweenDailyRewardGui", true)
+        if gui then
+            gui.Enabled = v
+            gui.ResetOnSpawn = false
+        end
+    end
+})
+
+-- CHRISTMAS GUI
+Tabs.Misc:AddToggle("Christmas", {
+    Title = "Open Christmas GUI",
+    Callback = function(v)
+        Flags.Christmas = v
+        local gui = LocalPlayer.PlayerGui:FindFirstChild("ChristmasDailyRewardGui", true)
+        if gui then
+            gui.Enabled = v
+            gui.ResetOnSpawn = false
+        end
+    end
+})
+
+-- AUTO CLAIM GIFTS
+Tabs.Misc:AddToggle("AutoGifts", {
+    Title = "Auto Claim Gifts",
+    Callback = function(v)
+        Flags.AutoGifts = v
+        task.spawn(function()
+            while Flags.AutoGifts do
+                local re = GetKnitRemote("OnlineRewardService", "RE", "ClaimOnlineReward")
+                if re then
+                    for i = 1, 12 do
+                        pcall(function() re:FireServer(i) end)
+                        task.wait(0.5)
+                    end
+                end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- INFINITE POTION
+Tabs.Misc:AddToggle("InfinitePotion", {
+    Title = "Infinite Potion + King Slime",
+    Default = false,
+    Callback = function(v)
+        Flags.InfinitePotion = v
+        task.spawn(function()
+            while Flags.InfinitePotion do
+                local rf = GetKnitRemote("ChestService", "RF", "ClaimDailyChest")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(0.5)
+            end
+        end)
+    end
+})
+
+-- AUTO CRATE 1
+Tabs.Misc:AddToggle("AutoCrate1", {
+    Title = "Auto Crate 1",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoCrate1 = v
+        task.spawn(function()
+            while Flags.AutoCrate1 do
+                local re = GetKnitRemote("ItemCrateService", "RE", "UnboxCrate")
+                if re then pcall(function() re:FireServer("Crate_1") end) end
+                task.wait(1)
+            end
+        end)
+    end
+})
+
+-- AUTO CRATE 2
+Tabs.Misc:AddToggle("AutoCrate2", {
+    Title = "Auto Crate 2",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoCrate2 = v
+        task.spawn(function()
+            while Flags.AutoCrate2 do
+                local re = GetKnitRemote("ItemCrateService", "RE", "UnboxCrate")
+                if re then pcall(function() re:FireServer("Crate_2") end) end
+                task.wait(1)
+            end
+        end)
+    end
+})
+
+-- AUTO EGG BRAINROT
+Tabs.Misc:AddToggle("AutoEggBrainrot", {
+    Title = "Auto Claim Egg Brainrot",
+    Default = false,
+    Callback = function(v)
+        Flags.EggGhost = v
+        task.spawn(function()
+            while Flags.EggGhost do
+                local rf = GetKnitRemote("OnlineRewardService", "RF", "ClaimOnlineQuestReward")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- AUTO RANDOM POTION
+Tabs.Misc:AddToggle("AutoRandomPotion", {
+    Title = "Auto Random Potion",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoRandomPotion = v
+        task.spawn(function()
+            while Flags.AutoRandomPotion do
+                local re = GetKnitRemote("RandomPotionService", "RE", "BuyPotionEvent")
+                if re then pcall(function() re:FireServer(3) end) end
+                task.wait(0.5)
+            end
+        end)
+    end
+})
+
+-- AUTO USE POTION
+Tabs.Misc:AddToggle("AutoUsePotion", {
+    Title = "Auto Use Potion (Double Strength)",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoUsePotion = v
+        task.spawn(function()
+            while Flags.AutoUsePotion do
+                local re = GetKnitRemote("PotionService", "RE", "UsePotion")
+                if re then pcall(function() re:FireServer("Potion_DoubleStrength") end) end
+                task.wait(1)
+            end
+        end)
+    end
+})
+
+-- TEST MONEY SERVICE (dump: TestMoneyService — serviço de teste de dev, RISCO DE BAN)
+Tabs.Misc:AddButton({
+    Title = "Test MoneyService (RISCO)",
+    Callback = function()
+        local rf = GetKnitRemote("TestMoneyService", "RF", "GetMoney")
+        if rf then
+            local ok, res = pcall(function() return rf:InvokeServer() end)
+            Fluent:Notify({
+                Title = "TestMoneyService",
+                Content = ok and ("resposta: " .. tostring(res)) or ("erro: " .. tostring(res)),
+                Duration = 4
+            })
+        else
+            Fluent:Notify({
+                Title = "TestMoneyService",
+                Content = "Remote não encontrado",
+                Duration = 4
+            })
+        end
+    end
+})
+
+-- =====================================
+-- TELEPORT TAB
+-- =====================================
+
+Tabs.Teleport:AddParagraph({
+    Title = "Info",
+    Content = "Click in button and rejoin"
+})
+
+for i = 2, 4 do
+    Tabs.Teleport:AddButton({
+        Title = "World " .. i,
+        Callback = function()
+            local re = GetKnitRemote("AreaService", "RE", "UpdatePlayerCurrentArea")
+            if re then pcall(function() re:FireServer("Area_" .. i) end) end
+        end
+    })
+end
+
+Tabs.Teleport:AddButton({
+    Title = "Area Fruit",
+    Callback = function()
+        local re = GetKnitRemote("AreaService", "RE", "UpdatePlayerCurrentArea")
+        if re then pcall(function() re:FireServer("Area_Fruit") end) end
+    end
+})
+
+-- =====================================
+-- PET TAB
+-- =====================================
+
+Tabs.Pet:AddToggle("AutoEquipBestPets", {
+    Title = "Auto Equip Best Pets",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoEquipBestPets = v
+        task.spawn(function()
+            while Flags.AutoEquipBestPets do
+                local re = GetKnitRemote("PetService", "RE", "EquipBestPets")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+Tabs.Pet:AddToggle("AutoCraftPets", {
+    Title = "Auto Fuse/Craft Pets",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoCraftPets = v
+        task.spawn(function()
+            while Flags.AutoCraftPets do
+                -- dump: FuseService/RF/FusePets (fusão correta de pets)
+                local rf = GetKnitRemote("FuseService", "RF", "FusePets")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                -- VoidService/RE/StartCraft (craft no void)
+                local re = GetKnitRemote("VoidService", "RE", "StartCraft")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(3)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- EGG TAB
+-- =====================================
+
+local function CreateEggToggle(world, egg)
+    local eggName = "Egg_" .. world .. "_" .. egg
+    Flags.EggToggles[eggName] = false
+    
+    Tabs.Egg:AddToggle(eggName, {
+        Title = "World " .. world .. " - Egg " .. egg,
+        Default = false,
+        Callback = function(v)
+            Flags.EggToggles[eggName] = v
+            task.spawn(function()
+                while Flags.EggToggles[eggName] do
+                    local re = GetKnitRemote("EggHatchService", "RE", "Hatch")
+                    if re then
+                        pcall(function() re:FireServer(eggName, 1) end)
+                    end
+                    task.wait(1)
+                end
+            end)
+        end
+    })
+end
+
+for world = 1, 4 do
+    for egg = 1, 4 do
+        CreateEggToggle(world, egg)
     end
 end
 
---------------------------------------------------------------------------------
--- BOOT
---------------------------------------------------------------------------------
-local ok, err = pcall(function()
-    CreateUI()
-    Notify("SlenderHub", "Game Dumper pronto. Executor: " .. tostring(ExecutorName), 4, nil)
+-- =====================================
+-- EVENT TAB
+-- =====================================
+
+-- AUTO BUY FRUIT
+local function BuyFruit(fruitID)
+    local re = GetKnitRemote("FruitService", "RE", "BuyFruit")
+    if re then
+        pcall(function() re:FireServer(fruitID) end)
+    end
+end
+
+for i = 1, 4 do
+    local fruitID = string.format("Fruit_00%d", i)
+    Flags.FruitToggles[fruitID] = false
+    
+    Tabs.Event:AddToggle(fruitID, {
+        Title = "Auto " .. fruitID,
+        Callback = function(v)
+            Flags.FruitToggles[fruitID] = v
+            task.spawn(function()
+                while Flags.FruitToggles[fruitID] do
+                    BuyFruit(fruitID)
+                    task.wait(1)
+                end
+            end)
+        end
+    })
+end
+
+-- FARM CANDY
+Tabs.Event:AddToggle("FarmCandy", {
+    Title = "Farm Candy/Gift",
+    Callback = function(v)
+        Flags.FarmCandy = v
+        task.spawn(function()
+            while Flags.FarmCandy do
+                local re = GetKnitRemote("FightService", "RE", "GetWinsEvent")
+                if re then
+                    pcall(function()
+                        re:FireServer("WinGate_16", Vector3.new(1813, 780.8884, -689396.3125))
+                        re:FireServer("WinGate_12", Vector3.new(1813, 780.9491, -229395.1406))
+                        re:FireServer("WinGate_14", Vector3.new(1812, 780.8914, -373397.5))
+                        re:FireServer("WinGate_13", Vector3.new(1815, 780.9649, -289395.25))
+                    end)
+                end
+                task.wait(0.5)
+            end
+        end)
+    end
+})
+
+-- EGG CHRISTMAS
+Tabs.Event:AddToggle("EggChristmas", {
+    Title = "Egg_Christmas",
+    Callback = function(v)
+        Flags.EggChristmas = v
+        task.spawn(function()
+            while Flags.EggChristmas do
+                local re = GetKnitRemote("EggHatchService", "RE", "Hatch")
+                if re then
+                    pcall(function() re:FireServer("Egg_Christmas", 3) end)
+                end
+                task.wait(1)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- CLAIMS TAB (recompensas reveladas no dump SlenderHub)
+-- =====================================
+
+Tabs.Claims:AddSection("Recompensas")
+
+-- Auto Claim Daily Reward
+Tabs.Claims:AddToggle("AutoDaily", {
+    Title = "Auto Daily Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoDaily = v
+        task.spawn(function()
+            while Flags.AutoDaily do
+                local re = GetKnitRemote("DailyRewardService", "RE", "ClaimDailyReward")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Long Daily Reward
+Tabs.Claims:AddToggle("AutoLongDaily", {
+    Title = "Auto Long Daily Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoLongDaily = v
+        task.spawn(function()
+            while Flags.AutoLongDaily do
+                local re = GetKnitRemote("LongDailyRewardService", "RE", "ClaimLongDailyReward")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Offline Wins (dump: OfflineRaceService)
+Tabs.Claims:AddToggle("AutoOfflineWins", {
+    Title = "Auto Claim Offline Wins",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoOfflineWins = v
+        task.spawn(function()
+            while Flags.AutoOfflineWins do
+                local rf = GetKnitRemote("OfflineRaceService", "RF", "ClaimOfflineWins")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Event Reward
+Tabs.Claims:AddToggle("AutoEventReward", {
+    Title = "Auto Event Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoEventReward = v
+        task.spawn(function()
+            while Flags.AutoEventReward do
+                local re = GetKnitRemote("EventService", "RE", "ClaimEventReward")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Quest Reward
+Tabs.Claims:AddToggle("AutoQuest", {
+    Title = "Auto Quest Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoQuest = v
+        task.spawn(function()
+            while Flags.AutoQuest do
+                local re = GetKnitRemote("QuestService", "RE", "ClaimQuestReward")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Achievement (tenta ids 1..30)
+Tabs.Claims:AddToggle("AutoAchievement", {
+    Title = "Auto Achievement Claim",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoAchievement = v
+        task.spawn(function()
+            local i = 1
+            while Flags.AutoAchievement do
+                local re = GetKnitRemote("AchievementService", "RE", "ClaimAchievementEvent")
+                if re then
+                    pcall(function() re:FireServer(i) end)
+                    i = i + 1
+                    if i > 30 then i = 1 end
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Auto Season Reward
+Tabs.Claims:AddToggle("AutoSeason", {
+    Title = "Auto Season Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoSeason = v
+        task.spawn(function()
+            while Flags.AutoSeason do
+                local rf = GetKnitRemote("SeasonService", "RF", "ClaimSeasonReward")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Princess Daily
+Tabs.Claims:AddToggle("AutoPrincess", {
+    Title = "Auto Princess Daily",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoPrincess = v
+        task.spawn(function()
+            while Flags.AutoPrincess do
+                local re = GetKnitRemote("PrincessService", "RE", "ClaimDailyPrincess")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Spin Wheel
+Tabs.Claims:AddToggle("AutoSpinWheel", {
+    Title = "Auto Spin Wheel",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoSpinWheel = v
+        task.spawn(function()
+            while Flags.AutoSpinWheel do
+                local rf = GetKnitRemote("SpinningWheelService", "RF", "StartSpin")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Challenge (leaderboard)
+Tabs.Claims:AddToggle("AutoChallenge", {
+    Title = "Auto Challenge Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoChallenge = v
+        task.spawn(function()
+            while Flags.AutoChallenge do
+                local re = GetKnitRemote("GlobalLeaderboardService", "RE", "ClaimChallengeReward")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Daily Chest
+Tabs.Claims:AddToggle("AutoDailyChest", {
+    Title = "Auto Daily Chest",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoDailyChest = v
+        task.spawn(function()
+            while Flags.AutoDailyChest do
+                local rf = GetKnitRemote("ChestService", "RF", "ClaimDailyChest")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+Tabs.Claims:AddSection("Autofarm nativo (AutoService)")
+
+-- Auto Train nativo do jogo (dump: AutoService/RE/AutoTrainStart)
+Tabs.Claims:AddToggle("AutoNativeTrain", {
+    Title = "Auto Train (nativo)",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoNativeTrain = v
+        local re = GetKnitRemote("AutoService", "RE", v and "AutoTrainStart" or "AutoTrainStop")
+        if re then pcall(function() re:FireServer() end) end
+    end
+})
+
+-- Auto Fight nativo do jogo (dump: AutoService/RE/AutoFightStart)
+Tabs.Claims:AddToggle("AutoNativeFight", {
+    Title = "Auto Fight (nativo)",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoNativeFight = v
+        local re = GetKnitRemote("AutoService", "RE", v and "AutoFightStart" or "AutoFightStop")
+        if re then pcall(function() re:FireServer() end) end
+    end
+})
+
+-- =====================================
+-- FLOATING BUTTON
+-- =====================================
+
+local WindowHidden = false
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local imageButton = Instance.new("ImageButton")
+imageButton.Size = UDim2.new(0, 50, 0, 50)
+imageButton.Position = UDim2.new(1, -110, 0, 10)
+imageButton.BackgroundTransparency = 1
+imageButton.Image = "rbxassetid://2875276601"
+imageButton.Parent = screenGui
+
+local uiStroke = Instance.new("UIStroke")
+uiStroke.Parent = imageButton
+uiStroke.Thickness = 4
+uiStroke.Color = Color3.fromRGB(0, 0, 255)
+uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+uiStroke.Transparency = 0
+
+local corner = Instance.new("UICorner")
+corner.Parent = imageButton
+
+imageButton.MouseButton1Click:Connect(function()
+    WindowHidden = not WindowHidden
+    Window:Minimize()
 end)
-if not ok then
-    warn("[SlenderHubDumper] Erro no boot: " .. tostring(err))
-end
 
-return SlenderHub
+-- Drag logic corrigida
+local dragging = false
+local dragStart
+local startPos
+
+imageButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = imageButton.Position
+    end
+end)
+
+imageButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+        local delta = input.Position - dragStart
+        imageButton.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+imageButton.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- =====================================
+-- SAVE MANAGER
+-- =====================================
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+InterfaceManager:SetFolder("HorseRaceHub")
+SaveManager:SetFolder("HorseRaceHub/saves")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title = "SlenderHub",
+    Content = "UI carregada com sucesso!",
+    Duration = 6
+})
+
+SaveManager:LoadAutoloadConfig()
