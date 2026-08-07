@@ -196,14 +196,22 @@ local function SetInfSanity(enabled)
             return
         end
         if not OrigPlayerLostSanity then OrigPlayerLostSanity = Lib.PlayerLostSanity end
+        -- Assinatura real (dump): Lib.PlayerLostSanity(amount, reason) — DOT call.
+        -- amount > 0 = perda, amount <= 0 = ganho (ex: -1 de StalkerStare "What...?").
+        -- Wrapper tolera também chamada como método (Lib:PlayerLostSanity(...)).
         Lib.PlayerLostSanity = function(self, amount, reason)
-            if InfSanityOn then
-                return
+            local callSelf, amt, rs = self, amount, reason
+            if type(callSelf) == "number" then
+                -- chamado como dot: PlayerLostSanity(amount, reason) → self é o amount
+                amt, rs, callSelf = callSelf, amount, nil
             end
-            if type(self) == "number" then
-                return OrigPlayerLostSanity(self, amount)
+            if InfSanityOn and (not amt or amt > 0) then
+                return -- bloqueia perda (servidor nunca recebe)
             end
-            return OrigPlayerLostSanity(self, amount, reason)
+            if callSelf then
+                return OrigPlayerLostSanity(callSelf, amt, rs)
+            end
+            return OrigPlayerLostSanity(amt, rs)
         end
         task.spawn(function()
             while InfSanityOn and task.wait(0.3) do
@@ -230,7 +238,7 @@ do
         function()
             if AutoHeartbeatOn and Lib and Lib.HeartMinigameComplete then
                 task.defer(function()
-                    pcall(function() Lib:HeartMinigameComplete(true) end)
+                    pcall(function() Lib.HeartMinigameComplete(true) end)
                 end)
             end
         end
@@ -495,9 +503,21 @@ UiGui.Name = "SlenderHubAnimalHospital"
 UiGui.ResetOnSpawn = false
 UiGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Suporte a executores mobile e restrições de permissão no CoreGui
-local ParentContainer = (gethui and gethui()) or pcall(function() return CoreGui end) and CoreGui or LocalPlayer:WaitForChild("PlayerGui")
-UiGui.Parent = ParentContainer
+-- Suporte a executores mobile e restrições de permissão no CoreGui:
+-- tenta parent no CoreGui; se o executor rejeitar (identity), usa gethui() e por fim PlayerGui
+local ParentContainer = nil
+if not pcall(function() UiGui.Parent = CoreGui end) then
+    local okH, hui = pcall(function()
+        if gethui then return gethui() end
+        return nil
+    end)
+    if okH and hui then
+        ParentContainer = hui
+    else
+        ParentContainer = LocalPlayer:WaitForChild("PlayerGui")
+    end
+    pcall(function() UiGui.Parent = ParentContainer end)
+end
 
 local ThemeUI = {
     Bg      = Color3.fromRGB(18, 22, 32),
