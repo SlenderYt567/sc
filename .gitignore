@@ -1,44 +1,26 @@
 --[[
     SlenderHub | Animal Hospital (Anomaly) — Script Premium
-    Dev: SlenderHub Team
-    Versão: 4.0.0 (UI NATIVA ScreenGui — sem Fluent, compatível com qualquer executor)
-
-    Feito para executors PC e Android (Wave/Codex/Delta/etc.).
-    UI: ScreenGui nativo (zero dependência de rede/lib externa).
-    Key system: verificação via API do SlenderHub (pluggável).
-
-    CALIBRAÇÃO REAL (dump SlenderHub_GameDumper — 07/08/2026):
-    - Todo o tráfego passa por ReplicatedStorage/Lib com wrapper
-      Network:FireServer(nome, ...) → roteia para RE/RequestRemoteEvent.
-      Este script usa o PRÓPRIO Lib do jogo (require direto).
-    - Sanidade: toda perda é client-side via Lib.PlayerLostSanity(amount, reason).
-      Bloquear no wrapper = sanidade infinita de verdade (servidor nunca recebe).
-    - Morte: atributos DeathCount/MAX_DeathCount em game.Players (replicados);
-      revive via minigame de coração HeartbeatMinigameComplete(state, true).
-    - Tags CollectionService: NPC, Anomaly, Door, Inspect, Grime, ShopItemPP,
-      EmergencyEventCounter, StalkerMonster, TallMonsterSpawn, Shadow.
-    - HONEYPOTS confirmados (NÃO FIRE): RE/ScannerKillGhost, RE/DialogDecision.
+    Versão: 4.0.1 (UI NATIVA ScreenGui — Corrigido)
 ]]
 
 -- =====================================
 -- CONFIG
 -- =====================================
 local Config = {
-    VerifyUrl  = "https://www.slenderhub.shop/api/exec",
-    AllowTrial = true,
-    WalkSpeed  = 22,
+    VerifyUrl   = "https://www.slenderhub.shop/api/exec",
+    AllowTrial  = true,
+    WalkSpeed   = 22,
     SanityFloor = 100,
-    EspGood    = Color3.fromRGB(60, 255, 120),
-    EspDanger  = Color3.fromRGB(255, 60, 60),
-    EspTask    = Color3.fromRGB(250, 180, 60),
-    EspDoor    = Color3.fromRGB(60, 130, 250),
-    ScareGuis  = { "Jumpscare", "static", "DontLookUp", "EmergencyCounter" },
+    EspGood     = Color3.fromRGB(60, 255, 120),
+    EspDanger   = Color3.fromRGB(255, 60, 60),
+    EspTask     = Color3.fromRGB(250, 180, 60),
+    EspDoor     = Color3.fromRGB(60, 130, 250),
+    ScareGuis   = { "Jumpscare", "static", "DontLookUp", "EmergencyCounter" },
+    ToggleKey   = Enum.KeyCode.RightControl, -- Tecla para abrir/fechar a UI (RCTRL)
 }
 
-
-
--- Notificação segura (substituída pela toast nativa quando a UI nasce)
-local function SafeNotify(title, content, duration)
+-- Notificação segura
+local SafeNotify = function(title, content, duration)
     warn("[SlenderHub] " .. tostring(title) .. " — " .. tostring(content))
 end
 
@@ -52,6 +34,7 @@ local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local CollectionService = game:GetService("CollectionService")
 local CoreGui = game:GetService("CoreGui")
+local TextService = game:GetService("TextService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -72,33 +55,13 @@ end
 -- =====================================
 local Env = getgenv and getgenv() or _G
 
-local function ExecFn(name)
-    if type(Env[name]) == "function" then return Env[name] end
-    return nil
-end
-
 local function Fn2(tbl)
     local ok, v = pcall(function() return tbl() end)
     return ok and v or nil
 end
 
-local CheckCaller = Fn2(function()
-    return type(checkcaller) == "function" and checkcaller or nil
-end)
 local FirePromptFn = Fn2(function()
     return type(fireproximityprompt) == "function" and fireproximityprompt or nil
-end)
-local FireClickFn = Fn2(function()
-    return type(fireclickdetector) == "function" and fireclickdetector or nil
-end)
-local GetRawMeta = Fn2(function()
-    return type(getrawmetatable) == "function" and getrawmetatable or nil
-end)
-local NewCClosure = Fn2(function()
-    return type(newcclosure) == "function" and newcclosure or nil
-end)
-local HookMeta = Fn2(function()
-    return type(hookmetamethod) == "function" and hookmetamethod or nil
 end)
 
 local function IdentifyExecutor()
@@ -113,63 +76,8 @@ local function IdentifyExecutor()
 end
 
 -- =====================================
--- LIB INTEGRATION (ReplicatedStorage/Lib — coração do jogo)
+-- HOOKS E EVENTOS (DECLARADOS ANTES DO LIB)
 -- =====================================
-local Lib = nil
-local LibReady = false
-local Data = nil
-
-do
-    local ok, lib = pcall(function()
-        return require(game.ReplicatedStorage:WaitForChild("Lib", 10))
-    end)
-    if ok and lib then
-        Lib = lib
-        LibReady = true
-    end
-end
-
-if Lib then
-    -- Hook BindEvents: captura handlers do servidor sem quebrar nada
-    pcall(function()
-        if Lib.Network and Lib.Network.BindEvents then
-            local old = Lib.Network.BindEvents
-            Lib.Network.BindEvents = function(self, events)
-                if type(events) == "table" and OnServerEvents then
-                    OnServerEvents(events)
-                end
-                return old(self, events)
-            end
-        end
-    end)
-    -- Hook Inject: captura handlers injetados (dot call!)
-    pcall(function()
-        if Lib.Inject then
-            local old = Lib.Inject
-            Lib.Inject = function(name, fn, ...)
-                if OnInject then OnInject(name, fn) end
-                return old(name, fn, ...)
-            end
-        end
-    end)
-    -- Sincronização de dados
-    pcall(function()
-        if Lib.dHandler and Lib.dHandler.UpdateData then
-            Lib.dHandler.UpdateData.Event:Connect(function()
-                Data = Lib.data
-            end)
-        end
-    end)
-    pcall(function()
-        if Lib.DS and Lib.DS.RequestData then
-            task.spawn(function()
-                local ok2, d = pcall(Lib.DS.RequestData)
-                if ok2 then Data = Lib.data or d end
-            end)
-        end
-    end)
-end
-
 local ServerEventHooks = {}
 local InjectHooks = {}
 
@@ -191,19 +99,75 @@ local function OnInject(name, fn)
     end
 end
 
--- Fire seguro por nome (wrapper do jogo; fallback direto no gateway)
+-- =====================================
+-- LIB INTEGRATION (ReplicatedStorage/Lib)
+-- =====================================
+local Lib = nil
+local LibReady = false
+local Data = nil
+
+do
+    local ok, lib = pcall(function()
+        return require(game:GetService("ReplicatedStorage"):WaitForChild("Lib", 10))
+    end)
+    if ok and lib then
+        Lib = lib
+        LibReady = true
+    end
+end
+
+if Lib then
+    pcall(function()
+        if Lib.Network and Lib.Network.BindEvents then
+            local old = Lib.Network.BindEvents
+            Lib.Network.BindEvents = function(self, events)
+                if type(events) == "table" then
+                    OnServerEvents(events)
+                end
+                return old(self, events)
+            end
+        end
+    end)
+    pcall(function()
+        if Lib.Inject then
+            local old = Lib.Inject
+            Lib.Inject = function(name, fn, ...)
+                OnInject(name, fn)
+                return old(name, fn, ...)
+            end
+        end
+    end)
+    pcall(function()
+        if Lib.dHandler and Lib.dHandler.UpdateData then
+            Lib.dHandler.UpdateData.Event:Connect(function()
+                Data = Lib.data
+            end)
+        end
+    end)
+    pcall(function()
+        if Lib.DS and Lib.DS.RequestData then
+            task.spawn(function()
+                local ok2, d = pcall(Lib.DS.RequestData)
+                if ok2 then Data = Lib.data or d end
+            end)
+        end
+    end)
+end
+
+-- Fire seguro por nome
 local function NetFire(name, ...)
+    local args = {...}
     if Lib and Lib.Network and Lib.Network.FireServer then
-        local ok = pcall(Lib.Network.FireServer, Lib.Network, name, ...)
+        local ok = pcall(function() Lib.Network:FireServer(name, unpack(args)) end)
         if ok then return true end
     end
     pcall(function()
-        local util = game.ReplicatedStorage:FindFirstChild("Util")
+        local util = game:GetService("ReplicatedStorage"):FindFirstChild("Util")
         local net = util and util:FindFirstChild("Net")
         local re = net and net:FindFirstChild("RE")
         local gw = re and re:FindFirstChild("RequestRemoteEvent")
         if gw and gw:IsA("RemoteEvent") then
-            gw:FireServer(name, ...)
+            gw:FireServer(name, unpack(args))
         end
     end)
     return true
@@ -215,7 +179,7 @@ local function GetData()
 end
 
 -- =====================================
--- INF SANITY REAL (hook no PlayerLostSanity — causa raiz)
+-- INF SANITY REAL
 -- =====================================
 local InfSanityOn = false
 local OrigPlayerLostSanity = Lib and Lib.PlayerLostSanity or nil
@@ -232,11 +196,14 @@ local function SetInfSanity(enabled)
             return
         end
         if not OrigPlayerLostSanity then OrigPlayerLostSanity = Lib.PlayerLostSanity end
-        Lib.PlayerLostSanity = function(amount, reason)
-            if InfSanityOn and (not amount or amount > 0) then
+        Lib.PlayerLostSanity = function(self, amount, reason)
+            if InfSanityOn then
                 return
             end
-            return OrigPlayerLostSanity(amount, reason)
+            if type(self) == "number" then
+                return OrigPlayerLostSanity(self, amount)
+            end
+            return OrigPlayerLostSanity(self, amount, reason)
         end
         task.spawn(function()
             while InfSanityOn and task.wait(0.3) do
@@ -254,7 +221,7 @@ local function SetInfSanity(enabled)
 end
 
 -- =====================================
--- AUTO HEARTBEAT (auto-completa minigame de coração)
+-- AUTO HEARTBEAT
 -- =====================================
 local AutoHeartbeatOn = false
 
@@ -263,7 +230,7 @@ do
         function()
             if AutoHeartbeatOn and Lib and Lib.HeartMinigameComplete then
                 task.defer(function()
-                    pcall(Lib.HeartMinigameComplete, true)
+                    pcall(function() Lib:HeartMinigameComplete(true) end)
                 end)
             end
         end
@@ -281,7 +248,7 @@ local function SetAutoHeartbeat(enabled)
                 if ui then
                     local frame = ui:FindFirstChild("Frame")
                     if frame and frame.Visible then
-                        Lib.HeartMinigameComplete(true)
+                        Lib:HeartMinigameComplete(true)
                     end
                 end
             end)
@@ -290,7 +257,7 @@ local function SetAutoHeartbeat(enabled)
 end
 
 -- =====================================
--- ANTI JUMPSCARE (handlers + GUIs reais)
+-- ANTI JUMPSCARE
 -- =====================================
 local AntiJumpscareOn = false
 
@@ -318,7 +285,7 @@ do
                     end
                 end
             end
-            if OnServerEvents then OnServerEvents(events) end
+            OnServerEvents(events)
             return old(self, events)
         end
     end
@@ -340,9 +307,8 @@ local function SetAntiJumpscare(enabled)
                         end
                     end
                 end
-                local cg = game:GetService("CoreGui")
                 for _, guiName in ipairs(Config.ScareGuis) do
-                    local gui = cg:FindFirstChild(guiName)
+                    local gui = CoreGui:FindFirstChild(guiName)
                     if gui and gui:IsA("ScreenGui") and gui.Enabled then
                         gui.Enabled = false
                     end
@@ -353,7 +319,7 @@ local function SetAntiJumpscare(enabled)
 end
 
 -- =====================================
--- ESP REAL (tags CollectionService)
+-- ESP REAL
 -- =====================================
 local ESPOn = false
 
@@ -403,7 +369,7 @@ local function SetESP(enabled)
 end
 
 -- =====================================
--- AUTO INTERACT (prompts por tags reais)
+-- AUTO INTERACT
 -- =====================================
 local AutoInteractOn = false
 
@@ -520,15 +486,18 @@ local function ShowStats()
         SafeNotify("Dados", "Dados indisponíveis (jogo não sincronizou)", 4)
     end
 end
+
 -- =====================================
--- UI NATIVA (ScreenGui puro — sem Fluent, compatível com qualquer executor)
+-- UI NATIVA (ScreenGui)
 -- =====================================
-local TweenS = game:GetService("TweenService")
 local UiGui = Instance.new("ScreenGui")
 UiGui.Name = "SlenderHubAnimalHospital"
 UiGui.ResetOnSpawn = false
 UiGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-UiGui.Parent = game:GetService("CoreGui")
+
+-- Suporte a executores mobile e restrições de permissão no CoreGui
+local ParentContainer = (gethui and gethui()) or pcall(function() return CoreGui end) and CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+UiGui.Parent = ParentContainer
 
 local ThemeUI = {
     Bg      = Color3.fromRGB(18, 22, 32),
@@ -543,9 +512,6 @@ local ThemeUI = {
     Danger  = Color3.fromRGB(255, 70, 70),
 }
 
-local ScreenSize = game:GetService("TextService").GetTextSize ~= nil and nil or nil -- noop
-
--- util: criar frame com bordas arredondadas
 local function Mk(className, props)
     local inst = Instance.new(className)
     for k, v in pairs(props) do inst[k] = v end
@@ -572,7 +538,7 @@ local Window = Mk("Frame", {
 Corner(Window, 12)
 Stroke(Window, ThemeUI.Line, 1.5)
 
--- Dragging (PC e Mobile)
+-- Dragging
 do
     local dragging, dragStart, winStart
     local function update(input)
@@ -598,6 +564,13 @@ do
     end)
 end
 
+-- Atalho de teclado para abrir/fechar a UI (RCTRL)
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if not gpe and input.KeyCode == Config.ToggleKey then
+        UiGui.Enabled = not UiGui.Enabled
+    end
+end)
+
 -- Header
 local Header = Mk("Frame", { Name = "Header", Parent = Window, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 46) })
 Mk("TextLabel", {
@@ -607,7 +580,7 @@ Mk("TextLabel", {
 })
 Mk("TextLabel", {
     Parent = Header, BackgroundTransparency = 1, Font = Enum.Font.Gotham,
-    Text = "By Slender  (LIB " .. (LibReady and "OK" or "FAIL") .. ")", TextColor3 = ThemeUI.Sub, TextSize = 13,
+    Text = "By Slender (LIB " .. (LibReady and "OK" or "FAIL") .. ")", TextColor3 = ThemeUI.Sub, TextSize = 13,
     Position = UDim2.fromOffset(16, 26), Size = UDim2.fromOffset(380, 18), TextXAlignment = Enum.TextXAlignment.Left,
 })
 
@@ -620,7 +593,7 @@ local CloseBtn = Mk("TextButton", {
 Corner(CloseBtn, 8)
 CloseBtn.MouseButton1Click:Connect(function() UiGui.Enabled = false end)
 
--- Abas (lista lateral)
+-- Abas
 local TabsBar = Mk("Frame", { Parent = Window, BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 58), Size = UDim2.fromOffset(150, 390) })
 
 local TabDefs = {
@@ -644,7 +617,7 @@ local function ShowTab(idx)
     CurrentTab = idx
     for i, btn in ipairs(TabButtons) do
         local active = (i == idx)
-        TweenS:Create(btn, TweenInfo.new(0.15), { BackgroundColor3 = active and ThemeUI.Accent2 or ThemeUI.Card }):Play()
+        TweenService:Create(btn, TweenInfo.new(0.15), { BackgroundColor3 = active and ThemeUI.Accent2 or ThemeUI.Card }):Play()
         local lbl = btn:FindFirstChild("Label")
         if lbl then lbl.TextColor3 = active and Color3.fromRGB(255,255,255) or ThemeUI.Sub end
     end
@@ -682,7 +655,7 @@ for i, def in ipairs(TabDefs) do
     TabPages[i] = page
 end
 
--- ===================== helpers de elementos (layout Y automático) =====================
+-- Layout Helpers
 local PageCursor = {}
 local function NextY(page, h)
     local y = PageCursor[page] or 0
@@ -716,7 +689,7 @@ local function Toggle(page, title, desc, default, cb)
         Text = title, TextColor3 = ThemeUI.Text, TextSize = 14,
         Position = UDim2.fromOffset(12, 5), Size = UDim2.fromOffset(300, 20), TextXAlignment = Enum.TextXAlignment.Left,
     })
-    if desc then
+    if desc and #desc > 0 then
         Mk("TextLabel", {
             Parent = card, BackgroundTransparency = 1, Font = Enum.Font.Gotham,
             Text = desc, TextColor3 = ThemeUI.Sub, TextSize = 11,
@@ -732,7 +705,7 @@ local function Toggle(page, title, desc, default, cb)
     Corner(dot, 6)
     local state = default or false
     local function refresh()
-        TweenS:Create(knob, TweenInfo.new(0.15), { BackgroundColor3 = state and ThemeUI.Accent or ThemeUI.Line }):Play()
+        TweenService:Create(knob, TweenInfo.new(0.15), { BackgroundColor3 = state and ThemeUI.Accent or ThemeUI.Line }):Play()
         dot.Visible = state
     end
     refresh()
@@ -784,7 +757,7 @@ local function Slider(page, title, min, max, def, cb)
     local function setFrom(input)
         local localX = math.clamp(input.Position.X - bar.AbsolutePosition.X, 0, bar.AbsoluteSize.X)
         value = min + (max - min) * (localX / math.max(bar.AbsoluteSize.X, 1))
-        value = math.round(value * 10) / 10
+        value = math.floor(value * 10 + 0.5) / 10
         fill.Size = UDim2.new((value-min)/(max-min), 0, 1, 0)
         valLbl.Text = tostring(value)
         pcall(cb, value)
@@ -806,7 +779,7 @@ local function Slider(page, title, min, max, def, cb)
     }
 end
 
--- ===================== ABAS: conteúdo =====================
+-- ===================== CONTEÚDO DAS ABAS =====================
 local P = TabPages
 
 -- MAIN
@@ -851,7 +824,7 @@ Toggle(P[5], "Fly (Space/Shift)", "", false, SetFly)
 -- SETTINGS
 Section(P[6], "Informações")
 Spacer(P[6], 26)
-Button(P[6], "Fechar UI", function() UiGui.Enabled = false end)
+Button(P[6], "Esconder UI (Atalho: RCTRL)", function() UiGui.Enabled = false end)
 
 ShowTab(1)
 
@@ -860,7 +833,7 @@ local NotifyHolder = Mk("Frame", { Parent = UiGui, BackgroundTransparency = 1, A
 
 local function NativeNotify(title, content, duration)
     pcall(function()
-        local toast = Mk("Frame", { Parent = NotifyHolder, BackgroundColor3 = ThemeUI.Panel, Size = UDim2.fromOffset(0, 46), Position = UDim2.new(0.5, 0, 0, 0) })
+        local toast = Mk("Frame", { Parent = NotifyHolder, BackgroundColor3 = ThemeUI.Panel, Size = UDim2.fromOffset(240, 46), Position = UDim2.new(0.5, 0, 0, 0) })
         Corner(toast, 8)
         Stroke(toast, ThemeUI.Line, 1)
         Mk("TextLabel", {
@@ -873,16 +846,15 @@ local function NativeNotify(title, content, duration)
             Text = content, TextColor3 = ThemeUI.Text, TextSize = 12,
             Position = UDim2.fromOffset(12, 22), Size = UDim2.fromOffset(400, 18), TextXAlignment = Enum.TextXAlignment.Left,
         })
-        local maxW = 0
-        for _, lbl in ipairs(toast:GetChildren()) do
-            if lbl:IsA("TextLabel") then maxW = math.max(maxW, lbl.TextBounds.X) end
-        end
-        toast.Size = UDim2.fromOffset(math.max(maxW + 24, 200), 46)
+        
+        local textBounds = TextService:GetTextSize(content or "", 12, Enum.Font.Gotham, Vector2.new(1000, 46))
+        toast.Size = UDim2.fromOffset(math.max(textBounds.X + 30, 220), 46)
         toast.Position = UDim2.new(0.5, 0, 0, 0)
         toast.AnchorPoint = Vector2.new(0.5, 0)
-        TweenS:Create(toast, TweenInfo.new(0.2), { Position = UDim2.new(0.5, 0, 0, 8) }):Play()
+        
+        TweenService:Create(toast, TweenInfo.new(0.2), { Position = UDim2.new(0.5, 0, 0, 8) }):Play()
         task.delay(duration or 4, function()
-            TweenS:Create(toast, TweenInfo.new(0.25), { Position = UDim2.new(0.5, 0, 0, -60) }):Play()
+            TweenService:Create(toast, TweenInfo.new(0.25), { Position = UDim2.new(0.5, 0, 0, -60) }):Play()
             task.delay(0.3, function() toast:Destroy() end)
         end)
     end)
@@ -890,8 +862,6 @@ end
 
 SafeNotify = NativeNotify
 
--- =====================================
--- BOOT / FINALIZAÇÃO
--- =====================================
+-- Boot Final
 SafeNotify("SlenderHub", "Carregado! LIB " .. (LibReady and "OK" or "FAIL")
     .. " | Executor: " .. IdentifyExecutor(), 4)
