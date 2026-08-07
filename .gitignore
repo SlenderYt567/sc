@@ -62,6 +62,8 @@ local Flags = {
     AutoDailyChest = false,
     AutoNativeTrain = false,
     AutoNativeFight = false,
+    -- Gamepass
+    AutoUnlockGamePass = false,
     -- Egg (dinâmico)
     EggToggles = {},
     FruitToggles = {}
@@ -209,6 +211,37 @@ local function GetKnitRemote(serviceName, remoteType, remoteName)
         end
     end
     return nil
+end
+
+-- =====================================
+-- GAMEPASSES (dump: GamePassService/RE/GiveGamePass + Rolimon's)
+-- =====================================
+local GamePasses = {
+    { id = 950274078,  name = "Auto Rebirth",      price = "79 R$" },
+    { id = 950278010,  name = "VIP",               price = "199 R$" },
+    { id = 950317865,  name = "+200 Inventory",    price = "99 R$" },
+    { id = 950329719,  name = "Double Wins",       price = "279 R$" },
+    { id = 950401771,  name = "Triple Egg Open",   price = "379 R$" },
+    { id = 950439674,  name = "Ultra Luck",        price = "1.299 R$" },
+    { id = 950505642,  name = "Secret Hunter",     price = "1.749 R$" },
+    { id = 950521602,  name = "Magic Eggs",        price = "559 R$" },
+    { id = 950713508,  name = "Double Power",      price = "174 R$" },
+    { id = 950733585,  name = "Super Luck",        price = "149 R$" },
+    { id = 950739490,  name = "Fast Hatch",        price = "174 R$" },
+    { id = 950859394,  name = "+3 Equip",          price = "349 R$" },
+    { id = 1003542584, name = "Teleport",          price = "39 R$" },
+    { id = 1068083629, name = "Auto Open Crate",   price = "169 R$" },
+}
+
+-- Fire no GiveGamePass com o ID do gamepass
+local function FireGiveGamePass(gamepassId)
+    local re = GetKnitRemote("GamePassService", "RE", "GiveGamePass")
+    if not re then return false end
+    -- Tenta padrão 1: só o ID
+    local ok1, err1 = pcall(function() re:FireServer(gamepassId) end)
+    -- Tenta padrão 2: ID + true (Knit costuma validar com booleano)
+    local ok2, err2 = pcall(function() re:FireServer(gamepassId, true) end)
+    return ok1 or ok2
 end
 
 -- =====================================
@@ -611,6 +644,45 @@ Tabs.Misc:AddButton({
 })
 
 -- =====================================
+-- GAMEPASS TAB (manual: teste individual dos 14 gamepasses)
+-- =====================================
+Tabs.Misc:AddSection("Gamepass (manual)")
+
+-- Botão: testar TODOS de uma vez
+Tabs.Misc:AddButton({
+    Title = "Try ALL Gamepasses (uma vez)",
+    Callback = function()
+        local okCount = 0
+        for _, gp in ipairs(GamePasses) do
+            if FireGiveGamePass(gp.id) then
+                okCount = okCount + 1
+            end
+            task.wait(0.15)
+        end
+        Fluent:Notify({
+            Title = "Gamepass",
+            Content = ("Fired %d/%d gamepasses (sem erro de envio)"):format(okCount, #GamePasses),
+            Duration = 5
+        })
+    end
+})
+
+-- Botões individuais (cada gamepass vira um botão)
+for _, gp in ipairs(GamePasses) do
+    Tabs.Misc:AddButton({
+        Title = ("Unlock %s (%s)"):format(gp.name, gp.price),
+        Callback = function()
+            local ok = FireGiveGamePass(gp.id)
+            Fluent:Notify({
+                Title = "Gamepass",
+                Content = ("%s: %s"):format(gp.name, ok and "fired" or "remote não encontrado"),
+                Duration = 3
+            })
+        end
+    })
+end
+
+-- =====================================
 -- TELEPORT TAB
 -- =====================================
 
@@ -759,16 +831,41 @@ Tabs.Event:AddToggle("FarmCandy", {
     end
 })
 
--- EGG CHRISTMAS
+-- EGG CHRISTMAS (CORRIGIDO: dump mostra o egg real como "Christmas_Egg"
+-- em Worlds.Area_Christmas.Eggs."Egg Stand".Christmas_Egg — o nome
+-- "Egg_Christmas" NÃO existe no jogo, por isso não funcionava)
 Tabs.Event:AddToggle("EggChristmas", {
-    Title = "Egg_Christmas",
+    Title = "Egg Christmas (corrigido)",
     Callback = function(v)
         Flags.EggChristmas = v
         task.spawn(function()
             while Flags.EggChristmas do
                 local re = GetKnitRemote("EggHatchService", "RE", "Hatch")
                 if re then
-                    pcall(function() re:FireServer("Egg_Christmas", 3) end)
+                    -- Descobre o nome real do egg de natal dinamicamente
+                    local worlds = ReplicatedStorage:FindFirstChild("Worlds")
+                    local area = worlds and worlds:FindFirstChild("Area_Christmas")
+                    local eggs = area and area:FindFirstChild("Eggs")
+                    local eggStand = eggs and eggs:FindFirstChild("Egg Stand")
+
+                    -- Nomes candidatos: o que encontrar na árvore + fallbacks conhecidos
+                    local candidates = {}
+                    if eggStand then
+                        for _, child in ipairs(eggStand:GetChildren()) do
+                            table.insert(candidates, child.Name)
+                        end
+                    end
+                    -- Fallbacks (dump + variações comuns)
+                    table.insert(candidates, "Christmas_Egg")
+                    table.insert(candidates, "Egg_Christmas")
+                    table.insert(candidates, "Egg_R_1")
+                    table.insert(candidates, "Egg_R_2")
+
+                    for _, eggName in ipairs(candidates) do
+                        pcall(function()
+                            re:FireServer(eggName, 1)
+                        end)
+                    end
                 end
                 task.wait(1)
             end
@@ -984,6 +1081,26 @@ Tabs.Claims:AddToggle("AutoNativeFight", {
         Flags.AutoNativeFight = v
         local re = GetKnitRemote("AutoService", "RE", v and "AutoFightStart" or "AutoFightStop")
         if re then pcall(function() re:FireServer() end) end
+    end
+})
+
+Tabs.Claims:AddSection("Gamepass")
+
+-- Auto Unlock Gamepass (tenta todos os 14 gamepasses via GiveGamePass)
+Tabs.Claims:AddToggle("AutoUnlockGamePass", {
+    Title = "Auto Unlock Gamepass (todos)",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoUnlockGamePass = v
+        task.spawn(function()
+            while Flags.AutoUnlockGamePass do
+                for _, gp in ipairs(GamePasses) do
+                    FireGiveGamePass(gp.id)
+                    task.wait(0.15)
+                end
+                task.wait(3)
+            end
+        end)
     end
 })
 
