@@ -26,6 +26,7 @@ local Flags = {
     AutoRebirth = false,
     AutoSuper = false,
     InfMoney = false,
+    InfGems = false,
     -- Misc
     Diamonds = false,
     Halloween = false,
@@ -47,6 +48,31 @@ local Flags = {
     -- Event
     FarmCandy = false,
     EggChristmas = false,
+    -- Claims
+    AutoDaily = false,
+    AutoLongDaily = false,
+    AutoOfflineWins = false,
+    AutoEventReward = false,
+    AutoQuest = false,
+    AutoAchievement = false,
+    AutoSeason = false,
+    AutoPrincess = false,
+    AutoSpinWheel = false,
+    AutoChallenge = false,
+    AutoDailyChest = false,
+    AutoNativeTrain = false,
+    AutoNativeFight = false,
+    -- Gamepass
+    AutoUnlockGamePass = false,
+    -- Inf eventos
+    InfGifts = false,
+    InfFruit = false,
+    -- Limited / UGC / Codes
+    AutoRedeemCodes = false,
+    AutoClaimUgc = false,
+    AutoClaimVoidPet = false,
+    AutoClaimTitanPet = false,
+    AutoLevelUpPet = false,
     -- Egg (dinâmico)
     EggToggles = {},
     FruitToggles = {}
@@ -90,6 +116,8 @@ local Tabs = {
     Pet    = Window:AddTab({ Title = "Pet",    Icon = "paw-print" }),
     Egg    = Window:AddTab({ Title = "Egg",    Icon = "egg" }),
     Event  = Window:AddTab({ Title = "Event",  Icon = "sparkles" }),
+    Codes  = Window:AddTab({ Title = "Codes",  Icon = "key" }),
+    Claims = Window:AddTab({ Title = "Claims", Icon = "gift" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
@@ -150,51 +178,102 @@ end)
 -- FUNÇÕES AUXILIARES
 -- =====================================
 
--- Loop seguro para toggles
-local function StartToggleLoop(flagRef, interval, func)
-    task.spawn(function()
-        while flagRef[1] do
-            local ok, err = pcall(func)
-            if not ok then
-                warn("[SlenderHub] Erro no loop:", err)
-            end
-            task.wait(interval)
-        end
-    end)
-end
-
--- Helper para criar toggle com loop
-local function CreateToggleLoop(tab, id, title, flagKey, interval, callback, default)
-    return tab:AddToggle(id, {
-        Title = title,
-        Default = default or false,
-        Callback = function(v)
-            Flags[flagKey] = v
-            if v then
-                StartToggleLoop(
-                    { get = function() return Flags[flagKey] end },
-                    interval,
-                    callback
-                )
-            end
-        end
-    })
-end
-
--- Acessa remote do Knit por nome do serviço
+-- Acessa serviço do Knit por nome
 local function GetKnitService(serviceName)
     if not KnitLoaded then return nil end
-    local service = Services:FindFirstChild(serviceName)
-    return service
+    return Services:FindFirstChild(serviceName)
 end
 
--- Acessa RemoteEvent/RemoteFunction por caminho
+-- Acessa RemoteEvent/RemoteFunction por caminho (com fallback direto pelo Knit)
 local function GetKnitRemote(serviceName, remoteType, remoteName)
     local service = GetKnitService(serviceName)
-    if not service then return nil end
-    local container = service:FindFirstChild(remoteType)  -- "RE" ou "RF"
-    if not container then return nil end
-    return container:FindFirstChild(remoteName)
+    if service then
+        local container = service:FindFirstChild(remoteType)
+        if container then
+            local r = container:FindFirstChild(remoteName)
+            if r then return r end
+        end
+    end
+    -- Fallback: caminho direto ReplicatedStorage/Packages/_Index/sleitnick_knit@x/knit/Services/<svc>/<RE|RF>/<name>
+    -- (não depende do Knit carregar; caminho confirmado pelo dump SlenderHub)
+    local packages = ReplicatedStorage:FindFirstChild("Packages")
+    if packages then
+        local index = packages:FindFirstChild("_Index")
+        if index then
+            for _, folder in ipairs(index:GetChildren()) do
+                if folder.Name:find("sleitnick_knit") then
+                    local knit = folder:FindFirstChild("knit")
+                    if knit then
+                        local services = knit:FindFirstChild("Services")
+                        if services then
+                            local svc = services:FindFirstChild(serviceName)
+                            if svc then
+                                local cont = svc:FindFirstChild(remoteType)
+                                if cont then
+                                    local r = cont:FindFirstChild(remoteName)
+                                    if r then return r end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- =====================================
+-- GAMEPASSES (dump: GamePassService/RE/GiveGamePass + Rolimon's)
+-- =====================================
+local GamePasses = {
+    { id = 950274078,  name = "Auto Rebirth",      price = "79 R$" },
+    { id = 950278010,  name = "VIP",               price = "199 R$" },
+    { id = 950317865,  name = "+200 Inventory",    price = "99 R$" },
+    { id = 950329719,  name = "Double Wins",       price = "279 R$" },
+    { id = 950401771,  name = "Triple Egg Open",   price = "379 R$" },
+    { id = 950439674,  name = "Ultra Luck",        price = "1.299 R$" },
+    { id = 950505642,  name = "Secret Hunter",     price = "1.749 R$" },
+    { id = 950521602,  name = "Magic Eggs",        price = "559 R$" },
+    { id = 950713508,  name = "Double Power",      price = "174 R$" },
+    { id = 950733585,  name = "Super Luck",        price = "149 R$" },
+    { id = 950739490,  name = "Fast Hatch",        price = "174 R$" },
+    { id = 950859394,  name = "+3 Equip",          price = "349 R$" },
+    { id = 1003542584, name = "Teleport",          price = "39 R$" },
+    { id = 1068083629, name = "Auto Open Crate",   price = "169 R$" },
+}
+
+-- Fire no GiveGamePass com o ID do gamepass
+local function FireGiveGamePass(gamepassId)
+    local re = GetKnitRemote("GamePassService", "RE", "GiveGamePass")
+    if not re then return false end
+    -- Tenta padrão 1: só o ID
+    local ok1, err1 = pcall(function() re:FireServer(gamepassId) end)
+    -- Tenta padrão 2: ID + true (Knit costuma validar com booleano)
+    local ok2, err2 = pcall(function() re:FireServer(gamepassId, true) end)
+    return ok1 or ok2
+end
+
+-- =====================================
+-- CÓDIGOS DO JOGO (descrição oficial — resgate via CodesService/RF/RedeemItem)
+-- =====================================
+local GameCodes = {
+    "RELEASE", "NEW", "Like3K", "Like28K", "Like60K",
+    "Xmas", "Santa", "Love", "Squid", "Power", "UPD10",
+    "Panda", "Batman", "Trade", "Fruit", "Upgrade",
+    "Like170k", "Super", "Season2", "Brainrot", "Offline", "X20"
+}
+
+-- Resgata um código (invoca o RF com variações de payload)
+local function RedeemCode(code)
+    local rf = GetKnitRemote("CodesService", "RF", "RedeemItem")
+    if not rf then return "no-remote" end
+    local payloads = { { code }, { code, 1 }, { code, true } }
+    for _, args in ipairs(payloads) do
+        local ok, res = pcall(function() return rf:InvokeServer(unpack(args)) end)
+        if ok then return tostring(res) end
+    end
+    return "falhou"
 end
 
 -- =====================================
@@ -291,6 +370,40 @@ Tabs.Main:AddToggle("InfMoney", {
     end
 })
 
+-- INFINITE GEMS (payload negativo — mesma técnica do InfMoney, alvos do dump)
+Tabs.Main:AddToggle("InfGems", {
+    Title = "Infinite Gems",
+    Callback = function(v)
+        Flags.InfGems = v
+        task.spawn(function()
+            while Flags.InfGems do
+                -- DungeonService/RE/BuyCystal (cristais — typo "Cystal" do jogo)
+                local buyCystal = GetKnitRemote("DungeonService", "RE", "BuyCystal")
+                if buyCystal then
+                    pcall(function()
+                        buyCystal:FireServer(-70e+70, {})
+                    end)
+                end
+                -- TrainService/RE/DropDiamonds (diamantes)
+                local dropDia = GetKnitRemote("TrainService", "RE", "DropDiamonds")
+                if dropDia then
+                    pcall(function()
+                        dropDia:FireServer(-70e+70)
+                    end)
+                end
+                -- FightService/RE/DropDiamonds (diamantes via contest)
+                local dropDiaFight = GetKnitRemote("FightService", "RE", "DropDiamonds")
+                if dropDiaFight then
+                    pcall(function()
+                        dropDiaFight:FireServer(-70e+70)
+                    end)
+                end
+                task.wait(0.15)
+            end
+        end)
+    end
+})
+
 -- =====================================
 -- TRAIN TAB
 -- =====================================
@@ -337,6 +450,46 @@ Tabs.Train:AddToggle("AutoTrainToggle", {
                 AutoTrainRunning = false
             end)
         end
+    end
+})
+
+-- AUTO STAR COLLECTOR (dump: TrainService/RE/HitStar + GetStar — é o que dá força de verdade)
+Tabs.Train:AddToggle("AutoStar", {
+    Title = "Auto Star Collector",
+    Default = false,
+    Callback = function(state)
+        Flags.AutoStar = state
+        task.spawn(function()
+            while Flags.AutoStar do
+                local hitStar = GetKnitRemote("TrainService", "RE", "HitStar")
+                local getStar = GetKnitRemote("TrainService", "RE", "GetStar")
+                if hitStar then
+                    -- procura estrelas geradas no Workspace (nome típico "Star"/"StarPart")
+                    local stars = Workspace:FindFirstChild("Stars") or Workspace:FindFirstChild("StarParts")
+                    if stars then
+                        for _, star in ipairs(stars:GetChildren()) do
+                            pcall(function()
+                                if star:IsA("BasePart") then
+                                    hitStar:FireServer(star.Position)
+                                    task.wait(0.05)
+                                end
+                            end)
+                        end
+                    end
+                    -- fallback: tenta fire direto com posição da raiz
+                    if not stars then
+                        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if root then
+                            pcall(function() hitStar:FireServer(root.Position) end)
+                        end
+                    end
+                end
+                if getStar then
+                    pcall(function() getStar:FireServer() end)
+                end
+                task.wait(0.4)
+            end
+        end)
     end
 })
 
@@ -500,6 +653,67 @@ Tabs.Misc:AddToggle("AutoUsePotion", {
     end
 })
 
+-- TEST MONEY SERVICE (dump: TestMoneyService — serviço de teste de dev, RISCO DE BAN)
+Tabs.Misc:AddButton({
+    Title = "Test MoneyService (RISCO)",
+    Callback = function()
+        local rf = GetKnitRemote("TestMoneyService", "RF", "GetMoney")
+        if rf then
+            local ok, res = pcall(function() return rf:InvokeServer() end)
+            Fluent:Notify({
+                Title = "TestMoneyService",
+                Content = ok and ("resposta: " .. tostring(res)) or ("erro: " .. tostring(res)),
+                Duration = 4
+            })
+        else
+            Fluent:Notify({
+                Title = "TestMoneyService",
+                Content = "Remote não encontrado",
+                Duration = 4
+            })
+        end
+    end
+})
+
+-- =====================================
+-- GAMEPASS TAB (manual: teste individual dos 14 gamepasses)
+-- =====================================
+Tabs.Misc:AddSection("Gamepass (manual)")
+
+-- Botão: testar TODOS de uma vez
+Tabs.Misc:AddButton({
+    Title = "Try ALL Gamepasses (uma vez)",
+    Callback = function()
+        local okCount = 0
+        for _, gp in ipairs(GamePasses) do
+            if FireGiveGamePass(gp.id) then
+                okCount = okCount + 1
+            end
+            task.wait(0.15)
+        end
+        Fluent:Notify({
+            Title = "Gamepass",
+            Content = ("Fired %d/%d gamepasses (sem erro de envio)"):format(okCount, #GamePasses),
+            Duration = 5
+        })
+    end
+})
+
+-- Botões individuais (cada gamepass vira um botão)
+for _, gp in ipairs(GamePasses) do
+    Tabs.Misc:AddButton({
+        Title = ("Unlock %s (%s)"):format(gp.name, gp.price),
+        Callback = function()
+            local ok = FireGiveGamePass(gp.id)
+            Fluent:Notify({
+                Title = "Gamepass",
+                Content = ("%s: %s"):format(gp.name, ok and "fired" or "remote não encontrado"),
+                Duration = 3
+            })
+        end
+    })
+end
+
 -- =====================================
 -- TELEPORT TAB
 -- =====================================
@@ -547,17 +761,146 @@ Tabs.Pet:AddToggle("AutoEquipBestPets", {
 })
 
 Tabs.Pet:AddToggle("AutoCraftPets", {
-    Title = "Auto Craft Pets",
+    Title = "Auto Fuse/Craft Pets",
     Default = false,
     Callback = function(v)
         Flags.AutoCraftPets = v
         task.spawn(function()
             while Flags.AutoCraftPets do
-                local re = GetKnitRemote("PetService", "RE", "EnlargeAllPets")
+                -- dump: FuseService/RF/FusePets (fusão correta de pets)
+                local rf = GetKnitRemote("FuseService", "RF", "FusePets")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                -- VoidService/RE/StartCraft (craft no void)
+                local re = GetKnitRemote("VoidService", "RE", "StartCraft")
                 if re then pcall(function() re:FireServer() end) end
                 task.wait(3)
             end
         end)
+    end
+})
+
+-- =====================================
+-- PET LIMITED / UGC (dump: UgcService + PurchaseService + Void/Titan)
+-- =====================================
+
+Tabs.Pet:AddSection("Limited / UGC")
+
+-- Auto Claim UGC (pets UGC: dump mostra UGC_PumpkinHead e UGC_WizardHat)
+Tabs.Pet:AddToggle("AutoClaimUgc", {
+    Title = "Auto Claim UGC Pets",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoClaimUgc = v
+        task.spawn(function()
+            while Flags.AutoClaimUgc do
+                local re = GetKnitRemote("UgcService", "RE", "ClaimUgc")
+                if re then
+                    -- Tenta os nomes UGC conhecidos do dump + payloads variados
+                    for _, ugcName in ipairs({ "UGC_PumpkinHead", "UGC_WizardHat" }) do
+                        pcall(function() re:FireServer(ugcName) end)
+                        pcall(function() re:FireServer(ugcName, true) end)
+                        pcall(function() re:FireServer(ugcName, 1) end)
+                    end
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Pet (VoidService — pet do craft no void)
+Tabs.Pet:AddToggle("AutoClaimVoidPet", {
+    Title = "Auto Claim Void Pet",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoClaimVoidPet = v
+        task.spawn(function()
+            while Flags.AutoClaimVoidPet do
+                local re = GetKnitRemote("VoidService", "RE", "ClaimPet")
+                if re then
+                    pcall(function() re:FireServer() end)
+                    pcall(function() re:FireServer(1) end)
+                    pcall(function() re:FireServer(true) end)
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Pet (TitanService — pet do titan)
+Tabs.Pet:AddToggle("AutoClaimTitanPet", {
+    Title = "Auto Claim Titan Pet",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoClaimTitanPet = v
+        task.spawn(function()
+            while Flags.AutoClaimTitanPet do
+                local re = GetKnitRemote("TitanService", "RE", "ClaimPet")
+                if re then
+                    pcall(function() re:FireServer() end)
+                    pcall(function() re:FireServer(1) end)
+                    pcall(function() re:FireServer(true) end)
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Auto Level Up Pet (PetService — upar o pet equipado)
+Tabs.Pet:AddToggle("AutoLevelUpPet", {
+    Title = "Auto Level Up Pet",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoLevelUpPet = v
+        task.spawn(function()
+            while Flags.AutoLevelUpPet do
+                local re = GetKnitRemote("PetService", "RE", "LevelUpPet")
+                if re then
+                    pcall(function() re:FireServer() end)
+                    pcall(function() re:FireServer(1) end)
+                    pcall(function() re:FireServer("pet") end)
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Botão: ver quantos pets limitados restam (PurchaseService/RF)
+Tabs.Pet:AddButton({
+    Title = "Check Limited Pet Remaining",
+    Callback = function()
+        local rf = GetKnitRemote("PurchaseService", "RF", "GetLimitedPetRemaining")
+        if rf then
+            local ok, res = pcall(function() return rf:InvokeServer() end)
+            Fluent:Notify({
+                Title = "Limited Pets",
+                Content = ok and ("resposta: " .. tostring(res)) or ("erro: " .. tostring(res)),
+                Duration = 5
+            })
+        else
+            Fluent:Notify({ Title = "Limited Pets", Content = "Remote não encontrado", Duration = 3 })
+        end
+    end
+})
+
+-- Botão: contar UGC restantes (UgcService/RF)
+Tabs.Pet:AddButton({
+    Title = "Check UGC Remaining",
+    Callback = function()
+        local rf = GetKnitRemote("UgcService", "RF", "GetAllUgcRemainingCounts")
+        if rf then
+            local ok, res = pcall(function() return rf:InvokeServer() end)
+            Fluent:Notify({
+                Title = "UGC",
+                Content = ok and ("resposta: " .. tostring(res)) or ("erro: " .. tostring(res)),
+                Duration = 5
+            })
+        else
+            Fluent:Notify({ Title = "UGC", Content = "Remote não encontrado", Duration = 3 })
+        end
     end
 })
 
@@ -645,18 +988,418 @@ Tabs.Event:AddToggle("FarmCandy", {
     end
 })
 
--- EGG CHRISTMAS
+-- EGG CHRISTMAS (CORRIGIDO: dump mostra o egg real como "Christmas_Egg"
+-- em Worlds.Area_Christmas.Eggs."Egg Stand".Christmas_Egg — o nome
+-- "Egg_Christmas" NÃO existe no jogo, por isso não funcionava)
 Tabs.Event:AddToggle("EggChristmas", {
-    Title = "Egg_Christmas",
+    Title = "Egg Christmas (corrigido)",
     Callback = function(v)
         Flags.EggChristmas = v
         task.spawn(function()
             while Flags.EggChristmas do
                 local re = GetKnitRemote("EggHatchService", "RE", "Hatch")
                 if re then
-                    pcall(function() re:FireServer("Egg_Christmas", 3) end)
+                    -- Descobre o nome real do egg de natal dinamicamente
+                    local worlds = ReplicatedStorage:FindFirstChild("Worlds")
+                    local area = worlds and worlds:FindFirstChild("Area_Christmas")
+                    local eggs = area and area:FindFirstChild("Eggs")
+                    local eggStand = eggs and eggs:FindFirstChild("Egg Stand")
+
+                    -- Nomes candidatos: o que encontrar na árvore + fallbacks conhecidos
+                    local candidates = {}
+                    if eggStand then
+                        for _, child in ipairs(eggStand:GetChildren()) do
+                            table.insert(candidates, child.Name)
+                        end
+                    end
+                    -- Fallbacks (dump + variações comuns)
+                    table.insert(candidates, "Christmas_Egg")
+                    table.insert(candidates, "Egg_Christmas")
+                    table.insert(candidates, "Egg_R_1")
+                    table.insert(candidates, "Egg_R_2")
+
+                    for _, eggName in ipairs(candidates) do
+                        pcall(function()
+                            re:FireServer(eggName, 1)
+                        end)
+                    end
                 end
                 task.wait(1)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- INF EVENTOS (payload negativo — mesmo padrão do InfGems que funciona)
+-- =====================================
+
+-- Helper: fira um remote com payload negativo em variantes
+local function FireNegative(serviceName, remoteName, payloads)
+    local re = GetKnitRemote(serviceName, "RE", remoteName)
+    if not re then return end
+    for _, args in ipairs(payloads) do
+        pcall(function() re:FireServer(unpack(args)) end)
+    end
+end
+
+-- INF GIFTS (Natal) — dump: GiftBoxService + ChristmasService + FightService
+Tabs.Event:AddToggle("InfGifts", {
+    Title = "Inf Gifts (Natal)",
+    Default = false,
+    Callback = function(v)
+        Flags.InfGifts = v
+        task.spawn(function()
+            while Flags.InfGifts do
+                -- GiftBoxService: drop/abrir gifts em massa
+                FireNegative("GiftBoxService", "DropGifts", {
+                    { -70e+70 }, { -70e+70, {} }, { 999 }, { 9999 }, {}
+                })
+                FireNegative("GiftBoxService", "PickGift", {
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
+                })
+                FireNegative("GiftBoxService", "OpenGiftBox", {
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
+                })
+                -- ChristmasService: tokens de natal
+                FireNegative("ChristmasService", "DropTokens", {
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
+                })
+                -- FightService: claim de token de natal (mesmo formato dos fruit tokens)
+                FireNegative("FightService", "GetChristmasTokenEvent", {
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
+                })
+                task.wait(0.2)
+            end
+        end)
+    end
+})
+
+-- INF FRUIT TOKENS (área de frutas) — dump: a moeda da área é "tokens":
+-- FightService/RE/GetFruitTokenEvent + FruitService/RE/GetTowerToken
+-- (PlayerDataService/RE/FruitTokensChanged é server→client, não fire)
+Tabs.Event:AddToggle("InfFruit", {
+    Title = "Inf Fruit Tokens",
+    Default = false,
+    Callback = function(v)
+        Flags.InfFruit = v
+        task.spawn(function()
+            while Flags.InfFruit do
+                -- FightService: evento que concede tokens de fruta
+                FireNegative("FightService", "GetFruitTokenEvent", {
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
+                })
+                -- FruitService: token de torre (área fruit)
+                FireNegative("FruitService", "GetTowerToken", {
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
+                })
+                -- Compras com saldo negativo (mantido como fallback)
+                FireNegative("FruitService", "BuyFruit", {
+                    { "Fruit_001", -70e+70 }, { "Fruit_001", -70e+70, {} },
+                    { "Fruit_002", -70e+70 }, { "Fruit_002", -70e+70, {} },
+                    { "Fruit_003", -70e+70 }, { "Fruit_003", -70e+70, {} },
+                    { "Fruit_004", -70e+70 }, { "Fruit_004", -70e+70, {} }
+                })
+                FireNegative("FruitService", "BuyPet", {
+                    { -70e+70 }, { -70e+70, {} }
+                })
+                FireNegative("FruitService", "UpdateTowerLevel", {
+                    { -70e+70 }, { -70e+70, {} }
+                })
+                task.wait(0.2)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- CODES TAB (códigos públicos do jogo — CodesService/RF/RedeemItem)
+-- =====================================
+
+-- Auto Redeem todos os códigos
+Tabs.Codes:AddToggle("AutoRedeemCodes", {
+    Title = "Auto Redeem ALL Codes",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoRedeemCodes = v
+        task.spawn(function()
+            while Flags.AutoRedeemCodes do
+                for _, code in ipairs(GameCodes) do
+                    local res = RedeemCode(code)
+                    task.wait(1)
+                end
+                task.wait(60) -- códigos têm cooldown/limite de uso
+            end
+        end)
+    end
+})
+
+-- Botão: tentar todos os códigos uma vez
+Tabs.Codes:AddButton({
+    Title = "Try ALL Codes (uma vez)",
+    Callback = function()
+        local okCount = 0
+        local results = {}
+        for _, code in ipairs(GameCodes) do
+            local res = RedeemCode(code)
+            if res ~= "no-remote" and res ~= "falhou" then
+                okCount = okCount + 1
+                table.insert(results, ("%s: %s"):format(code, res))
+            end
+            task.wait(1)
+        end
+        Fluent:Notify({
+            Title = "Codes",
+            Content = ("%d códigos responderam"):format(okCount),
+            Duration = 4
+        })
+        for _, r in ipairs(results) do
+            Fluent:Notify({ Title = "Code OK", Content = r, Duration = 3 })
+        end
+    end
+})
+
+-- Botões individuais de código
+for _, code in ipairs(GameCodes) do
+    Tabs.Codes:AddButton({
+        Title = "Redeem " .. code,
+        Callback = function()
+            local res = RedeemCode(code)
+            Fluent:Notify({
+                Title = "Code " .. code,
+                Content = res,
+                Duration = 3
+            })
+        end
+    })
+end
+
+-- =====================================
+-- CLAIMS TAB (recompensas reveladas no dump SlenderHub)
+-- =====================================
+
+Tabs.Claims:AddSection("Recompensas")
+
+-- Auto Claim Daily Reward
+Tabs.Claims:AddToggle("AutoDaily", {
+    Title = "Auto Daily Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoDaily = v
+        task.spawn(function()
+            while Flags.AutoDaily do
+                local re = GetKnitRemote("DailyRewardService", "RE", "ClaimDailyReward")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Long Daily Reward
+Tabs.Claims:AddToggle("AutoLongDaily", {
+    Title = "Auto Long Daily Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoLongDaily = v
+        task.spawn(function()
+            while Flags.AutoLongDaily do
+                local re = GetKnitRemote("LongDailyRewardService", "RE", "ClaimLongDailyReward")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Offline Wins (dump: OfflineRaceService)
+Tabs.Claims:AddToggle("AutoOfflineWins", {
+    Title = "Auto Claim Offline Wins",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoOfflineWins = v
+        task.spawn(function()
+            while Flags.AutoOfflineWins do
+                local rf = GetKnitRemote("OfflineRaceService", "RF", "ClaimOfflineWins")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Event Reward
+Tabs.Claims:AddToggle("AutoEventReward", {
+    Title = "Auto Event Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoEventReward = v
+        task.spawn(function()
+            while Flags.AutoEventReward do
+                local re = GetKnitRemote("EventService", "RE", "ClaimEventReward")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Quest Reward
+Tabs.Claims:AddToggle("AutoQuest", {
+    Title = "Auto Quest Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoQuest = v
+        task.spawn(function()
+            while Flags.AutoQuest do
+                local re = GetKnitRemote("QuestService", "RE", "ClaimQuestReward")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Achievement (tenta ids 1..30)
+Tabs.Claims:AddToggle("AutoAchievement", {
+    Title = "Auto Achievement Claim",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoAchievement = v
+        task.spawn(function()
+            local i = 1
+            while Flags.AutoAchievement do
+                local re = GetKnitRemote("AchievementService", "RE", "ClaimAchievementEvent")
+                if re then
+                    pcall(function() re:FireServer(i) end)
+                    i = i + 1
+                    if i > 30 then i = 1 end
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Auto Season Reward
+Tabs.Claims:AddToggle("AutoSeason", {
+    Title = "Auto Season Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoSeason = v
+        task.spawn(function()
+            while Flags.AutoSeason do
+                local rf = GetKnitRemote("SeasonService", "RF", "ClaimSeasonReward")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Princess Daily
+Tabs.Claims:AddToggle("AutoPrincess", {
+    Title = "Auto Princess Daily",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoPrincess = v
+        task.spawn(function()
+            while Flags.AutoPrincess do
+                local re = GetKnitRemote("PrincessService", "RE", "ClaimDailyPrincess")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Spin Wheel
+Tabs.Claims:AddToggle("AutoSpinWheel", {
+    Title = "Auto Spin Wheel",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoSpinWheel = v
+        task.spawn(function()
+            while Flags.AutoSpinWheel do
+                local rf = GetKnitRemote("SpinningWheelService", "RF", "StartSpin")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Challenge (leaderboard)
+Tabs.Claims:AddToggle("AutoChallenge", {
+    Title = "Auto Challenge Reward",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoChallenge = v
+        task.spawn(function()
+            while Flags.AutoChallenge do
+                local re = GetKnitRemote("GlobalLeaderboardService", "RE", "ClaimChallengeReward")
+                if re then pcall(function() re:FireServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Daily Chest
+Tabs.Claims:AddToggle("AutoDailyChest", {
+    Title = "Auto Daily Chest",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoDailyChest = v
+        task.spawn(function()
+            while Flags.AutoDailyChest do
+                local rf = GetKnitRemote("ChestService", "RF", "ClaimDailyChest")
+                if rf then pcall(function() rf:InvokeServer() end) end
+                task.wait(5)
+            end
+        end)
+    end
+})
+
+Tabs.Claims:AddSection("Autofarm nativo (AutoService)")
+
+-- Auto Train nativo do jogo (dump: AutoService/RE/AutoTrainStart)
+Tabs.Claims:AddToggle("AutoNativeTrain", {
+    Title = "Auto Train (nativo)",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoNativeTrain = v
+        local re = GetKnitRemote("AutoService", "RE", v and "AutoTrainStart" or "AutoTrainStop")
+        if re then pcall(function() re:FireServer() end) end
+    end
+})
+
+-- Auto Fight nativo do jogo (dump: AutoService/RE/AutoFightStart)
+Tabs.Claims:AddToggle("AutoNativeFight", {
+    Title = "Auto Fight (nativo)",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoNativeFight = v
+        local re = GetKnitRemote("AutoService", "RE", v and "AutoFightStart" or "AutoFightStop")
+        if re then pcall(function() re:FireServer() end) end
+    end
+})
+
+Tabs.Claims:AddSection("Gamepass")
+
+-- Auto Unlock Gamepass (tenta todos os 14 gamepasses via GiveGamePass)
+Tabs.Claims:AddToggle("AutoUnlockGamePass", {
+    Title = "Auto Unlock Gamepass (todos)",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoUnlockGamePass = v
+        task.spawn(function()
+            while Flags.AutoUnlockGamePass do
+                for _, gp in ipairs(GamePasses) do
+                    FireGiveGamePass(gp.id)
+                    task.wait(0.15)
+                end
+                task.wait(3)
             end
         end)
     end
