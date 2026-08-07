@@ -899,21 +899,21 @@ Tabs.Event:AddToggle("InfGifts", {
             while Flags.InfGifts do
                 -- GiftBoxService: drop/abrir gifts em massa
                 FireNegative("GiftBoxService", "DropGifts", {
-                    { -70e+70 }, { -70e+70, {} }, { 999 }
+                    { -70e+70 }, { -70e+70, {} }, { 999 }, { 9999 }, {}
                 })
                 FireNegative("GiftBoxService", "PickGift", {
-                    { -70e+70 }, { -70e+70, {} }
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
                 })
                 FireNegative("GiftBoxService", "OpenGiftBox", {
-                    { -70e+70 }, { -70e+70, {} }
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
                 })
                 -- ChristmasService: tokens de natal
                 FireNegative("ChristmasService", "DropTokens", {
-                    { -70e+70 }, { -70e+70, {} }
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
                 })
-                -- FightService: claim de token de natal
+                -- FightService: claim de token de natal (mesmo formato dos fruit tokens)
                 FireNegative("FightService", "GetChristmasTokenEvent", {
-                    { -70e+70 }, { -70e+70, {} }
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
                 })
                 task.wait(0.2)
             end
@@ -921,18 +921,25 @@ Tabs.Event:AddToggle("InfGifts", {
     end
 })
 
--- INF FRUIT (área de frutas) — dump: FruitService + FightService
+-- INF FRUIT TOKENS (área de frutas) — dump: a moeda da área é "tokens":
+-- FightService/RE/GetFruitTokenEvent + FruitService/RE/GetTowerToken
+-- (PlayerDataService/RE/FruitTokensChanged é server→client, não fire)
 Tabs.Event:AddToggle("InfFruit", {
-    Title = "Inf Fruit (área frutas)",
+    Title = "Inf Fruit Tokens",
     Default = false,
     Callback = function(v)
         Flags.InfFruit = v
         task.spawn(function()
             while Flags.InfFruit do
-                -- FruitService: tokens de torre + compras
-                FireNegative("FruitService", "GetTowerToken", {
-                    { -70e+70 }, { -70e+70, {} }
+                -- FightService: evento que concede tokens de fruta
+                FireNegative("FightService", "GetFruitTokenEvent", {
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
                 })
+                -- FruitService: token de torre (área fruit)
+                FireNegative("FruitService", "GetTowerToken", {
+                    { -70e+70 }, { -70e+70, {} }, { 9999 }, {}
+                })
+                -- Compras com saldo negativo (mantido como fallback)
                 FireNegative("FruitService", "BuyFruit", {
                     { "Fruit_001", -70e+70 }, { "Fruit_001", -70e+70, {} },
                     { "Fruit_002", -70e+70 }, { "Fruit_002", -70e+70, {} },
@@ -943,10 +950,6 @@ Tabs.Event:AddToggle("InfFruit", {
                     { -70e+70 }, { -70e+70, {} }
                 })
                 FireNegative("FruitService", "UpdateTowerLevel", {
-                    { -70e+70 }, { -70e+70, {} }
-                })
-                -- FightService: claim de token de fruta
-                FireNegative("FightService", "GetFruitTokenEvent", {
                     { -70e+70 }, { -70e+70, {} }
                 })
                 task.wait(0.2)
