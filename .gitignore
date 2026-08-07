@@ -470,14 +470,15 @@ local function SetAutoInteract(enabled)
         while AutoInteractOn and task.wait(0.8) do
             pcall(function()
                 local root = GetRoot()
+                local now = os.clock()
                 for _, prompt in ipairs(FindPrompts()) do
-                    if not last[prompt] or task.time() - last[prompt] > 6 then
+                    if not last[prompt] or now - last[prompt] > 6 then
                         local parent = prompt.Parent
                         local pos = parent and (parent:IsA("BasePart") and parent.Position
                             or (parent.PrimaryPart and parent.PrimaryPart.Position)) or nil
                         if root and pos and (root.Position - pos).Magnitude < 40 then
                             FirePromptFn(prompt)
-                            last[prompt] = task.time()
+                            last[prompt] = now
                         end
                     end
                 end
