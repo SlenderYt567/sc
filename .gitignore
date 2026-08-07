@@ -1,78 +1,51 @@
 --[[
-    SlenderHub | Animal Hospital (Anomaly) — Script Premium
+    SlenderHub | Game Dumper Universal — v1.0.0
     Dev: SlenderHub Team
-    Versão: 1.0.0 (build inicial)
 
-    Feito para executors PC (Wave/Codex/Delta/etc.) com matriz de fallback.
-    UI padrão SlenderWind (embutida, enxuta).
-    Key system: verificação via API do SlenderHub (pluggável).
+    Dump automático estilo Dex, universal (Delta/Wave/Codex/Synapse/Fluxus...):
+      • Scripts (closures Luau) separados por PASTA e NOME
+      • Remotes catalogados (RemoteEvent/RemoteFunction/UnreliableRemoteEvent)
+      • Honeypot / backdoor detection (nomes suspeitos + sem handler)
+      • Export em disco: slenderhub_dumps/<jogo>/
+          scripts/<pasta>/<nome>.lua
+          scripts/_closures/*.lua        (closures extras do mesmo source)
+          remotes/remotes.txt            (catálogo completo)
+          remotes/honeypots.txt          (suspeitos)
+          remotes/connections.txt        (quem escuta cada remote)
+          remotes/runtime_log.txt        (chamadas FireServer/InvokeServer, se ativado)
+          metadata.json                  (resumo estruturado)
 
-    IMPORTANTE (calibração):
-    O jogo não expõe nomes oficiais de remotes/valores de forma documentada.
-    As constantes na seção CONFIG usam heurística — ajuste os nomes conforme
-    a versão atual do jogo. O loop usa pcall em tudo: nada quebra se algo mudar.
+    IMPORTANTE:
+    • "Scripts" aqui = código do CLIENTE (LocalScripts/Módulos). Código
+      server-side não sai pelo cliente — isso é limitação do Roblox, não do script.
+    • decompile() reconstrói o código (variáveis viram v1/v2...). Se o jogo
+      for ofuscado (Luraph/MoonSec), o resultado sai ilegível — aí use a
+      pipeline de desofuscação do SlenderHub.
+    • Tudo roda com pcall + matriz de fallback: nada quebra em executor fraco,
+      só perde recursos.
 ]]
 
 local SlenderHub = {}
 
-----------------------------------------------------------------------------
--- CONFIG (calibre aqui)
-----------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- CONFIG
+--------------------------------------------------------------------------------
 SlenderHub.Config = {
-    -- API de verificação de key (mesmo endpoint do loader do site)
-    VerifyUrl  = "https://www.slenderhub.shop/api/exec",
-    -- Se true, sem key o script roda em modo TRIAL limitado; se false, trava
-    AllowTrial = true,
-
-    -- Heurística de sanidade: nomes de Value/Attribute procurados no DataModel
-    SanityNames = { "Sanity", "Sanidade", "sanity", "Brain", "Mentality" },
-
-    -- Heurística de pacientes/anomalias: substrings de nome de modelos no Workspace
-    PatientNames = { "Patient", "Paciente", "Client", "Visitor", "Anomaly" },
-    AnomalyNames = { "Anomaly", "Skinwalker", "Stalker", "Hider", "Mimic", "Tentacle" },
-
-    -- Heurística de itens/salas
-    CoffeeNames   = { "Coffee", "Cafe", "Machine", "Pot" },
-    ItemNames     = { "Med", "Medicine", "Item", "Tool", "Supply" },
-    RoomNames     = { "Surgery", "XRay", "X-Ray", "Heart", "Medical", "Room" },
-
-    -- ProximityPrompts / ClickDetectors procurados
-    PromptNames   = { "ProximityPrompt", "Prompt", "Button", "Shutter" },
-
-    -- Jogabilidade
-    WalkSpeed     = 22,
-    JumpPower     = 50,
-    SanityFloor   = 100,   -- valor alvo do inf sanity
-    EspColor      = Color3.fromRGB(255, 60, 60),
-    EspColorGood  = Color3.fromRGB(60, 255, 120),
+    OutputRoot   = "slenderhub_dumps",   -- pasta raiz (dentro da pasta do executor)
+    Sanitize     = true,                 -- remove caracteres inválidos de nomes de arquivo
+    WriteExtra   = true,                 -- salva closures extras do mesmo source
+    KeyMode      = "none",               -- "none" = livre; "api" = pluga VerifyKey depois
 }
 
-----------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 -- SERVICES + UTILS
-----------------------------------------------------------------------------
-local RunService   = game:GetService("RunService")
-local Players      = game:GetService("Players")
-local Lighting     = game:GetService("Lighting")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local HttpService  = game:GetService("HttpService")
-local CoreGui      = game:GetService("CoreGui")
-
-local LocalPlayer  = Players.LocalPlayer
-local Camera       = workspace.CurrentCamera
-
-local function GetHumanoid()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    return char:FindFirstChildOfClass("Humanoid")
-end
-
-local function Tween(obj, props, dur)
-    dur = dur or 0.25
-    local tween = TweenService:Create(obj, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props)
-    tween:Play()
-    return tween
-end
+--------------------------------------------------------------------------------
+local Players        = game:GetService("Players")
+local RunService     = game:GetService("RunService")
+local HttpService    = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local CoreGui        = game:GetService("CoreGui")
+local LocalPlayer    = Players.LocalPlayer
 
 local function Notify(title, text, dur, type)
     if SlenderHub.UI and SlenderHub.UI.Notify then
@@ -80,26 +53,36 @@ local function Notify(title, text, dur, type)
     end
 end
 
-----------------------------------------------------------------------------
--- MATRIZ DE EXECUTORES (fallbacks — nunca assuma que a função existe)
-----------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- MATRIZ DE EXECUTORES (universal — nunca assuma que a função existe)
+--------------------------------------------------------------------------------
 local Env = getgenv and getgenv() or _G
 
 local FunctionMap = {
-    CheckCaller       = function() return type(checkcaller) == "function" and checkcaller or nil end,
-    NewCClosure       = function() return type(newcclosure) == "function" and newcclosure or nil end,
-    HookMetaMethod    = function() return type(hookmetamethod) == "function" and hookmetamethod or nil end,
-    HookFunction      = function() return type(hookfunction) == "function" and hookfunction or nil end,
-    GetRawMetaTable   = function() return type(getrawmetatable) == "function" and getrawmetatable or nil end,
-    SetReadOnly       = function() return type(setreadonly) == "function" and setreadonly or nil end,
-    FirePrompt        = function() return type(fireproximityprompt) == "function" and fireproximityprompt or nil end,
-    FireClick         = function() return type(fireclickdetector) == "function" and fireclickdetector or nil end,
-    GetGC             = function() return type(getgc) == "function" and getgc or nil end,
-    GetReg            = function() return type(getreg) == "function" and getreg or nil end,
-    IdentifyExecutor  = function()
+    CheckCaller     = function() return type(checkcaller) == "function" and checkcaller or nil end,
+    NewCClosure     = function() return type(newcclosure) == "function" and newcclosure or nil end,
+    HookMetaMethod  = function() return type(hookmetamethod) == "function" and hookmetamethod or nil end,
+    GetNamecall     = function() return type(getnamecallmethod) == "function" and getnamecallmethod or nil end,
+    GetGC           = function() return type(getgc) == "function" and getgc or nil end,
+    GetReg          = function() return type(getreg) == "function" and getreg or nil end,
+    GetNilInstances = function() return type(getnilinstances) == "function" and getnilinstances or nil end,
+    GetRunning      = function() return type(getrunningscripts) == "function" and getrunningscripts or nil end,
+    GetConnections  = function() return type(getconnections) == "function" and getconnections or nil end,
+    Decompile       = function() return type(decompile) == "function" and decompile or nil end,
+    ScriptBytecode  = function() return type(getscriptbytecode) == "function" and getscriptbytecode or nil end,
+    DumpString      = function() return type(dumpstring) == "function" and dumpstring or nil end,
+    WriteFile       = function() return type(writefile) == "function" and writefile or nil end,
+    MakeFolder      = function() return type(makefolder) == "function" and makefolder or nil end,
+    IsFolder        = function() return type(isfolder) == "function" and isfolder or nil end,
+    IsFile          = function() return type(isfile) == "function" and isfile or nil end,
+    ListFiles       = function() return type(listfiles) == "function" and listfiles or nil end,
+    Identify        = function()
         local names = { "getexecutorname", "identifyexecutor", "get_identify" }
         for _, n in ipairs(names) do
-            if type(Env[n]) == "function" then return Env[n]() end
+            if type(Env[n]) == "function" then
+                local ok, v = pcall(Env[n])
+                if ok and v then return tostring(v) end
+            end
         end
         return "unknown"
     end,
@@ -110,346 +93,631 @@ local function Fn(name)
     return ok and val or nil
 end
 
---// HWID (pluggável: cada executor expõe de um jeito)
-local HWID
-do
-    local ok, h = pcall(function()
-        local exec = Fn("IdentifyExecutor") or "unknown"
-        if type(Env["get_hwid"]) == "function" then return tostring(Env.get_hwid()) end
-        -- fallback: hash estável do ambiente (não é HWID real; troque pelo nativo do seu executor)
-        local base = tostring(LocalPlayer.UserId) .. ":" .. exec
-        return HttpService:GenerateGUID(false) -- substitua por hash real se quiser persistência
+local ExecutorName = Fn("Identify")
+
+--------------------------------------------------------------------------------
+-- NOME DO JOGO (com cache — GetProductInfo tem rate limit)
+--------------------------------------------------------------------------------
+local GameNameCache
+
+local function GetGameName()
+    if GameNameCache then return GameNameCache end
+    local ok, info = pcall(function()
+        return MarketplaceService:GetProductInfo(game.PlaceId).Name
     end)
-    HWID = ok and h or "unknown"
+    local name = ok and info or ("place_" .. tostring(game.PlaceId))
+    name = (name or ""):gsub("[<>:\"/\\|?*]", "_")
+    GameNameCache = name ~= "" and name or ("place_" .. tostring(game.PlaceId))
+    return GameNameCache
 end
 
-----------------------------------------------------------------------------
--- KEY SYSTEM (pluggável — mesma resposta JSON do loader: {success, tier, message})
-----------------------------------------------------------------------------
-function SlenderHub.VerifyKey(key)
-    local ok, res = pcall(function()
-        local url = SlenderHub.Config.VerifyUrl
-            .. "?key=" .. HttpService:UrlEncode(key)
-            .. "&hwid=" .. HttpService:UrlEncode(HWID)
-        return HttpService:JSONDecode(game:HttpGet(url))
-    end)
-    if not ok or not res then
-        return false, "Falha na conexão com o servidor"
-    end
-    if not res.success then
-        return false, res.message or "Key inválida"
-    end
-    return true, res
+--------------------------------------------------------------------------------
+-- FILESYSTEM (writefile/makefolder com fallback)
+--------------------------------------------------------------------------------
+local HasWrite = Fn("WriteFile") ~= nil
+
+local function SanitizeName(name)
+    if not SlenderHub.Config.Sanitize then return name end
+    name = name:gsub("[<>:\"/\\|?*%c]", "_")
+    name = name:gsub("^_+", ""):gsub("_+$", "")
+    return name ~= "" and name or "unnamed"
 end
 
-function SlenderHub.Authenticate(key)
-    local ok, data = SlenderHub.VerifyKey(key)
-    if not ok then return false, data end
-    local tier = data.tier or data.type or "basic"
-    return true, tier
-end
-
-----------------------------------------------------------------------------
--- INF SANITY (heurística: bloqueia perda no lado do cliente)
-----------------------------------------------------------------------------
-SlenderHub.InfSanity = { Enabled = false }
-
-local function FindSanityValues()
-    local found = {}
-    local names = SlenderHub.Config.SanityNames
-    local function scan(inst)
-        if inst:IsA("NumberValue") or inst:IsA("IntValue") then
-            for _, n in ipairs(names) do
-                if inst.Name:lower():find(n:lower()) then
-                    table.insert(found, inst)
-                    break
-                end
-            end
+local function EnsureFolder(path)
+    local mk = Fn("MakeFolder")
+    local isf = Fn("IsFolder")
+    if not mk then return false end
+    local cur = ""
+    for _, part in ipairs(string.split(path, "/")) do
+        cur = cur .. part
+        local exists = false
+        if isf then
+            local ok, e = pcall(isf, cur)
+            exists = ok and e == true
         end
-        if inst:IsA("Folder") or inst:IsA("Model") or inst:IsA("Workspace") or inst:IsA("PlayerGui") then
-            for _, child in ipairs(inst:GetChildren()) do
-                scan(child)
-            end
+        if not exists then
+            local ok = pcall(mk, cur)
+            if not ok then return false end
         end
+        cur = cur .. "/"
     end
-    scan(workspace)
-    if LocalPlayer:FindFirstChild("PlayerGui") then scan(LocalPlayer.PlayerGui) end
-    return found
+    return true
 end
 
-function SlenderHub.SetInfSanity(enabled)
-    SlenderHub.InfSanity.Enabled = enabled
-    if not enabled then return end
-    task.spawn(function()
-        while SlenderHub.InfSanity.Enabled and task.wait(0.2) do
-            pcall(function()
-                for _, v in ipairs(FindSanityValues()) do
-                    if v.Value < SlenderHub.Config.SanityFloor then
-                        v.Value = SlenderHub.Config.SanityFloor
+local function WriteUniqueFile(path, content)
+    local wf = Fn("WriteFile")
+    local isf = Fn("IsFile")
+    if not wf then return nil end
+    local final = path
+    local n = 1
+    while isf do
+        local ok, e = pcall(isf, final)
+        if not (ok and e) then break end
+        n = n + 1
+        final = path:gsub("(.+)%.(lua|txt|json|bin)$", "%1_" .. n .. ".%2")
+        if final == path then final = path .. "_" .. n end
+    end
+    local ok = pcall(wf, final, content)
+    return ok and final or nil
+end
+
+--------------------------------------------------------------------------------
+-- COLETA DE REMOTES
+--------------------------------------------------------------------------------
+local REMOTE_CLASSES = {
+    "RemoteEvent", "RemoteFunction", "UnreliableRemoteEvent",
+}
+
+local SUSPICIOUS_WORDS = {
+    "ban", "admin", "detect", "cheat", "exploit", "check", "verify", "kick",
+    "anti", "honeypot", "log", "report", "ac", "detection", "flag", "punish",
+    "moderation", "security", "backdoor",
+}
+
+local SECURITY_FOLDERS = { "anticheat", "anti-cheat", "ac", "security", "moderation", "detection" }
+
+local function IsSuspiciousName(name)
+    local n = name:lower()
+    for _, w in ipairs(SUSPICIOUS_WORDS) do
+        if n:find(w, 1, true) then return true end
+    end
+    return false
+end
+
+local function IsInsideSecurityFolder(inst)
+    local cur = inst.Parent
+    while cur do
+        local cname = cur.Name:lower()
+        for _, f in ipairs(SECURITY_FOLDERS) do
+            if cname == f then return true end
+        end
+        cur = cur.Parent
+    end
+    return false
+end
+
+local function GetRemotePath(inst)
+    local parts = {}
+    local cur = inst
+    while cur and cur ~= game do
+        table.insert(parts, 1, cur.Name)
+        cur = cur.Parent
+    end
+    return table.concat(parts, "/")
+end
+
+local function CollectRemotes()
+    local remotes = {}
+    local seen = {}
+
+    local function Add(inst)
+        if seen[inst] then return end
+        seen[inst] = true
+        table.insert(remotes, inst)
+    end
+
+    -- 1) árvore visível
+    for _, desc in ipairs(game:GetDescendants()) do
+        for _, cls in ipairs(REMOTE_CLASSES) do
+            if desc:IsA(cls) then Add(desc) end
+        end
+        if desc:IsA("BindableEvent") or desc:IsA("BindableFunction") then
+            Add(desc) -- informativo (não fireável pelo cliente)
+        end
+    end
+
+    -- 2) heap (remotes não expostos na árvore pública)
+    local gc = Fn("GetGC")
+    if gc then
+        pcall(function()
+            for _, v in ipairs(gc()) do
+                if type(v) == "userdata" and typeof(v) == "Instance" then
+                    for _, cls in ipairs(REMOTE_CLASSES) do
+                        if v:IsA(cls) then Add(v) end
                     end
                 end
-            end)
-        end
-    end)
-end
+            end
+        end)
+    end
 
---// TODO (v1.1): bloqueio de perda de sanidade via hook de metatable.
--- Se o jogo guardar a sanidade em tabela local (não em Value), faça:
---   local mt  = getrawmetatable(game)
---   local old = hookmetamethod(game, "__newindex")
---   setreadonly(mt, false)
---   hookmetamethod(game, "__newindex", newcclosure(function(self, key, val)
---       if key:lower():find("sanity") and checkcaller() then return end
---       return old(self, key, val)
---   end))
--- Aqui só tratamos NumberValue/IntValue via SlenderHub.SetInfSanity.
-
-----------------------------------------------------------------------------
--- ESP (Highlight se disponível; senão Drawing; senão nada)
-----------------------------------------------------------------------------
-SlenderHub.ESP = { Enabled = false, Instances = {} }
-
-local Highlight = function(inst, color)
-    if inst:FindFirstChildOfClass("Highlight") then return end
-    local hl = Instance.new("Highlight")
-    hl.Name = "SlenderHubESP"
-    hl.FillColor = color
-    hl.FillTransparency = 0.6
-    hl.OutlineColor = color
-    hl.OutlineTransparency = 0
-    hl.Parent = inst
-end
-
-local function ScanTargets()
-    local patients, anomalies = {}, {}
-    for _, desc in ipairs(SlenderHub.Config.PatientNames) do
-        for _, model in ipairs(workspace:GetDescendants()) do
-            if model:IsA("Model") and model.PrimaryPart then
-                local okName = model.Name:lower()
-                local isPatient = okName:find(desc:lower())
-                local isAnom = false
-                for _, a in ipairs(SlenderHub.Config.AnomalyNames) do
-                    if okName:find(a:lower()) then isAnom = true break end
-                end
-                if isPatient then
-                    if isAnom then table.insert(anomalies, model)
-                    else table.insert(patients, model) end
+    -- 3) instâncias ocultas
+    local nilInst = Fn("GetNilInstances")
+    if nilInst then
+        pcall(function()
+            for _, v in ipairs(nilInst()) do
+                if typeof(v) == "Instance" then
+                    for _, cls in ipairs(REMOTE_CLASSES) do
+                        if v:IsA(cls) then Add(v) end
+                    end
                 end
             end
-        end
+        end)
     end
-    return patients, anomalies
+
+    return remotes
 end
 
-function SlenderHub.SetESP(enabled)
-    SlenderHub.ESP.Enabled = enabled
-    if not enabled then
-        for _, hl in ipairs(workspace:GetDescendants()) do
-            if hl:IsA("Highlight") and hl.Name == "SlenderHubESP" then hl:Destroy() end
+local function CountConnections(remote)
+    local gc = Fn("GetConnections")
+    if not gc then return nil end
+    local ok, cons = pcall(gc, remote)
+    if not ok or type(cons) ~= "table" then return nil end
+    return #cons
+end
+
+--------------------------------------------------------------------------------
+-- COLETA DE SCRIPTS
+--------------------------------------------------------------------------------
+local ScriptStore = {}   -- { path = caminho no disco, content = string, kind = "code"|"bytecode"|"note" }
+local ExtraStore = {}    -- closures extras por source
+local SeenSources = {}
+local Stats = { scripts = 0, closures = 0, extras = 0, errors = 0 }
+
+local function SourceToPath(source)
+    -- source: "@ReplicatedStorage/ModuleScript:42" | "@ModuleScript:42"
+    local s = source:gsub("^@", ""):gsub(":%d+$", "")
+    local parts = {}
+    for part in s:gmatch("[^/]+") do
+        table.insert(parts, part)
+    end
+    local folder, name
+    if #parts == 0 then
+        folder, name = "unknown", "unknown"
+    elseif #parts == 1 then
+        folder, name = "unknown", parts[1]
+    else
+        folder, name = parts[1], parts[#parts]
+    end
+    return SanitizeName(folder), SanitizeName(name)
+end
+
+local function DecompileOne(closure)
+    local dc = Fn("Decompile")
+    if dc then
+        local ok, code = pcall(dc, closure)
+        if ok and type(code) == "string" and #code > 0 then
+            return code, "code"
+        end
+    end
+    local sb = Fn("ScriptBytecode") or Fn("DumpString")
+    if sb then
+        local ok, bin = pcall(sb, closure)
+        if ok and type(bin) == "string" and #bin > 0 then
+            return bin, "bytecode"
+        end
+    end
+    return nil, nil
+end
+
+local function AddClosure(closure, info)
+    info = info or debug.getinfo(closure)
+    if not info or type(info.source) ~= "string" then return end
+    local src = info.source
+    if src == "=[C]" or not src:find("^@") then return end -- C closure / builtin
+
+    Stats.closures = Stats.closures + 1
+    if SeenSources[src] then
+        if SlenderHub.Config.WriteExtra then
+            table.insert(ExtraStore, { source = src, closure = closure, info = info })
         end
         return
     end
-    task.spawn(function()
-        while SlenderHub.ESP.Enabled and task.wait(0.5) do
-            pcall(function()
-                for _, m in ipairs(workspace:GetDescendants()) do
-                    if m:IsA("Model") and m.PrimaryPart then
-                        local n = m.Name:lower()
-                        for _, p in ipairs(SlenderHub.Config.PatientNames) do
-                            if n:find(p:lower()) then
-                                local isAnom = false
-                                for _, a in ipairs(SlenderHub.Config.AnomalyNames) do
-                                    if n:find(a:lower()) then isAnom = true break end
+    SeenSources[src] = true
+
+    local folder, name = SourceToPath(src)
+    local content, kind = DecompileOne(closure)
+    local note
+    if not content then
+        kind = "note"
+        note = string.format("-- Closure sem decompilador disponível.\n-- Executor: %s\n-- source: %s\n", tostring(ExecutorName), tostring(src))
+    end
+    local filePath = string.format("scripts/%s/%s.lua", folder, name)
+    table.insert(ScriptStore, {
+        path = filePath,
+        folder = folder,
+        name = name,
+        content = content,
+        kind = kind,
+        note = note,
+        source = src,
+    })
+    Stats.scripts = Stats.scripts + 1
+end
+
+local function CollectScripts()
+    -- A) scripts rodando (instâncias) — melhor precisão de nome/pasta
+    local running = Fn("GetRunning")
+    if running then
+        pcall(function()
+            for _, inst in ipairs(running()) do
+                if typeof(inst) == "Instance" then
+                    local okClass = pcall(function() return inst:IsA("LuaSourceContainer") end)
+                    if okClass then
+                        local content, kind
+                        local okSrc, src = pcall(function() return inst.Source end)
+                        if okSrc and type(src) == "string" and #src > 0 then
+                            content, kind = src, "code"
+                        else
+                            local dc = Fn("Decompile")
+                            if dc then
+                                local ok2, code = pcall(dc, inst)
+                                if ok2 and type(code) == "string" and #code > 0 then
+                                    content, kind = code, "code"
                                 end
-                                Highlight(m, isAnom and SlenderHub.Config.EspColor or SlenderHub.Config.EspColorGood)
-                                break
                             end
                         end
+                        local folder, name = "scripts_rodando", SanitizeName(inst.Name)
+                        local filePath = string.format("scripts/%s/%s.lua", folder, name)
+                        table.insert(ScriptStore, {
+                            path = filePath, folder = folder, name = name,
+                            content = content, kind = kind or "note",
+                            note = kind and nil or ("-- Script sem código recuperável: " .. tostring(inst:GetFullName())),
+                            source = inst:GetFullName(),
+                        })
+                        Stats.scripts = Stats.scripts + 1
                     end
                 end
-            end)
-        end
-    end)
-end
-
-----------------------------------------------------------------------------
--- MOVEMENT (walkspeed / noclip / fly / teleport p/ prompt)
-----------------------------------------------------------------------------
-SlenderHub.Movement = { Noclip = false, Fly = false }
-
-local NoclipConn
-
-function SlenderHub.SetWalkSpeed(v)
-    local hum = GetHumanoid()
-    if hum then hum.WalkSpeed = v end
-end
-
-function SlenderHub.SetNoclip(enabled)
-    SlenderHub.Movement.Noclip = enabled
-    if not enabled then
-        if NoclipConn then NoclipConn:Disconnect() NoclipConn = nil end
-        return
+            end
+        end)
     end
-    if NoclipConn then NoclipConn:Disconnect() end
-    NoclipConn = RunService.Stepped:Connect(function(_, dt)
-        local hum = GetHumanoid()
-        if not hum then return end
-        hum:ChangeState(Enum.HumanoidStateType.Physics)
-        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if root then root.Velocity = Vector3.new(0, 0, 0) end
-    end)
+
+    -- B) heap scan (closures vivas)
+    local gc = Fn("GetGC")
+    if gc then
+        pcall(function()
+            for _, v in ipairs(gc()) do
+                if type(v) == "function" then
+                    local ok, info = pcall(debug.getinfo, v, "S")
+                    if ok and info then AddClosure(v, info) end
+                end
+            end
+        end)
+    end
+
+    -- C) instâncias ocultas
+    local nilInst = Fn("GetNilInstances")
+    if nilInst then
+        pcall(function()
+            for _, v in ipairs(nilInst()) do
+                if typeof(v) == "Instance" and pcall(function() return v:IsA("LuaSourceContainer") end) then
+                    local content
+                    local okSrc, src = pcall(function() return v.Source end)
+                    if okSrc and type(src) == "string" and #src > 0 then
+                        content = src
+                    else
+                        local dc = Fn("Decompile")
+                        if dc then
+                            local ok2, code = pcall(dc, v)
+                            if ok2 and type(code) == "string" and #code > 0 then content = code end
+                        end
+                    end
+                    local folder, name = "ocultos", SanitizeName(v.Name)
+                    local filePath = string.format("scripts/%s/%s.lua", folder, name)
+                    table.insert(ScriptStore, {
+                        path = filePath, folder = folder, name = name,
+                        content = content or ("-- Instância oculta (sem código): " .. tostring(v:GetFullName())),
+                        kind = content and "code" or "note",
+                        source = v:GetFullName(),
+                    })
+                    Stats.scripts = Stats.scripts + 1
+                end
+            end
+        end)
+    end
 end
 
-function SlenderHub.SetFly(enabled)
-    SlenderHub.Movement.Fly = enabled
-    if not enabled then return end
-    task.spawn(function()
-        while SlenderHub.Movement.Fly and task.wait() do
-            local hum = GetHumanoid()
-            local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if not hum or not root then break end
-            local vel = root.AssemblyLinearVelocity or Vector3.new(0, 0, 0)
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0, 60, 0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then vel = vel - Vector3.new(0, 60, 0) end
-            root.AssemblyLinearVelocity = Vector3.new(vel.X, vel.Y, vel.Z)
+--------------------------------------------------------------------------------
+-- LOG RUNTIME DE REMOTES (feature premium — off por padrão, hook detectável)
+--------------------------------------------------------------------------------
+SlenderHub.RemoteLog = { Enabled = false, Buffer = {}, Hooked = false, OldNamecall = nil }
+
+local function FlushRemoteLog()
+    local base = string.format("%s/%s/remotes/runtime_log.txt", SlenderHub.Config.OutputRoot, GetGameName())
+    EnsureFolder(SlenderHub.Config.OutputRoot .. "/" .. GetGameName() .. "/remotes")
+    local content = table.concat(SlenderHub.RemoteLog.Buffer, "\n")
+    WriteUniqueFile(base, content)
+end
+
+local function EnableRemoteLog()
+    local hook = Fn("HookMetaMethod")
+    local nm   = Fn("GetNamecall")
+    local cc   = Fn("CheckCaller")
+    local ncc  = Fn("NewCClosure")
+    if not hook or not nm then
+        Notify("SlenderHub", "Executor sem hookmetamethod — log runtime indisponível", 3, "Error")
+        return false
+    end
+    local old = hook(game, "__namecall")
+    SlenderHub.RemoteLog.OldNamecall = old
+    local function callback(self, ...)
+        local method = nm()
+        if (method == "FireServer" or method == "InvokeServer") and typeof(self) == "Instance" then
+            if not (cc and cc()) then
+                local args = { ... }
+                local argStr = {}
+                for i = 1, math.min(6, #args) do
+                    local v = args[i]
+                    local str
+                    if typeof(v) == "Instance" then
+                        str = "Inst:" .. v.ClassName .. ":" .. v.Name
+                    elseif typeof(v) == "Vector3" or typeof(v) == "CFrame" or typeof(v) == "Color3" then
+                        str = tostring(v)
+                    else
+                        str = string.format("%q", tostring(v))
+                    end
+                    table.insert(argStr, str)
+                end
+                local line = string.format("[%s] %s %s(%s)",
+                    os.clock() > 0 and tostring(os.clock()) or tostring(0),
+                    self.ClassName, self.Name, table.concat(argStr, ", "))
+                table.insert(SlenderHub.RemoteLog.Buffer, line)
+            end
         end
-    end)
+        return old(self, ...)
+    end
+    local hookedFn = ncc and ncc(callback) or callback
+    hook(game, "__namecall", hookedFn)
+    SlenderHub.RemoteLog.Hooked = true
+    return true
 end
 
-function SlenderHub.TeleportToPrompt()
-    local prompt = nil
-    local names = SlenderHub.Config.PromptNames
-    for _, d in ipairs(workspace:GetDescendants()) do
-        if d:IsA("ProximityPrompt") or d:IsA("ClickDetector") then
-            for _, n in ipairs(names) do
-                if d.Name:lower():find(n:lower()) or (d.Parent and d.Parent.Name:lower():find(n:lower())) then
-                    prompt = d
-                    break
+local function DisableRemoteLog()
+    if SlenderHub.RemoteLog.Hooked then
+        if SlenderHub.RemoteLog.OldNamecall then
+            pcall(hookmetamethod, game, "__namecall", SlenderHub.RemoteLog.OldNamecall)
+        else
+            pcall(hookmetamethod, game, "__namecall", nil)
+        end
+        SlenderHub.RemoteLog.Hooked = false
+    end
+    FlushRemoteLog()
+end
+
+--------------------------------------------------------------------------------
+-- DUMP COMPLETO
+--------------------------------------------------------------------------------
+local function BuildMetadata(remotes, honeypots)
+    local meta = {
+        tool = "SlenderHub Game Dumper",
+        version = "1.0.0",
+        game = GetGameName(),
+        placeId = tostring(game.PlaceId),
+        executor = tostring(ExecutorName),
+        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
+        stats = {
+            scripts = Stats.scripts,
+            closures_scanned = Stats.closures,
+            extra_closures = Stats.extras,
+            remotes = #remotes,
+            honeypots = #honeypots,
+            errors = Stats.errors,
+        },
+        remotes_summary = {},
+    }
+    for _, r in ipairs(remotes) do
+        table.insert(meta.remotes_summary, {
+            name = r.Name,
+            className = r.ClassName,
+            path = GetRemotePath(r),
+            bindable = r:IsA("BindableEvent") or r:IsA("BindableFunction"),
+        })
+    end
+    return HttpService:JSONEncode(meta)
+end
+
+local function RunDump()
+    Stats = { scripts = 0, closures = 0, extras = 0, errors = 0 }
+    ScriptStore = {}
+    ExtraStore = {}
+    SeenSources = {}
+
+    local gameName = GetGameName()
+    local root = string.format("%s/%s", SlenderHub.Config.OutputRoot, gameName)
+
+    if not HasWrite then
+        Notify("SlenderHub", "Executor sem writefile — só exibindo na tela", 4, "Warning")
+    end
+
+    Notify("SlenderHub", "Coletando remotes...", 2, nil)
+    local remotes = CollectRemotes()
+
+    Notify("SlenderHub", "Coletando scripts (heap scan)...", 3, nil)
+    CollectScripts()
+
+    -- honeypots
+    local honeypots = {}
+    local connectionInfo = {}
+    for _, r in ipairs(remotes) do
+        local cons = CountConnections(r)
+        local susp = IsSuspiciousName(r.Name) or IsInsideSecurityFolder(r)
+        connectionInfo[r] = cons
+        if susp then
+            table.insert(honeypots, r)
+        end
+    end
+
+    -- export
+    local okWrite = HasWrite
+    if okWrite then
+        EnsureFolder(root .. "/scripts")
+        EnsureFolder(root .. "/remotes")
+    end
+
+    local written = 0
+    local failed = 0
+    if okWrite then
+        for _, s in ipairs(ScriptStore) do
+            local full = string.format("%s/%s", root, s.path)
+            EnsureFolder(root .. "/scripts/" .. s.folder)
+            local content = s.content
+            if s.kind == "bytecode" then
+                content = "-- BYTECODE (use descompilador externo)\n" .. content
+            elseif s.kind == "note" then
+                content = s.note
+            else
+                content = "--// SlenderHub Dump | " .. gameName .. " | source: " .. (s.source or "") .. "\n\n" .. content
+            end
+            local ok = WriteUniqueFile(full, content)
+            if ok then written = written + 1 else failed = failed + 1 end
+        end
+        -- extras
+        if SlenderHub.Config.WriteExtra then
+            local done = {}
+            for _, ex in ipairs(ExtraStore) do
+                local folder, name = SourceToPath(ex.source)
+                local content, kind = DecompileOne(ex.closure)
+                if content then
+                    local n = (done[ex.source] or 0) + 1
+                    done[ex.source] = n
+                    local full = string.format("%s/scripts/_closures/%s_%d.lua", root, name, n)
+                    EnsureFolder(root .. "/scripts/_closures")
+                    WriteUniqueFile(full, "--// SlenderHub Dump (closure extra)\n" .. content)
+                end
+            end
+            Stats.extras = done and #ExtraStore or 0
+        end
+
+        -- remotes.txt
+        local lines = { string.format("REMOTES — %s (%s)", gameName, tostring(game.PlaceId)) }
+        for _, r in ipairs(remotes) do
+            local bind = r:IsA("BindableEvent") or r:IsA("BindableFunction")
+            local cons = connectionInfo[r]
+            local consStr = cons and tostring(cons) or "?"
+            table.insert(lines, string.format("[%s] %s | caminho: %s | handlers: %s%s",
+                r.ClassName, r.Name, GetRemotePath(r), consStr,
+                bind and " | BINDABLE (local, não fireável)" or ""))
+        end
+        WriteUniqueFile(root .. "/remotes/remotes.txt", table.concat(lines, "\n"))
+
+        -- honeypots.txt
+        local hl = { "HONEYPOTS / SUSPEITOS — NÃO FIRE sem investigar", "" }
+        for _, r in ipairs(honeypots) do
+            local reason = {}
+            if IsSuspiciousName(r.Name) then table.insert(reason, "nome suspeito") end
+            if IsInsideSecurityFolder(r) then table.insert(reason, "dentro de pasta de segurança") end
+            table.insert(hl, string.format("[%s] %s (%s) | %s",
+                r.ClassName, r.Name, GetRemotePath(r), table.concat(reason, ", ")))
+        end
+        table.insert(hl, "")
+        table.insert(hl, "OBS: remote SEM handlers no cliente não é necessariamente honeypot —")
+        table.insert(hl, "o handler pode estar no servidor. Sempre teste com conta descartável.")
+        WriteUniqueFile(root .. "/remotes/honeypots.txt", table.concat(hl, "\n"))
+
+        -- connections.txt
+        local cl = { "CONEXÕES (quem escuta no cliente)", "" }
+        for _, r in ipairs(remotes) do
+            local gc = Fn("GetConnections")
+            if gc then
+                local ok, cons = pcall(gc, r)
+                if ok and type(cons) == "table" and #cons > 0 then
+                    table.insert(cl, string.format("[%s] %s — %d conexão(ões)", r.ClassName, r.Name, #cons))
+                    for i, c in ipairs(cons) do
+                        local fn = type(c) == "table" and c.Function
+                        local loc
+                        if type(fn) == "function" then
+                            local ok2, info = pcall(debug.getinfo, fn, "S")
+                            loc = ok2 and info and tostring(info.source) or "?"
+                        end
+                        table.insert(cl, string.format("    %d. handler em %s", i, loc or "?"))
+                    end
                 end
             end
         end
-        if prompt then break end
+        WriteUniqueFile(root .. "/remotes/connections.txt", table.concat(cl, "\n"))
+
+        -- metadata.json
+        WriteUniqueFile(root .. "/metadata.json", BuildMetadata(remotes, honeypots))
     end
-    if not prompt then
-        Notify("SlenderHub", "Nenhum prompt encontrado", 2, "Warning")
-        return
+
+    -- resumo
+    local cons = Fn("GetConnections")
+    local handlersCount = 0
+    if cons then
+        pcall(function()
+            for _, r in ipairs(remotes) do
+                local c = CountConnections(r)
+                if c then handlersCount = handlersCount + c end
+            end
+        end)
     end
-    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if root and prompt.Parent then
-        local target = prompt.Parent:IsA("BasePart") and prompt.Parent.Position or (prompt.Parent.PrimaryPart and prompt.Parent.PrimaryPart.Position)
-        if target then
-            root.CFrame = CFrame.new(target + Vector3.new(0, 4, 0))
-            Notify("SlenderHub", "Teleportado para: " .. prompt.Parent.Name, 2, "Success")
-        end
+
+    local summary = string.format(
+        "DUMP CONCLUÍDO\nJogo: %s (%s)\nExecutor: %s\n\nPasta: %s\n  • Scripts: %d (falhas: %d)\n  • Closures no heap: %d\n  • Closures extras: %d\n  • Remotes: %d (honeypots: %d)\n  • Handlers no cliente: %d",
+        gameName, tostring(game.PlaceId), tostring(ExecutorName),
+        root, written, failed,
+        Stats.closures, Stats.extras,
+        #remotes, #honeypots, handlersCount)
+
+    if SlenderHub.UI and SlenderHub.UI.SetResult then
+        SlenderHub.UI:SetResult(summary)
     end
+    Notify("SlenderHub", "Dump salvo em " .. root, 6, "Success")
 end
 
-function SlenderHub.InteractWithPrompt()
-    local fp = Fn("FirePrompt")
-    local fc = Fn("FireClick")
-    for _, d in ipairs(workspace:GetDescendants()) do
-        if d:IsA("ProximityPrompt") and fp then
-            pcall(fp, d)
-            return
-        elseif d:IsA("ClickDetector") and fc then
-            pcall(fc, d)
-            return
-        end
-    end
-    Notify("SlenderHub", "Executor não expõe fire de prompts", 2, "Error")
-end
-
-----------------------------------------------------------------------------
--- AUTO CHECK-IN / REJECT (heurística + botão do shutter via prompt)
-----------------------------------------------------------------------------
-SlenderHub.AutoCheckIn = { Enabled = false }
-
-function SlenderHub.SetAutoCheckIn(enabled)
-    SlenderHub.AutoCheckIn.Enabled = enabled
-    if not enabled then return end
-    task.spawn(function()
-        while SlenderHub.AutoCheckIn.Enabled and task.wait(0.6) do
-            pcall(function()
-                -- tenta interagir com o shutter/prompt mais próximo
-                SlenderHub.InteractWithPrompt()
-            end)
-        end
-    end)
-end
-
-----------------------------------------------------------------------------
--- ANTI JUMPSCARE (esconde telas de susto que o jogo cria no PlayerGui)
-----------------------------------------------------------------------------
-SlenderHub.AntiJumpscare = { Enabled = false, Done = {} }
-
-function SlenderHub.SetAntiJumpscare(enabled)
-    SlenderHub.AntiJumpscare.Enabled = enabled
-    if not enabled then return end
-    task.spawn(function()
-        while SlenderHub.AntiJumpscare.Enabled and task.wait(0.3) do
-            pcall(function()
-                local pg = LocalPlayer:FindFirstChild("PlayerGui")
-                if not pg then return end
-                for _, gui in ipairs(pg:GetChildren()) do
-                    if gui:IsA("ScreenGui") and gui:IsA("ScreenGui") then
-                        local n = gui.Name:lower()
-                        if n:find("jump") or n:find("scare") or n:find("horror") or n:find("effect") then
-                            if not SlenderHub.AntiJumpscare.Done[gui] then
-                                SlenderHub.AntiJumpscare.Done[gui] = true
-                                gui.Enabled = false
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end)
-end
-
-----------------------------------------------------------------------------
--- UI SLENDERWIND (embutida, enxuta — padrão visual do hub)
-----------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- UI SLENDERWIND (enxuta — mesma identidade do hub)
+--------------------------------------------------------------------------------
 SlenderHub.UI = {}
 
 local function CreateUI()
     local theme = {
-        MainBg   = Color3.fromRGB(18, 18, 22),
-        Sidebar  = Color3.fromRGB(23, 23, 27),
-        Element  = Color3.fromRGB(30, 30, 36),
-        Text     = Color3.fromRGB(240, 240, 240),
-        SubText  = Color3.fromRGB(160, 160, 160),
-        Accent   = Color3.fromRGB(60, 130, 250),
-        Stroke   = Color3.fromRGB(45, 45, 50),
-        Success  = Color3.fromRGB(60, 250, 100),
-        Warning  = Color3.fromRGB(250, 180, 60),
-        Error    = Color3.fromRGB(255, 85, 85),
+        MainBg  = Color3.fromRGB(18, 18, 22),
+        Sidebar = Color3.fromRGB(23, 23, 27),
+        Element = Color3.fromRGB(30, 30, 36),
+        Text    = Color3.fromRGB(240, 240, 240),
+        SubText = Color3.fromRGB(160, 160, 160),
+        Accent  = Color3.fromRGB(60, 130, 250),
+        Stroke  = Color3.fromRGB(45, 45, 50),
+        Success = Color3.fromRGB(60, 250, 100),
+        Warning = Color3.fromRGB(250, 180, 60),
+        Error   = Color3.fromRGB(255, 85, 85),
     }
 
     local parent = CoreGui
-    if parent:FindFirstChild("SlenderHub") then parent.SlenderHub:Destroy() end
+    if parent:FindFirstChild("SlenderHubDumper") then parent.SlenderHubDumper:Destroy() end
 
     local sg = Instance.new("ScreenGui")
-    sg.Name = "SlenderHub"
+    sg.Name = "SlenderHubDumper"
     sg.ResetOnSpawn = false
     sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     sg.Parent = parent
 
     local main = Instance.new("Frame")
     main.BackgroundColor3 = theme.MainBg
-    main.Size = UDim2.new(0, 420, 0, 520)
-    main.Position = UDim2.new(0.5, -210, 0.5, -260)
+    main.Size = UDim2.new(0, 460, 0, 460)
+    main.Position = UDim2.new(0.5, -230, 0.5, -230)
     main.Parent = sg
     local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 10); corner.Parent = main
     local stroke = Instance.new("UIStroke"); stroke.Color = theme.Stroke; stroke.Parent = main
 
-    -- topbar
+    -- topbar (drag)
     local topbar = Instance.new("Frame")
     topbar.BackgroundTransparency = 1
     topbar.Size = UDim2.new(1, 0, 0, 36)
     topbar.Parent = main
 
     local title = Instance.new("TextLabel")
-    title.Text = "SlenderHub | Animal Hospital"
+    title.Text = "SlenderHub | Game Dumper"
     title.TextColor3 = theme.Text
     title.Font = Enum.Font.GothamBold
     title.TextSize = 15
@@ -459,235 +727,160 @@ local function CreateUI()
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = topbar
 
-    -- drag
     local dragging, dragInput, startPos
     topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true; startPos = input.Position; dragInput = input
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - startPos
             main.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset + delta.X, main.Position.Y.Scale, main.Position.Y.Offset + delta.Y)
         end
     end)
-    UserInputService.InputEnded:Connect(function(input)
+    game:GetService("UserInputService").InputEnded:Connect(function(input)
         if input == dragInput then dragging = false end
     end)
 
-    -- toggle
-    local openBtn = Instance.new("TextButton")
-    openBtn.Text = "SH"
-    openBtn.TextColor3 = theme.Accent
-    openBtn.BackgroundColor3 = theme.Sidebar
-    openBtn.Size = UDim2.new(0, 44, 0, 44)
-    openBtn.Position = UDim2.new(0, 20, 0.5, 0)
-    openBtn.Font = Enum.Font.GothamBlack
-    openBtn.TextSize = 16
-    openBtn.Visible = false
-    openBtn.Parent = sg
-    local oc = Instance.new("UICorner"); oc.CornerRadius = UDim.new(0, 12); oc.Parent = openBtn
-    local toggle = function()
-        main.Visible = not main.Visible
-        openBtn.Visible = not main.Visible
-    end
-    openBtn.MouseButton1Click:Connect(toggle)
+    local close = Instance.new("TextButton")
+    close.Text = "X"
+    close.TextColor3 = theme.SubText
+    close.BackgroundTransparency = 1
+    close.Size = UDim2.new(0, 32, 0, 32)
+    close.Position = UDim2.new(1, -36, 0, 2)
+    close.Font = Enum.Font.GothamBold
+    close.TextSize = 14
+    close.Parent = topbar
+    close.MouseButton1Click:Connect(function() sg:Destroy() end)
 
-    -- content
-    local content = Instance.new("ScrollingFrame")
-    content.BackgroundTransparency = 1
-    content.Position = UDim2.new(0, 12, 0, 44)
-    content.Size = UDim2.new(1, -24, 1, -56)
-    content.ScrollBarThickness = 3
-    content.ScrollBarImageColor3 = theme.Accent
-    content.CanvasSize = UDim2.new(0, 0, 0, 0)
-    content.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    content.Parent = main
+    -- corpo
+    local body = Instance.new("Frame")
+    body.BackgroundTransparency = 1
+    body.Position = UDim2.new(0, 12, 0, 44)
+    body.Size = UDim2.new(1, -24, 1, -56)
+    body.Parent = main
 
-    local list = Instance.new("UIListLayout")
-    list.Padding = UDim.new(0, 8)
-    list.SortOrder = Enum.SortOrder.LayoutOrder
-    list.Parent = content
+    local info = Instance.new("TextLabel")
+    info.Text = string.format("Jogo: %s | Executor: %s", GetGameName(), tostring(ExecutorName))
+    info.TextColor3 = theme.SubText
+    info.Font = Enum.Font.Gotham
+    info.TextSize = 12
+    info.BackgroundTransparency = 1
+    info.Size = UDim2.new(1, 0, 0, 24)
+    info.TextXAlignment = Enum.TextXAlignment.Left
+    info.Parent = body
 
+    local btnDump = Instance.new("TextButton")
+    btnDump.Text = "▶  DUMPAR JOGO"
+    btnDump.TextColor3 = theme.Text
+    btnDump.Font = Enum.Font.GothamBold
+    btnDump.TextSize = 14
+    btnDump.BackgroundColor3 = theme.Accent
+    btnDump.Size = UDim2.new(1, 0, 0, 40)
+    btnDump.Position = UDim2.new(0, 0, 0, 30)
+    btnDump.Parent = body
+    local bcorner = Instance.new("UICorner"); bcorner.CornerRadius = UDim.new(0, 6); bcorner.Parent = btnDump
+
+    local btnLog = Instance.new("TextButton")
+    btnLog.Text = "●  LOG DE REMOTES (runtime)"
+    btnLog.TextColor3 = theme.Text
+    btnLog.Font = Enum.Font.GothamBold
+    btnLog.TextSize = 13
+    btnLog.BackgroundColor3 = theme.Element
+    btnLog.Size = UDim2.new(1, 0, 0, 36)
+    btnLog.Position = UDim2.new(0, 0, 0, 78)
+    btnLog.Parent = body
+    local bcorner2 = Instance.new("UICorner"); bcorner2.CornerRadius = UDim.new(0, 6); bcorner2.Parent = btnLog
+
+    local logActive = false
+    btnLog.MouseButton1Click:Connect(function()
+        logActive = not logActive
+        if logActive then
+            local ok = EnableRemoteLog()
+            if ok then
+                btnLog.Text = "●  LOG DE REMOTES (runtime) — ATIVO"
+                btnLog.BackgroundColor3 = theme.Success
+            else
+                logActive = false
+            end
+        else
+            DisableRemoteLog()
+            btnLog.Text = "●  LOG DE REMOTES (runtime)"
+            btnLog.BackgroundColor3 = theme.Element
+        end
+    end)
+
+    btnDump.MouseButton1Click:Connect(function()
+        task.spawn(function()
+            btnDump.Text = "⏳  Dumpando... (não feche)"
+            btnDump.BackgroundColor3 = theme.Warning
+            RunDump()
+            btnDump.Text = "▶  DUMPAR JOGO"
+            btnDump.BackgroundColor3 = theme.Accent
+        end)
+    end)
+
+    local result = Instance.new("TextLabel")
+    result.Text = "Clique em DUMPAR JOGO.\nO dump será salvo em: " .. SlenderHub.Config.OutputRoot .. "/<nome_do_jogo>/"
+    result.TextColor3 = theme.Text
+    result.Font = Enum.Font.Gotham
+    result.TextSize = 12
+    result.TextWrapped = true
+    result.TextXAlignment = Enum.TextXAlignment.Left
+    result.TextYAlignment = Enum.TextYAlignment.Top
+    result.BackgroundColor3 = theme.Element
+    result.Size = UDim2.new(1, 0, 1, -124)
+    result.Position = UDim2.new(0, 0, 0, 122)
+    result.Parent = body
+    local rcorner = Instance.new("UICorner"); rcorner.CornerRadius = UDim.new(0, 6); rcorner.Parent = result
+    local padding = Instance.new("UIPadding"); padding.PaddingLeft = UDim.new(0, 10); padding.PaddingTop = UDim.new(0, 8); padding.Parent = result
+
+    -- notificações
     local notifyContainer = Instance.new("Frame")
     notifyContainer.BackgroundTransparency = 1
-    notifyContainer.Position = UDim2.new(1, -310, 1, -20)
-    notifyContainer.Size = UDim2.new(0, 290, 1, 0)
     notifyContainer.AnchorPoint = Vector2.new(0, 1)
+    notifyContainer.Position = UDim2.new(1, -300, 1, -16)
+    notifyContainer.Size = UDim2.new(0, 280, 1, 0)
     notifyContainer.Parent = sg
-    local nlist = Instance.new("UIListLayout")
-    nlist.Padding = UDim.new(0, 6)
-    nlist.VerticalAlignment = Enum.VerticalAlignment.Bottom
-    nlist.Parent = notifyContainer
+    local nlist = Instance.new("UIListLayout"); nlist.Padding = UDim.new(0, 6); nlist.VerticalAlignment = Enum.VerticalAlignment.Bottom; nlist.Parent = notifyContainer
 
-    SlenderHub.UI.Notify = function(titleText, body, dur, type)
+    SlenderHub.UI.Notify = function(titleText, text, dur, type)
         local typeColor = theme.Accent
         if type == "Success" then typeColor = theme.Success
         elseif type == "Warning" then typeColor = theme.Warning
         elseif type == "Error" then typeColor = theme.Error end
-
         local frame = Instance.new("Frame")
         frame.BackgroundColor3 = theme.Sidebar
-        frame.Size = UDim2.new(1, 0, 0, 56)
+        frame.Size = UDim2.new(1, 0, 0, 48)
         frame.Parent = notifyContainer
         local fcorner = Instance.new("UICorner"); fcorner.CornerRadius = UDim.new(0, 8); fcorner.Parent = frame
         local fstroke = Instance.new("UIStroke"); fstroke.Color = typeColor; fstroke.Parent = frame
-
         local t1 = Instance.new("TextLabel")
-        t1.Text = titleText; t1.TextColor3 = typeColor; t1.Font = Enum.Font.GothamBold; t1.TextSize = 14
-        t1.BackgroundTransparency = 1; t1.Position = UDim2.new(0, 10, 0, 6); t1.Size = UDim2.new(1, -20, 0, 20)
+        t1.Text = titleText; t1.TextColor3 = typeColor; t1.Font = Enum.Font.GothamBold; t1.TextSize = 13
+        t1.BackgroundTransparency = 1; t1.Position = UDim2.new(0, 10, 0, 5); t1.Size = UDim2.new(1, -20, 0, 18)
         t1.TextXAlignment = Enum.TextXAlignment.Left; t1.Parent = frame
         local t2 = Instance.new("TextLabel")
-        t2.Text = body or ""; t2.TextColor3 = theme.Text; t2.Font = Enum.Font.Gotham; t2.TextSize = 12
-        t2.BackgroundTransparency = 1; t2.Position = UDim2.new(0, 10, 0, 26); t2.Size = UDim2.new(1, -20, 0, 22)
+        t2.Text = text or ""; t2.TextColor3 = theme.Text; t2.Font = Enum.Font.Gotham; t2.TextSize = 11
+        t2.BackgroundTransparency = 1; t2.Position = UDim2.new(0, 10, 0, 23); t2.Size = UDim2.new(1, -20, 0, 18)
         t2.TextXAlignment = Enum.TextXAlignment.Left; t2.TextWrapped = true; t2.Parent = frame
-
-        task.delay(dur or 3, function()
-            frame:Destroy()
-        end)
+        task.delay(dur or 3, function() frame:Destroy() end)
     end
 
-    local function Section(text)
-        local s = Instance.new("TextLabel")
-        s.Text = text; s.TextColor3 = theme.SubText; s.Font = Enum.Font.GothamBold; s.TextSize = 11
-        s.BackgroundTransparency = 1; s.Size = UDim2.new(1, 0, 0, 22); s.TextXAlignment = Enum.TextXAlignment.Left
-        s.Parent = content
+    SlenderHub.UI.SetResult = function(text)
+        result.Text = text
     end
-
-    local function Row(text, desc)
-        local frame = Instance.new("Frame")
-        frame.BackgroundColor3 = theme.Element
-        frame.Size = UDim2.new(1, 0, 0, 40)
-        frame.Parent = content
-        local rcorner = Instance.new("UICorner"); rcorner.CornerRadius = UDim.new(0, 6); rcorner.Parent = frame
-        local rstroke = Instance.new("UIStroke"); rstroke.Color = theme.Stroke; rstroke.Parent = frame
-        local l = Instance.new("TextLabel")
-        l.Text = text; l.TextColor3 = theme.Text; l.Font = Enum.Font.GothamMedium; l.TextSize = 13
-        l.BackgroundTransparency = 1; l.Position = UDim2.new(0, 12, 0, 0); l.Size = UDim2.new(1, -50, 1, 0)
-        l.TextXAlignment = Enum.TextXAlignment.Left; l.Parent = frame
-        if desc then
-            local d = Instance.new("TextLabel")
-            d.Text = desc; d.TextColor3 = theme.SubText; d.Font = Enum.Font.Gotham; d.TextSize = 10
-            d.BackgroundTransparency = 1; d.Position = UDim2.new(0, 12, 0, 18); d.Size = UDim2.new(1, -50, 0, 20)
-            d.TextXAlignment = Enum.TextXAlignment.Left; d.Parent = frame
-        end
-        return frame, l
-    end
-
-    local function Button(text, callback)
-        local btn = Instance.new("TextButton")
-        btn.Text = text; btn.TextColor3 = theme.Text; btn.Font = Enum.Font.GothamBold; btn.TextSize = 13
-        btn.BackgroundColor3 = theme.Accent; btn.Size = UDim2.new(1, 0, 0, 36)
-        btn.Parent = content
-        local bcorner = Instance.new("UICorner"); bcorner.CornerRadius = UDim.new(0, 6); bcorner.Parent = btn
-        btn.MouseButton1Click:Connect(function()
-            pcall(callback)
-        end)
-    end
-
-    local function Toggle(text, default, callback)
-        local frame, label = Row(text)
-        local sw = Instance.new("Frame")
-        sw.BackgroundColor3 = default and theme.Accent or Color3.fromRGB(50, 50, 55)
-        sw.Size = UDim2.new(0, 36, 0, 20); sw.Position = UDim2.new(1, -46, 0.5, -10)
-        sw.Parent = frame
-        local sc = Instance.new("UICorner"); sc.CornerRadius = UDim.new(1, 0); sc.Parent = sw
-        local knob = Instance.new("Frame")
-        knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        knob.Size = UDim2.new(0, 16, 0, 16); knob.Position = UDim2.new(0, default and 18 or 2, 0.5, -8)
-        knob.Parent = sw
-        local kc = Instance.new("UICorner"); kc.CornerRadius = UDim.new(1, 0); kc.Parent = knob
-
-        local enabled = default
-        local function update(val)
-            enabled = val
-            Tween(sw, { BackgroundColor3 = enabled and theme.Accent or Color3.fromRGB(50, 50, 55) }, 0.15)
-            Tween(knob, { Position = UDim2.new(0, enabled and 18 or 2, 0.5, -8) }, 0.15)
-            pcall(callback, enabled)
-        end
-        frame.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                update(not enabled)
-            end
-        end)
-        return {
-            Set = update,
-        }
-    end
-
-    return {
-        Section = Section,
-        Button = Button,
-        Toggle = Toggle,
-    }
 end
 
-----------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 -- BOOT
-----------------------------------------------------------------------------
-local function Boot()
+--------------------------------------------------------------------------------
+local ok, err = pcall(function()
     CreateUI()
-
-    -- Key flow
-    local tier = nil
-    local function StartFeatures(freeTier)
-        tier = freeTier
-        Notify("SlenderHub", "Acesso liberado (tier: " .. (tier or "trial") .. ")", 3, "Success")
-
-        local ui = SlenderHub.UI
-
-        ui.Section("ESP")
-        ui.Toggle("ESP de Pacientes/Anomalias", false, function(v)
-            SlenderHub.SetESP(v)
-        end)
-
-        ui.Section("Sanidade")
-        ui.Toggle("Sanidade Infinita", false, function(v)
-            SlenderHub.SetInfSanity(v)
-        end)
-        ui.Toggle("Anti-Jumpscare", false, function(v)
-            SlenderHub.SetAntiJumpscare(v)
-        end)
-
-        ui.Section("Automação")
-        ui.Toggle("Auto Check-In", false, function(v)
-            SlenderHub.SetAutoCheckIn(v)
-        end)
-        ui.Button("Interagir com prompt", function()
-            SlenderHub.InteractWithPrompt()
-        end)
-        ui.Button("Teleportar p/ prompt", function()
-            SlenderHub.TeleportToPrompt()
-        end)
-
-        ui.Section("Movimento")
-        ui.Toggle("Noclip", false, function(v)
-            SlenderHub.SetNoclip(v)
-        end)
-        ui.Toggle("Fly (Space/Shift)", false, function(v)
-            SlenderHub.SetFly(v)
-        end)
-
-        ui.Section("Sistema")
-        ui.Button("Fechar Hub", function()
-            local pg = CoreGui:FindFirstChild("SlenderHub")
-            if pg then pg:Destroy() end
-        end)
-    end
-
-    -- Modo trial (sem key) ou com key
-    if SlenderHub.Config.AllowTrial then
-        StartFeatures("trial")
-    else
-        -- aqui entra a tela de key quando AllowedTrial = false
-        StartFeatures("premium")
-    end
-end
-
-local ok, err = pcall(Boot)
+    Notify("SlenderHub", "Game Dumper pronto. Executor: " .. tostring(ExecutorName), 4, nil)
+end)
 if not ok then
-    warn("[SlenderHub] Erro no boot: " .. tostring(err))
+    warn("[SlenderHubDumper] Erro no boot: " .. tostring(err))
 end
 
 return SlenderHub
