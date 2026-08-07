@@ -73,6 +73,8 @@ local Flags = {
     AutoClaimVoidPet = false,
     AutoClaimTitanPet = false,
     AutoLevelUpPet = false,
+    AutoUnlockExclusive = false,
+    AutoClaimLimitedPacks = false,
     -- Egg (dinâmico)
     EggToggles = {},
     FruitToggles = {}
@@ -901,6 +903,116 @@ Tabs.Pet:AddButton({
         else
             Fluent:Notify({ Title = "UGC", Content = "Remote não encontrado", Duration = 3 })
         end
+    end
+})
+
+-- =====================================
+-- PET EXCLUSIVE (dump: UgcService/ClaimUgc + OnlineRewardService/RF)
+-- =====================================
+
+-- Pets UGC exclusivos do dump + nomes comuns de temporada (descoberta dinâmica)
+local function GetUgcCandidates()
+    local names = {}
+    -- Descoberta dinâmica: procura qualquer "UGC_*" replicado no jogo
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("Instance") and obj.Name:match("^UGC_") then
+            names[obj.Name] = true
+        end
+    end
+    -- Fallbacks conhecidos do dump + convenção do jogo
+    local known = {
+        "UGC_PumpkinHead", "UGC_WizardHat", "UGC_SantaHat", "UGC_Reindeer",
+        "UGC_Snowman", "UGC_Ghost", "UGC_Candy", "UGC_Elf", "UGC_Rudolph",
+        "UGC_ChristmasTree", "UGC_EasterEgg", "UGC_Unicorn", "UGC_Dragon",
+    }
+    for _, n in ipairs(known) do names[n] = true end
+    return names
+end
+
+-- Helper: tenta claim de um UGC com payloads variados
+local function FireClaimUgc(ugcName)
+    local re = GetKnitRemote("UgcService", "RE", "ClaimUgc")
+    if not re then return false end
+    pcall(function() re:FireServer(ugcName) end)
+    pcall(function() re:FireServer(ugcName, true) end)
+    pcall(function() re:FireServer(ugcName, 1) end)
+    return true
+end
+
+-- Helper: tenta claim de um Limited Pack via OnlineRewardService (honeypot listado!)
+local function FireClaimLimitedPack(packName)
+    -- packName: "ClaimStarterPack" | "ClaimAdvancedPack" | "ClaimOnlineQuestReward"
+    local rf = GetKnitRemote("OnlineRewardService", "RF", packName)
+    if not rf then return false end
+    pcall(function() rf:InvokeServer() end)
+    pcall(function() rf:InvokeServer(1) end)
+    pcall(function() rf:InvokeServer(true) end)
+    return true
+end
+
+-- Toggle: Auto Unlock Exclusive Pets (UGC + packs limitados)
+Tabs.Pet:AddToggle("AutoUnlockExclusive", {
+    Title = "Auto Unlock Exclusive Pets",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoUnlockExclusive = v
+        task.spawn(function()
+            while Flags.AutoUnlockExclusive do
+                -- 1) UGC pets (UgcService/RE/ClaimUgc)
+                local ugcs = GetUgcCandidates()
+                for ugcName in pairs(ugcs) do
+                    FireClaimUgc(ugcName)
+                    task.wait(0.05)
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Toggle: Auto Claim Limited Packs (OnlineRewardService/RF — HONEYPOT LISTADO, usar com conta descartável)
+Tabs.Pet:AddToggle("AutoClaimLimitedPacks", {
+    Title = "Auto Claim Limited Packs (risco!)",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoClaimLimitedPacks = v
+        if v then
+            Fluent:Notify({
+                Title = "Aviso",
+                Content = "ClaimStarterPack/ClaimAdvancedPack estão no honeypot do dump — use conta descartável",
+                Duration = 6
+            })
+        end
+        task.spawn(function()
+            while Flags.AutoClaimLimitedPacks do
+                FireClaimLimitedPack("ClaimStarterPack")
+                task.wait(1)
+                FireClaimLimitedPack("ClaimAdvancedPack")
+                task.wait(1)
+                FireClaimLimitedPack("ClaimOnlineQuestReward")
+                task.wait(3)
+            end
+        end)
+    end
+})
+
+-- Botão: desbloquear todos os pets exclusivos uma vez (UGC + limited packs)
+Tabs.Pet:AddButton({
+    Title = "Unlock ALL Exclusive (uma vez)",
+    Callback = function()
+        local ugcs = GetUgcCandidates()
+        for ugcName in pairs(ugcs) do
+            FireClaimUgc(ugcName)
+            task.wait(0.05)
+        end
+        FireClaimLimitedPack("ClaimStarterPack")
+        FireClaimLimitedPack("ClaimAdvancedPack")
+        FireClaimLimitedPack("ClaimOnlineQuestReward")
+        Fluent:Notify({
+            Title = "Exclusive",
+            Content = "Disparado UGCs + Limited Packs (verifique o inventário)",
+            Duration = 4
+        })
     end
 })
 
