@@ -67,6 +67,12 @@ local Flags = {
     -- Inf eventos
     InfGifts = false,
     InfFruit = false,
+    -- Limited / UGC / Codes
+    AutoRedeemCodes = false,
+    AutoClaimUgc = false,
+    AutoClaimVoidPet = false,
+    AutoClaimTitanPet = false,
+    AutoLevelUpPet = false,
     -- Egg (dinâmico)
     EggToggles = {},
     FruitToggles = {}
@@ -110,6 +116,7 @@ local Tabs = {
     Pet    = Window:AddTab({ Title = "Pet",    Icon = "paw-print" }),
     Egg    = Window:AddTab({ Title = "Egg",    Icon = "egg" }),
     Event  = Window:AddTab({ Title = "Event",  Icon = "sparkles" }),
+    Codes  = Window:AddTab({ Title = "Codes",  Icon = "key" }),
     Claims = Window:AddTab({ Title = "Claims", Icon = "gift" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
@@ -245,6 +252,28 @@ local function FireGiveGamePass(gamepassId)
     -- Tenta padrão 2: ID + true (Knit costuma validar com booleano)
     local ok2, err2 = pcall(function() re:FireServer(gamepassId, true) end)
     return ok1 or ok2
+end
+
+-- =====================================
+-- CÓDIGOS DO JOGO (descrição oficial — resgate via CodesService/RF/RedeemItem)
+-- =====================================
+local GameCodes = {
+    "RELEASE", "NEW", "Like3K", "Like28K", "Like60K",
+    "Xmas", "Santa", "Love", "Squid", "Power", "UPD10",
+    "Panda", "Batman", "Trade", "Fruit", "Upgrade",
+    "Like170k", "Super", "Season2", "Brainrot", "Offline", "X20"
+}
+
+-- Resgata um código (invoca o RF com variações de payload)
+local function RedeemCode(code)
+    local rf = GetKnitRemote("CodesService", "RF", "RedeemItem")
+    if not rf then return "no-remote" end
+    local payloads = { { code }, { code, 1 }, { code, true } }
+    for _, args in ipairs(payloads) do
+        local ok, res = pcall(function() return rf:InvokeServer(unpack(args)) end)
+        if ok then return tostring(res) end
+    end
+    return "falhou"
 end
 
 -- =====================================
@@ -751,6 +780,131 @@ Tabs.Pet:AddToggle("AutoCraftPets", {
 })
 
 -- =====================================
+-- PET LIMITED / UGC (dump: UgcService + PurchaseService + Void/Titan)
+-- =====================================
+
+Tabs.Pet:AddSection("Limited / UGC")
+
+-- Auto Claim UGC (pets UGC: dump mostra UGC_PumpkinHead e UGC_WizardHat)
+Tabs.Pet:AddToggle("AutoClaimUgc", {
+    Title = "Auto Claim UGC Pets",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoClaimUgc = v
+        task.spawn(function()
+            while Flags.AutoClaimUgc do
+                local re = GetKnitRemote("UgcService", "RE", "ClaimUgc")
+                if re then
+                    -- Tenta os nomes UGC conhecidos do dump + payloads variados
+                    for _, ugcName in ipairs({ "UGC_PumpkinHead", "UGC_WizardHat" }) do
+                        pcall(function() re:FireServer(ugcName) end)
+                        pcall(function() re:FireServer(ugcName, true) end)
+                        pcall(function() re:FireServer(ugcName, 1) end)
+                    end
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Pet (VoidService — pet do craft no void)
+Tabs.Pet:AddToggle("AutoClaimVoidPet", {
+    Title = "Auto Claim Void Pet",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoClaimVoidPet = v
+        task.spawn(function()
+            while Flags.AutoClaimVoidPet do
+                local re = GetKnitRemote("VoidService", "RE", "ClaimPet")
+                if re then
+                    pcall(function() re:FireServer() end)
+                    pcall(function() re:FireServer(1) end)
+                    pcall(function() re:FireServer(true) end)
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Auto Claim Pet (TitanService — pet do titan)
+Tabs.Pet:AddToggle("AutoClaimTitanPet", {
+    Title = "Auto Claim Titan Pet",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoClaimTitanPet = v
+        task.spawn(function()
+            while Flags.AutoClaimTitanPet do
+                local re = GetKnitRemote("TitanService", "RE", "ClaimPet")
+                if re then
+                    pcall(function() re:FireServer() end)
+                    pcall(function() re:FireServer(1) end)
+                    pcall(function() re:FireServer(true) end)
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Auto Level Up Pet (PetService — upar o pet equipado)
+Tabs.Pet:AddToggle("AutoLevelUpPet", {
+    Title = "Auto Level Up Pet",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoLevelUpPet = v
+        task.spawn(function()
+            while Flags.AutoLevelUpPet do
+                local re = GetKnitRemote("PetService", "RE", "LevelUpPet")
+                if re then
+                    pcall(function() re:FireServer() end)
+                    pcall(function() re:FireServer(1) end)
+                    pcall(function() re:FireServer("pet") end)
+                end
+                task.wait(2)
+            end
+        end)
+    end
+})
+
+-- Botão: ver quantos pets limitados restam (PurchaseService/RF)
+Tabs.Pet:AddButton({
+    Title = "Check Limited Pet Remaining",
+    Callback = function()
+        local rf = GetKnitRemote("PurchaseService", "RF", "GetLimitedPetRemaining")
+        if rf then
+            local ok, res = pcall(function() return rf:InvokeServer() end)
+            Fluent:Notify({
+                Title = "Limited Pets",
+                Content = ok and ("resposta: " .. tostring(res)) or ("erro: " .. tostring(res)),
+                Duration = 5
+            })
+        else
+            Fluent:Notify({ Title = "Limited Pets", Content = "Remote não encontrado", Duration = 3 })
+        end
+    end
+})
+
+-- Botão: contar UGC restantes (UgcService/RF)
+Tabs.Pet:AddButton({
+    Title = "Check UGC Remaining",
+    Callback = function()
+        local rf = GetKnitRemote("UgcService", "RF", "GetAllUgcRemainingCounts")
+        if rf then
+            local ok, res = pcall(function() return rf:InvokeServer() end)
+            Fluent:Notify({
+                Title = "UGC",
+                Content = ok and ("resposta: " .. tostring(res)) or ("erro: " .. tostring(res)),
+                Duration = 5
+            })
+        else
+            Fluent:Notify({ Title = "UGC", Content = "Remote não encontrado", Duration = 3 })
+        end
+    end
+})
+
+-- =====================================
 -- EGG TAB
 -- =====================================
 
@@ -957,6 +1111,68 @@ Tabs.Event:AddToggle("InfFruit", {
         end)
     end
 })
+
+-- =====================================
+-- CODES TAB (códigos públicos do jogo — CodesService/RF/RedeemItem)
+-- =====================================
+
+-- Auto Redeem todos os códigos
+Tabs.Codes:AddToggle("AutoRedeemCodes", {
+    Title = "Auto Redeem ALL Codes",
+    Default = false,
+    Callback = function(v)
+        Flags.AutoRedeemCodes = v
+        task.spawn(function()
+            while Flags.AutoRedeemCodes do
+                for _, code in ipairs(GameCodes) do
+                    local res = RedeemCode(code)
+                    task.wait(1)
+                end
+                task.wait(60) -- códigos têm cooldown/limite de uso
+            end
+        end)
+    end
+})
+
+-- Botão: tentar todos os códigos uma vez
+Tabs.Codes:AddButton({
+    Title = "Try ALL Codes (uma vez)",
+    Callback = function()
+        local okCount = 0
+        local results = {}
+        for _, code in ipairs(GameCodes) do
+            local res = RedeemCode(code)
+            if res ~= "no-remote" and res ~= "falhou" then
+                okCount = okCount + 1
+                table.insert(results, ("%s: %s"):format(code, res))
+            end
+            task.wait(1)
+        end
+        Fluent:Notify({
+            Title = "Codes",
+            Content = ("%d códigos responderam"):format(okCount),
+            Duration = 4
+        })
+        for _, r in ipairs(results) do
+            Fluent:Notify({ Title = "Code OK", Content = r, Duration = 3 })
+        end
+    end
+})
+
+-- Botões individuais de código
+for _, code in ipairs(GameCodes) do
+    Tabs.Codes:AddButton({
+        Title = "Redeem " .. code,
+        Callback = function()
+            local res = RedeemCode(code)
+            Fluent:Notify({
+                Title = "Code " .. code,
+                Content = res,
+                Duration = 3
+            })
+        end
+    })
+end
 
 -- =====================================
 -- CLAIMS TAB (recompensas reveladas no dump SlenderHub)
