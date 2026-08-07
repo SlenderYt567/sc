@@ -64,6 +64,9 @@ local Flags = {
     AutoNativeFight = false,
     -- Gamepass
     AutoUnlockGamePass = false,
+    -- Inf eventos
+    InfGifts = false,
+    InfFruit = false,
     -- Egg (dinâmico)
     EggToggles = {},
     FruitToggles = {}
@@ -868,6 +871,85 @@ Tabs.Event:AddToggle("EggChristmas", {
                     end
                 end
                 task.wait(1)
+            end
+        end)
+    end
+})
+
+-- =====================================
+-- INF EVENTOS (payload negativo — mesmo padrão do InfGems que funciona)
+-- =====================================
+
+-- Helper: fira um remote com payload negativo em variantes
+local function FireNegative(serviceName, remoteName, payloads)
+    local re = GetKnitRemote(serviceName, "RE", remoteName)
+    if not re then return end
+    for _, args in ipairs(payloads) do
+        pcall(function() re:FireServer(unpack(args)) end)
+    end
+end
+
+-- INF GIFTS (Natal) — dump: GiftBoxService + ChristmasService + FightService
+Tabs.Event:AddToggle("InfGifts", {
+    Title = "Inf Gifts (Natal)",
+    Default = false,
+    Callback = function(v)
+        Flags.InfGifts = v
+        task.spawn(function()
+            while Flags.InfGifts do
+                -- GiftBoxService: drop/abrir gifts em massa
+                FireNegative("GiftBoxService", "DropGifts", {
+                    { -70e+70 }, { -70e+70, {} }, { 999 }
+                })
+                FireNegative("GiftBoxService", "PickGift", {
+                    { -70e+70 }, { -70e+70, {} }
+                })
+                FireNegative("GiftBoxService", "OpenGiftBox", {
+                    { -70e+70 }, { -70e+70, {} }
+                })
+                -- ChristmasService: tokens de natal
+                FireNegative("ChristmasService", "DropTokens", {
+                    { -70e+70 }, { -70e+70, {} }
+                })
+                -- FightService: claim de token de natal
+                FireNegative("FightService", "GetChristmasTokenEvent", {
+                    { -70e+70 }, { -70e+70, {} }
+                })
+                task.wait(0.2)
+            end
+        end)
+    end
+})
+
+-- INF FRUIT (área de frutas) — dump: FruitService + FightService
+Tabs.Event:AddToggle("InfFruit", {
+    Title = "Inf Fruit (área frutas)",
+    Default = false,
+    Callback = function(v)
+        Flags.InfFruit = v
+        task.spawn(function()
+            while Flags.InfFruit do
+                -- FruitService: tokens de torre + compras
+                FireNegative("FruitService", "GetTowerToken", {
+                    { -70e+70 }, { -70e+70, {} }
+                })
+                FireNegative("FruitService", "BuyFruit", {
+                    { "Fruit_001", -70e+70 }, { "Fruit_001", -70e+70, {} },
+                    { "Fruit_002", -70e+70 }, { "Fruit_002", -70e+70, {} },
+                    { "Fruit_003", -70e+70 }, { "Fruit_003", -70e+70, {} },
+                    { "Fruit_004", -70e+70 }, { "Fruit_004", -70e+70, {} }
+                })
+                FireNegative("FruitService", "BuyPet", {
+                    { -70e+70 }, { -70e+70, {} }
+                })
+                FireNegative("FruitService", "UpdateTowerLevel", {
+                    { -70e+70 }, { -70e+70, {} }
+                })
+                -- FightService: claim de token de fruta
+                FireNegative("FightService", "GetFruitTokenEvent", {
+                    { -70e+70 }, { -70e+70, {} }
+                })
+                task.wait(0.2)
             end
         end)
     end
