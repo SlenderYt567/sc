@@ -49,7 +49,7 @@ local LocalPlayer    = Players.LocalPlayer
 
 local function Notify(title, text, dur, type)
     if SlenderHub.UI and SlenderHub.UI.Notify then
-        SlenderHub.UI:Notify(title, text, dur, type)
+        SlenderHub.UI.Notify(title, text, dur, type)
     end
 end
 
@@ -669,7 +669,7 @@ local function RunDump()
         #remotes, #honeypots, handlersCount)
 
     if SlenderHub.UI and SlenderHub.UI.SetResult then
-        SlenderHub.UI:SetResult(summary)
+        SlenderHub.UI.SetResult(summary)
     end
     Notify("SlenderHub", "Dump salvo em " .. root, 6, "Success")
 end
