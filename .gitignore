@@ -1,6 +1,6 @@
 --[[
     SlenderHub | Animal Hospital (Anomaly) — Script Premium
-    Versão: 4.1.0 (UI NATIVA + Aba Farm: Slime/Diagnose/Atendimento)
+    Versão: 4.2.0 (Farm estilo OP: Auto Interact ALL + Slime/Fogo + Revive + Café)
 ]]
 
 -- =====================================
@@ -429,17 +429,24 @@ local function SetAutoInteract(enabled)
 end
 
 -- =====================================
--- FARM ENGINE (Slime / Diagnose / Atendimento)
+-- FARM ENGINE (estilo hubs OP: Auto Interact ALL + Slime/Fogo + Revive + Café)
 -- =====================================
--- Mecânica real do jogo (do dump):
---   * Slime (Grime): tag "Grime", limpa com extintor. O servidor spawna bolhas
---     (tag "SprayingBubbles") quando o jogador USA o extintor; as bolhas ao tocar
---     no slime disparam FireServer("ExtinguisherBubbleHitGrime") que paga cash.
---   * Diagnose/Atendimento: server-side via ProximityPrompts (sem remote dedicado).
---     "Inspect" = inspecionar; NPCs com PP = atender.
+-- Mecânica real do jogo (dump):
+--   * Todo o fluxo de check-in/tratamento/diagnóstico é SERVER-SIDE via
+--     ProximityPrompts e ClickDetectors (sem remote dedicado). O farm é:
+--     varrer TODOS os prompts, teleportar perto e disparar (fireproximityprompt).
+--   * Slime (Grime, tag "Grime") e fogo (tag "OnFire"): o servidor spawna bolhas
+--     ("SprayingBubbles") quando o jogador USA o extintor; as bolhas ao tocar
+--     disparam FireServer("ExtinguisherBubbleHitGrime"/"ExtinguisherBubbleHit*")
+--     que paga cash. Teleportar ACIMA do hazard e ativar o extintor.
+--   * Reviver: tag "DeadPlayer" + FireServer("ReviveOther", player).
+--   * Sanidade: atributo do jogador "Sanity" (0-100); café recupera.
 local FarmOn = false
 local DiagnoseOn = false
 local AttendOn = false
+local ReviveOn = false
+local CoffeeOn = false
+local InstantPromptOn = false
 local FarmTargetPos = nil -- ESP/indicador do alvo atual (opcional)
 
 local function FindAllPrompts()
@@ -480,32 +487,81 @@ local function TeleportNear(pos, dist)
     root.CFrame = CFrame.new(root.Position + delta.Unit * (mag - (dist or 6)))
 end
 
--- Extintor: procura Tool no inventário (nome/atributo genérico)
+-- INSTANT PROMPTS: HoldDuration=0 + distância máxima em TODOS os PPs do mapa.
+-- Técnica universal dos hubs OP deste jogo (Patch Hub, 4479, etc.).
+local function ApplyInstantPrompt(prompt)
+    pcall(function()
+        prompt.HoldDuration = 0
+        prompt.MaxActivationDistance = math.max(prompt.MaxActivationDistance, 60)
+        prompt.RequiresLineOfSight = false
+        prompt.ClickablePrompt = true
+    end)
+end
+
+local function SetInstantPrompts(enabled)
+    InstantPromptOn = enabled
+    if not enabled then
+        SafeNotify("Instant Prompts", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while InstantPromptOn and task.wait(1) do
+            pcall(function()
+                for _, prompt in ipairs(FindAllPrompts()) do
+                    ApplyInstantPrompt(prompt)
+                end
+                -- também pega novos PPs que nascerem
+                for _, prompt in ipairs(workspace:GetDescendants()) do
+                    if prompt:IsA("ProximityPrompt") then ApplyInstantPrompt(prompt) end
+                end
+            end)
+        end
+    end)
+end
+
+-- Extintor: procura Tool no inventário/equipado (nome/atributo genérico)
 local function FindExtinguisher()
+    local function check(tool)
+        if not tool or not tool:IsA("Tool") then return false end
+        local n = string.lower(tool.Name)
+        if string.find(n, "extinguisher") or string.find(n, "extintor") then return true end
+        if tool:GetAttribute("FireExtinguisher") or tool:GetAttribute("IsFireExtinguisher") then return true end
+        return false
+    end
     for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
-        if tool:IsA("Tool") then
-            local n = string.lower(tool.Name)
-            if string.find(n, "extinguisher") or string.find(n, "fire") or string.find(n, "extintor")
-                or tool:GetAttribute("FireExtinguisher") or tool:GetAttribute("IsFireExtinguisher") then
-                return tool
-            end
+        if check(tool) then return tool end
+    end
+    local char = LocalPlayer.Character
+    if char then
+        for _, tool in ipairs(char:GetChildren()) do
+            if check(tool) then return tool end
         end
     end
     return nil
 end
 
-local function FindActiveGrime()
+local function FindHazards(tag)
     local best, bestDist = nil, math.huge
     local root = GetRoot()
-    for _, m in ipairs(CollectionService:GetTagged("Grime")) do
-        if m:IsA("Model") and m.PrimaryPart and m:GetAttribute("Enabled") ~= false then
-            local d = root and (root.Position - m.PrimaryPart.Position).Magnitude or 0
-            if d < bestDist then
-                best, bestDist = m, d
-            end
+    for _, m in ipairs(CollectionService:GetTagged(tag)) do
+        local pos
+        if m:IsA("BasePart") then
+            pos = m.Position
+        elseif m:IsA("Model") and m.PrimaryPart then
+            pos = m.PrimaryPart.Position
+        end
+        if pos then
+            local d = root and (root.Position - pos).Magnitude or 0
+            if d < bestDist then best, bestDist = m, d end
         end
     end
     return best
+end
+
+local function HazardPos(hazard)
+    if hazard:IsA("BasePart") then return hazard.Position end
+    if hazard:IsA("Model") and hazard.PrimaryPart then return hazard.PrimaryPart.Position end
+    return nil
 end
 
 local function UseExtinguisher(tool)
@@ -516,7 +572,7 @@ local function UseExtinguisher(tool)
     pcall(function() tool:Activate() end)
 end
 
--- AUTO FARM: limpa slime com o extintor (teleporta até o alvo)
+-- AUTO FARM: limpa slime (Grime) e apaga fogo (OnFire) teleportando ACIMA do hazard
 local function SetAutoFarm(enabled)
     FarmOn = enabled
     if not enabled then
@@ -525,7 +581,7 @@ local function SetAutoFarm(enabled)
     end
     task.spawn(function()
         local warnedNoTool = false
-        while FarmOn and task.wait(1.4) do
+        while FarmOn and task.wait(1.2) do
             pcall(function()
                 local tool = FindExtinguisher()
                 if not tool then
@@ -536,12 +592,19 @@ local function SetAutoFarm(enabled)
                     return
                 end
                 warnedNoTool = false
-                local grime = FindActiveGrime()
-                if not grime then return end
-                FarmTargetPos = grime.PrimaryPart.Position
-                TeleportNear(grime.PrimaryPart.Position, 4)
+                local target = FindHazards("Grime") or FindHazards("OnFire")
+                if not target then return end
+                local pos = HazardPos(target)
+                if not pos then return end
+                FarmTargetPos = pos
+                -- Teleporta ACIMA (os hubs OP fazem isso: bolhas caem no alvo)
+                local root = GetRoot()
+                if root then
+                    local dest = CFrame.new(pos + Vector3.new(0, 6, 0))
+                    root.CFrame = dest
+                end
                 UseExtinguisher(tool)
-                task.wait(0.6)
+                task.wait(0.7)
                 UseExtinguisher(tool)
             end)
         end
@@ -576,7 +639,9 @@ local function SetAutoDiagnose(enabled)
     end)
 end
 
--- AUTO ATENDIMENTO: dispara qualquer PP em NPCs (pacientes) e promps de tarefa
+-- AUTO ATENDIMENTO: dispara QUALQUER PP/ClickDetector do mapa (check-in,
+-- badges, máquinas, tratamento, pacientes). Técnica "Auto-Interact ALL"
+-- dos hubs OP: teleporta para cada prompt e dispara.
 local function SetAutoAttend(enabled)
     AttendOn = enabled
     if not enabled then
@@ -585,21 +650,97 @@ local function SetAutoAttend(enabled)
     end
     task.spawn(function()
         local last = {}
-        while AttendOn and task.wait(1.2) do
+        while AttendOn and task.wait(1.0) do
             pcall(function()
                 local now = os.clock()
+                -- PPs
                 for _, prompt in ipairs(FindAllPrompts()) do
-                    local parent = prompt.Parent
-                    local isNpc = prompt:HasTag("NPC") or (parent and (parent:HasTag("NPC") or parent:IsA("Model") and parent.Parent and parent.Parent:HasTag("NPC")))
-                    if isNpc and not prompt:HasTag("Inspect") then
+                    if prompt.Enabled and not prompt:HasTag("Inspect") then
                         local pos = PromptPos(prompt)
-                        if pos and (not last[prompt] or now - last[prompt] > 5) then
-                            TeleportNear(pos, 4)
+                        if pos and (not last[prompt] or now - last[prompt] > 4) then
+                            TeleportNear(pos, 3)
                             FirePrompt(prompt)
                             last[prompt] = now
-                            task.wait(0.5)
+                            task.wait(0.35)
                         end
                     end
+                end
+                -- ClickDetectors (algumas máquinas usam CD em vez de PP)
+                for _, cd in ipairs(workspace:GetDescendants()) do
+                    if cd:IsA("ClickDetector") and cd.Parent and cd.Parent:IsA("BasePart") then
+                        local pos = cd.Parent.Position
+                        if (not last[cd] or now - last[cd] > 4) then
+                            TeleportNear(pos, 3)
+                            pcall(function()
+                                if fireclickdetector then
+                                    fireclickdetector(cd)
+                                else
+                                    cd:Click()
+                                end
+                            end)
+                            last[cd] = now
+                            task.wait(0.35)
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO REVIVE: revive jogadores caídos (tag DeadPlayer)
+local function SetAutoRevive(enabled)
+    ReviveOn = enabled
+    if not enabled then
+        SafeNotify("Auto Revive", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local last = {}
+        while ReviveOn and task.wait(1.5) do
+            pcall(function()
+                local now = os.clock()
+                for _, p in ipairs(CollectionService:GetTagged("DeadPlayer")) do
+                    if p:IsA("Player") and p ~= LocalPlayer and (not last[p] or now - last[p] > 12) then
+                        last[p] = now
+                        NetFire("ReviveOther", p)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO CAFÉ: usa item de café quando a sanidade está baixa
+local function SetAutoCoffee(enabled)
+    CoffeeOn = enabled
+    if not enabled then
+        SafeNotify("Auto Café", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local warnedNoCoffee = false
+        while CoffeeOn and task.wait(2) do
+            pcall(function()
+                local sanity = LocalPlayer:GetAttribute("Sanity") or 100
+                if sanity > 60 then return end
+                for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        local n = string.lower(tool.Name)
+                        if string.find(n, "coffee") or string.find(n, "café") or string.find(n, "drink") then
+                            local hum = GetHumanoid()
+                            if hum then pcall(function() hum:EquipTool(tool) end) end
+                            task.wait(0.2)
+                            pcall(function() tool:Activate() end)
+                            warnedNoCoffee = false
+                            task.wait(4)
+                            return
+                        end
+                    end
+                end
+                if not warnedNoCoffee then
+                    SafeNotify("Auto Café", "Nenhum café no inventário", 4)
+                    warnedNoCoffee = true
                 end
             end)
         end
@@ -1009,14 +1150,22 @@ Toggle(P[3], "Auto Interagir", "Inspect/Shop", false, SetAutoInteract)
 -- FARM
 Section(P[4], "Automações de Farm")
 Spacer(P[4], 26)
-Toggle(P[4], "Auto Farm (Slime)", "Equipa extintor e limpa Grime", false, SetAutoFarm)
+Toggle(P[4], "Auto Farm (Slime/Fogo)", "Extintor + teleport acima do hazard", false, SetAutoFarm)
 Spacer(P[4], 6)
 Toggle(P[4], "Auto Diagnose", "Dispara prompts Inspect", false, SetAutoDiagnose)
 Spacer(P[4], 6)
-Toggle(P[4], "Auto Atendimento", "Dispara PPs em NPCs", false, SetAutoAttend)
+Toggle(P[4], "Auto Atendimento", "Interage com TODOS os prompts/máquinas", false, SetAutoAttend)
 Spacer(P[4], 6)
-Button(P[4], "Informação: requer extintor no inventário",
-    function() SafeNotify("Auto Farm", "Farm de slime = limpar Grime com extintor (cash). Sem remote direto no cliente.", 6) end)
+Toggle(P[4], "Auto Revive", "Revive jogadores caídos (DeadPlayer)", false, SetAutoRevive)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Café", "Usa café quando sanidade < 60%", false, SetAutoCoffee)
+Spacer(P[4], 6)
+Section(P[4], "Geral")
+Spacer(P[4], 26)
+Toggle(P[4], "Instant Prompts", "HoldDuration 0 + distância máx (estilo OP)", false, SetInstantPrompts)
+Spacer(P[4], 6)
+Button(P[4], "Informação: como farmar",
+    function() SafeNotify("Farm", "Cash é pago no FIM do turno (desempenho). Auto Atendimento + Diagnose + Slime = turno completo.", 7) end)
 
 -- VISUAL
 Section(P[5], "ESP")
