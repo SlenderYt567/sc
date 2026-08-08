@@ -1,28 +1,6 @@
 --[[
-    SlenderHub | Game Dumper Universal — v1.0.2 (Delta: sem freeze no clique)
+    SlenderHub | Game Dumper Universal — v1.0.3 (Fix: Delta / Mobile Compatibility)
     Dev: SlenderHub Team
-
-    Dump automático estilo Dex, universal (Delta/Wave/Codex/Synapse/Fluxus...):
-      • Scripts (closures Luau) separados por PASTA e NOME
-      • Remotes catalogados (RemoteEvent/RemoteFunction/UnreliableRemoteEvent)
-      • Honeypot / backdoor detection (nomes suspeitos + sem handler)
-      • Export em disco: slenderhub_dumps/<jogo>/
-          scripts/<pasta>/<nome>.lua
-          scripts/_closures/*.lua        (closures extras do mesmo source)
-          remotes/remotes.txt            (catálogo completo)
-          remotes/honeypots.txt          (suspeitos)
-          remotes/connections.txt        (quem escuta cada remote)
-          remotes/runtime_log.txt        (chamadas FireServer/InvokeServer, se ativado)
-          metadata.json                  (resumo estruturado)
-
-    IMPORTANTE:
-    • "Scripts" aqui = código do CLIENTE (LocalScripts/Módulos). Código
-      server-side não sai pelo cliente — isso é limitação do Roblox, não do script.
-    • decompile() reconstrói o código (variáveis viram v1/v2...). Se o jogo
-      for ofuscado (Luraph/MoonSec), o resultado sai ilegível — aí use a
-      pipeline de desofuscação do SlenderHub.
-    • Tudo roda com pcall + matriz de fallback: nada quebra em executor fraco,
-      só perde recursos.
 ]]
 
 local SlenderHub = {}
@@ -34,11 +12,11 @@ SlenderHub.Config = {
     OutputRoot   = "slenderhub_dumps",   -- pasta raiz (dentro da pasta do executor)
     Sanitize     = true,                 -- remove caracteres inválidos de nomes de arquivo
     WriteExtra   = true,                 -- salva closures extras do mesmo source
-    KeyMode      = "none",               -- "none" = livre; "api" = pluga VerifyKey depois
+    KeyMode      = "none",               -- "none" = livre
 
     -- Hardening p/ executores com decompile/scan instável (Delta/Wave/Codex):
-    MaxDecompilePerDump = 250,           -- trava nº de decompile() por dump (Delta: baixo!)
-    MaxHeapScan         = 8000,          -- limite de valores escaneados no heap (debug.getinfo é caro no Delta)
+    MaxDecompilePerDump = 250,           -- trava nº de decompile() por dump
+    MaxHeapScan         = 8000,          -- limite de valores escaneados no heap
     HeapMissLimit       = 1500,          -- para cedo se N itens seguidos não trazem source novo
     MinUniqueSources    = 20,            -- só deixa o early-exit agir depois de achar N sources
 }
@@ -60,36 +38,44 @@ local function Notify(title, text, dur, type)
 end
 
 --------------------------------------------------------------------------------
--- MATRIZ DE EXECUTORES (universal — nunca assuma que a função existe)
+-- MATRIZ DE EXECUTORES (universal — checa getgenv e _G com segurança)
 --------------------------------------------------------------------------------
-local Env = getgenv and getgenv() or _G
+local Env = (type(getgenv) == "function" and getgenv()) or _G or {}
+
+local function GetEnvFunc(name)
+    if type(Env[name]) == "function" then return Env[name] end
+    local ok, val = pcall(function() return rawget(_G, name) end)
+    if ok and type(val) == "function" then return val end
+    return nil
+end
 
 local FunctionMap = {
-    CheckCaller     = function() return type(checkcaller) == "function" and checkcaller or nil end,
-    NewCClosure     = function() return type(newcclosure) == "function" and newcclosure or nil end,
-    HookMetaMethod  = function() return type(hookmetamethod) == "function" and hookmetamethod or nil end,
-    GetNamecall     = function() return type(getnamecallmethod) == "function" and getnamecallmethod or nil end,
-    GetGC           = function() return type(getgc) == "function" and getgc or nil end,
-    GetReg          = function() return type(getreg) == "function" and getreg or nil end,
-    GetNilInstances = function() return type(getnilinstances) == "function" and getnilinstances or nil end,
-    GetRunning      = function() return type(getrunningscripts) == "function" and getrunningscripts or nil end,
-    GetConnections  = function() return type(getconnections) == "function" and getconnections or nil end,
-    GetRawMetaTable = function() return type(getrawmetatable) == "function" and getrawmetatable or nil end,
-    IsClosure       = function() return type(isclosure) == "function" and isclosure or nil end,
-    IsCClosure      = function() return type(iscclosure) == "function" and iscclosure or nil end,
-    Decompile       = function() return type(decompile) == "function" and decompile or nil end,
-    ScriptBytecode  = function() return type(getscriptbytecode) == "function" and getscriptbytecode or nil end,
-    DumpString      = function() return type(dumpstring) == "function" and dumpstring or nil end,
-    WriteFile       = function() return type(writefile) == "function" and writefile or nil end,
-    MakeFolder      = function() return type(makefolder) == "function" and makefolder or nil end,
-    IsFolder        = function() return type(isfolder) == "function" and isfolder or nil end,
-    IsFile          = function() return type(isfile) == "function" and isfile or nil end,
-    ListFiles       = function() return type(listfiles) == "function" and listfiles or nil end,
+    CheckCaller     = function() return GetEnvFunc("checkcaller") end,
+    NewCClosure     = function() return GetEnvFunc("newcclosure") end,
+    HookMetaMethod  = function() return GetEnvFunc("hookmetamethod") end,
+    GetNamecall     = function() return GetEnvFunc("getnamecallmethod") end,
+    GetGC           = function() return GetEnvFunc("getgc") end,
+    GetReg          = function() return GetEnvFunc("getreg") end,
+    GetNilInstances = function() return GetEnvFunc("getnilinstances") end,
+    GetRunning      = function() return GetEnvFunc("getrunningscripts") end,
+    GetConnections  = function() return GetEnvFunc("getconnections") end,
+    GetRawMetaTable = function() return GetEnvFunc("getrawmetatable") end,
+    IsClosure       = function() return GetEnvFunc("isclosure") end,
+    IsCClosure      = function() return GetEnvFunc("iscclosure") end,
+    Decompile       = function() return GetEnvFunc("decompile") end,
+    ScriptBytecode  = function() return GetEnvFunc("getscriptbytecode") end,
+    DumpString      = function() return GetEnvFunc("dumpstring") end,
+    WriteFile       = function() return GetEnvFunc("writefile") end,
+    MakeFolder      = function() return GetEnvFunc("makefolder") end,
+    IsFolder        = function() return GetEnvFunc("isfolder") end,
+    IsFile          = function() return GetEnvFunc("isfile") end,
+    ListFiles       = function() return GetEnvFunc("listfiles") end,
     Identify        = function()
         local names = { "getexecutorname", "identifyexecutor", "get_identify" }
         for _, n in ipairs(names) do
-            if type(Env[n]) == "function" then
-                local ok, v = pcall(Env[n])
+            local fn = GetEnvFunc(n)
+            if fn then
+                local ok, v = pcall(fn)
                 if ok and v then return tostring(v) end
             end
         end
@@ -98,14 +84,17 @@ local FunctionMap = {
 }
 
 local function Fn(name)
-    local ok, val = pcall(FunctionMap[name])
-    return ok and val or nil
+    if FunctionMap[name] then
+        local ok, val = pcall(FunctionMap[name])
+        return ok and val or nil
+    end
+    return nil
 end
 
-local ExecutorName = Fn("Identify")
+local ExecutorName = Fn("Identify") or "unknown"
 
 -------------------------------------------------------------------------------
--- ORÇAMENTO DE DECOMPILE (estabilidade em executores fracos)
+-- ORÇAMENTO DE DECOMPILE
 -------------------------------------------------------------------------------
 local DecompileBudget = 0
 
@@ -115,7 +104,7 @@ local function UseBudget()
 end
 
 --------------------------------------------------------------------------------
--- NOME DO JOGO (com cache — GetProductInfo tem rate limit)
+-- NOME DO JOGO
 --------------------------------------------------------------------------------
 local GameNameCache
 
@@ -131,7 +120,7 @@ local function GetGameName()
 end
 
 --------------------------------------------------------------------------------
--- FILESYSTEM (writefile/makefolder com fallback)
+-- FILESYSTEM
 --------------------------------------------------------------------------------
 local HasWrite = Fn("WriteFile") ~= nil
 
@@ -187,15 +176,12 @@ local REMOTE_CLASSES = {
     "RemoteEvent", "RemoteFunction", "UnreliableRemoteEvent",
 }
 
--- Palavras de honeypot: exigimos >= 3 letras e match de palavra inteira
--- (evita falso positivo tipo "ac" em "Character")
 local SUSPICIOUS_WORDS = {
     "ban", "admin", "detect", "cheat", "exploit", "check", "verify", "kick",
     "anti", "honeypot", "report", "flag", "punish", "moderation", "security",
     "backdoor", "scan", "validate", "guard", "log", "monitor",
 }
 
--- Remotes padrão do Roblox (nunca são honeypots do jogo)
 local ROBLOX_SYSTEM = {
     "IntegrityCheck", "CharacterSoundEvent", "SetDialogInUse", "ReadUpdateLog",
     "GetServerType", "GetServerVersion", "GetServerChannel", "WhisperChat",
@@ -213,9 +199,8 @@ local ROBLOX_SYSTEM = {
 local SECURITY_FOLDERS = { "anticheat", "anti-cheat", "security", "moderation", "detection" }
 
 local function IsSystemRemote(name)
-    local n = name
     for _, w in ipairs(ROBLOX_SYSTEM) do
-        if n:find(w, 1, true) then return true end
+        if name:find(w, 1, true) then return true end
     end
     return false
 end
@@ -260,17 +245,15 @@ local function CollectRemotes()
         table.insert(remotes, inst)
     end
 
-    -- 1) árvore visível
     for _, desc in ipairs(game:GetDescendants()) do
         for _, cls in ipairs(REMOTE_CLASSES) do
             if desc:IsA(cls) then Add(desc) end
         end
         if desc:IsA("BindableEvent") or desc:IsA("BindableFunction") then
-            Add(desc) -- informativo (não fireável pelo cliente)
+            Add(desc)
         end
     end
 
-    -- 2) heap (remotes não expostos na árvore pública)
     local gc = Fn("GetGC")
     if gc then
         pcall(function()
@@ -284,7 +267,6 @@ local function CollectRemotes()
         end)
     end
 
-    -- 3) instâncias ocultas
     local nilInst = Fn("GetNilInstances")
     if nilInst then
         pcall(function()
@@ -312,13 +294,12 @@ end
 --------------------------------------------------------------------------------
 -- COLETA DE SCRIPTS
 --------------------------------------------------------------------------------
-local ScriptStore = {}   -- { path = caminho no disco, content = string, kind = "code"|"bytecode"|"note" }
-local ExtraStore = {}    -- closures extras por source
+local ScriptStore = {}
+local ExtraStore = {}
 local SeenSources = {}
 local Stats = { scripts = 0, closures = 0, extras = 0, errors = 0 }
 
 local function SourceToPath(source)
-    -- source: "@ReplicatedStorage/ModuleScript:42" | "@ModuleScript:42"
     local s = source:gsub("^@", ""):gsub(":%d+$", "")
     local parts = {}
     for part in s:gmatch("[^/]+") do
@@ -336,7 +317,7 @@ local function SourceToPath(source)
 end
 
 local function DecompileOne(closure)
-    if not UseBudget() then return nil, nil end -- orçamento esgotado: não arrisca crash
+    if not UseBudget() then return nil, nil end
     local dc = Fn("Decompile")
     if dc then
         local ok, code = pcall(dc, closure)
@@ -358,7 +339,7 @@ local function AddClosure(closure, info)
     info = info or debug.getinfo(closure)
     if not info or type(info.source) ~= "string" then return end
     local src = info.source
-    if src == "=[C]" or not src:find("^@") then return end -- C closure / builtin
+    if src == "=[C]" or not src:find("^@") then return end
 
     Stats.closures = Stats.closures + 1
     if SeenSources[src] then
@@ -390,7 +371,6 @@ local function AddClosure(closure, info)
 end
 
 local function CollectScripts()
-    -- A) scripts rodando (instâncias) — melhor precisão de nome/pasta
     local running = Fn("GetRunning")
     if running then
         pcall(function()
@@ -426,8 +406,6 @@ local function CollectScripts()
         end)
     end
 
-    -- B) heap scan (closures vivas) — síncrono, LIMITADO e com early-exit.
-    --    (task.wait() dentro de pcall travou no Delta; aqui é tudo reto e rápido)
     local gc = Fn("GetGC")
     if gc then
         pcall(function()
@@ -438,10 +416,9 @@ local function CollectScripts()
                 scanned = scanned + 1
                 if scanned > SlenderHub.Config.MaxHeapScan then break end
                 if type(v) == "function" then
-                    -- pula C closures (maioria do heap) — debug.getinfo é caro no Delta
                     if isC then
                         local okC, isCClosure = pcall(isC, v)
-                        if okC and isCClosure then continue end -- nativa, sem "@" source
+                        if okC and isCClosure then continue end
                     end
                     local ok, info = pcall(debug.getinfo, v, "S")
                     if ok and info and type(info.source) == "string" and info.source:find("^@") then
@@ -451,7 +428,6 @@ local function CollectScripts()
                     else
                         misses = misses + 1
                     end
-                    -- já achou o essencial? sai cedo em vez de varrer o heap inteiro
                     if misses >= SlenderHub.Config.HeapMissLimit
                         and #SeenSources >= SlenderHub.Config.MinUniqueSources then
                         break
@@ -461,7 +437,6 @@ local function CollectScripts()
         end)
     end
 
-    -- C) instâncias ocultas
     local nilInst = Fn("GetNilInstances")
     if nilInst then
         pcall(function()
@@ -494,7 +469,7 @@ local function CollectScripts()
 end
 
 --------------------------------------------------------------------------------
--- LOG RUNTIME DE REMOTES (feature premium — off por padrão, hook detectável)
+-- LOG RUNTIME DE REMOTES
 --------------------------------------------------------------------------------
 SlenderHub.RemoteLog = { Enabled = false, Buffer = {}, Hooked = false, OldNamecall = nil }
 
@@ -514,7 +489,6 @@ local function EnableRemoteLog()
         Notify("SlenderHub", "Executor sem hookmetamethod — log runtime indisponível", 3, "Error")
         return false
     end
-    -- recupera o metamétodo ORIGINAL sem gambiarra de hook com 2 args
     local old
     local raw = Fn("GetRawMetaTable")
     if raw then
@@ -530,7 +504,7 @@ local function EnableRemoteLog()
         local method = nm()
         if (method == "FireServer" or method == "InvokeServer") and typeof(self) == "Instance" then
             if not (cc and cc()) then
-                pcall(function() -- nunca deixe o log quebrar a chamada real
+                pcall(function()
                     local args = { ... }
                     local argStr = {}
                     for i = 1, math.min(6, #args) do
@@ -566,9 +540,9 @@ end
 
 local function DisableRemoteLog()
     if SlenderHub.RemoteLog.Hooked then
-        -- restaura SEMPRE com o original; nunca seta nil (quebraria todo namecall)
-        if SlenderHub.RemoteLog.OldNamecall then
-            pcall(hookmetamethod, game, "__namecall", SlenderHub.RemoteLog.OldNamecall)
+        local hook = Fn("HookMetaMethod")
+        if SlenderHub.RemoteLog.OldNamecall and hook then
+            pcall(hook, game, "__namecall", SlenderHub.RemoteLog.OldNamecall)
         end
         SlenderHub.RemoteLog.Hooked = false
     end
@@ -581,7 +555,7 @@ end
 local function BuildMetadata(remotes, honeypots)
     local meta = {
         tool = "SlenderHub Game Dumper",
-        version = "1.0.2",
+        version = "1.0.3",
         game = GetGameName(),
         placeId = tostring(game.PlaceId),
         executor = tostring(ExecutorName),
@@ -633,7 +607,6 @@ local function RunDump()
     Notify("SlenderHub", "Coletando scripts (heap scan)...", 3, nil)
     CollectScripts()
 
-    -- honeypots (ignora remotes do sistema Roblox — falsos positivos)
     local honeypots = {}
     local connectionInfo = {}
     for _, r in ipairs(remotes) do
@@ -646,7 +619,6 @@ local function RunDump()
         end
     end
 
-    -- export
     local okWrite = HasWrite
     if okWrite then
         EnsureFolder(root .. "/scripts")
@@ -659,7 +631,6 @@ local function RunDump()
         if SlenderHub.UI and SlenderHub.UI.SetResult then
             SlenderHub.UI.SetResult("Fase 3/3 — Escrevendo arquivos (" .. #ScriptStore .. " scripts)...")
         end
-        -- cache de pastas: evita chamada nativa (isfolder/makefolder) por script
         local madeFolders = {}
         local function EnsureCached(path)
             if madeFolders[path] then return end
@@ -680,7 +651,7 @@ local function RunDump()
             local ok = WriteUniqueFile(full, content)
             if ok then written = written + 1 else failed = failed + 1 end
         end
-        -- extras
+
         if SlenderHub.Config.WriteExtra then
             local done = {}
             for _, ex in ipairs(ExtraStore) do
@@ -697,7 +668,6 @@ local function RunDump()
             Stats.extras = #ExtraStore
         end
 
-        -- remotes.txt
         local lines = { string.format("REMOTES — %s (%s)", gameName, tostring(game.PlaceId)) }
         for _, r in ipairs(remotes) do
             local bind = r:IsA("BindableEvent") or r:IsA("BindableFunction")
@@ -709,7 +679,6 @@ local function RunDump()
         end
         WriteUniqueFile(root .. "/remotes/remotes.txt", table.concat(lines, "\n"))
 
-        -- honeypots.txt
         local hl = { "HONEYPOTS / SUSPEITOS — NÃO FIRE sem investigar", "" }
         for _, r in ipairs(honeypots) do
             local reason = {}
@@ -723,7 +692,6 @@ local function RunDump()
         table.insert(hl, "o handler pode estar no servidor. Sempre teste com conta descartável.")
         WriteUniqueFile(root .. "/remotes/honeypots.txt", table.concat(hl, "\n"))
 
-        -- connections.txt
         local cl = { "CONEXÕES (quem escuta no cliente)", "" }
         for _, r in ipairs(remotes) do
             local gc = Fn("GetConnections")
@@ -745,11 +713,9 @@ local function RunDump()
         end
         WriteUniqueFile(root .. "/remotes/connections.txt", table.concat(cl, "\n"))
 
-        -- metadata.json
         WriteUniqueFile(root .. "/metadata.json", BuildMetadata(remotes, honeypots))
     end
 
-    -- resumo
     local cons = Fn("GetConnections")
     local handlersCount = 0
     if cons then
@@ -775,7 +741,7 @@ local function RunDump()
 end
 
 --------------------------------------------------------------------------------
--- UI SLENDERWIND (enxuta — mesma identidade do hub)
+-- UI SLENDERWIND
 --------------------------------------------------------------------------------
 SlenderHub.UI = {}
 
@@ -810,7 +776,6 @@ local function CreateUI()
     local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 10); corner.Parent = main
     local stroke = Instance.new("UIStroke"); stroke.Color = theme.Stroke; stroke.Parent = main
 
-    -- topbar (drag)
     local topbar = Instance.new("Frame")
     topbar.BackgroundTransparency = 1
     topbar.Size = UDim2.new(1, 0, 0, 36)
@@ -854,7 +819,6 @@ local function CreateUI()
     close.Parent = topbar
     close.MouseButton1Click:Connect(function() sg:Destroy() end)
 
-    -- corpo
     local body = Instance.new("Frame")
     body.BackgroundTransparency = 1
     body.Position = UDim2.new(0, 12, 0, 44)
@@ -913,14 +877,13 @@ local function CreateUI()
 
     local dumping = false
     btnDump.MouseButton1Click:Connect(function()
-        if dumping then return end -- ignora duplo clique
+        if dumping then return end
         dumping = true
         task.spawn(function()
             btnDump.Text = "⏳  Dumpando... (não feche)"
             btnDump.BackgroundColor3 = theme.Warning
             local ok, err = pcall(RunDump)
             if not ok then
-                -- nunca deixa o botão preso em "Dumpando..." por erro silencioso
                 Notify("SlenderHub", "Erro no dump: " .. tostring(err), 6, "Error")
                 if SlenderHub.UI and SlenderHub.UI.SetResult then
                     SlenderHub.UI.SetResult("ERRO no dump:\n" .. tostring(err) ..
@@ -948,7 +911,6 @@ local function CreateUI()
     local rcorner = Instance.new("UICorner"); rcorner.CornerRadius = UDim.new(0, 6); rcorner.Parent = result
     local padding = Instance.new("UIPadding"); padding.PaddingLeft = UDim.new(0, 10); padding.PaddingTop = UDim.new(0, 8); padding.Parent = result
 
-    -- notificações
     local notifyContainer = Instance.new("Frame")
     notifyContainer.BackgroundTransparency = 1
     notifyContainer.AnchorPoint = Vector2.new(0, 1)
