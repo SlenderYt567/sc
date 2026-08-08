@@ -2189,6 +2189,278 @@ do
     end
 end
 
+-- ============================================================
+-- [4.5.2] PATIENT FARM ENGINE — Fila FIFO
+-- Auto Diagnose + Auto Atendimento v2: atende pacientes UM POR UM
+-- (diagnostica → trata → verifica → próximo). Não repete paciente já
+-- concluído e não toca em prompts fora do paciente atual.
+-- Validado contra dump: tags Inspect/Patient/InBed/NPC/DeadPlayer/OnFire,
+-- atributos Treated/Cured/Healed/Health (Padrão do jogo)
+-- ============================================================
+local PatientDiagOn = false
+local PatientFarmOn = false
+
+local PatientDiagKeywords  = { "diagnos", "inspect", "scan" }
+local PatientTreatKeywords = { "treat", "heal", "cure", "medicine", "bandage", "carry", "help", "bed", "inject" }
+
+local function PromptModel(prompt)
+    local p = prompt.Parent
+    while p and not p:IsA("Model") do p = p.Parent end
+    return p
+end
+
+local function PromptKind(prompt)
+    local at = string.lower(prompt.ActionText or "") .. " " .. string.lower(prompt.ObjectText or "")
+    -- prompt de inspeção real (tag "Inspect" confirmada no dump/InspectLocal)
+    if prompt:HasTag("Inspect") then return "diag" end
+    for _, kw in ipairs(PatientDiagKeywords) do
+        if string.find(at, kw) then return "diag" end
+    end
+    for _, kw in ipairs(PatientTreatKeywords) do
+        if string.find(at, kw) then return "treat" end
+    end
+    return nil
+end
+
+local function CollectPatients()
+    local map, order = {}, {}
+    for _, prompt in ipairs(FindAllPrompts()) do
+        if prompt.Enabled then
+            local kind = PromptKind(prompt)
+            local model = PromptModel(prompt)
+            local base = model or prompt.Parent
+            if base then
+                -- modelo marcado como paciente/cama/NPC → qualquer prompt é tratamento
+                if not kind and model and (model:HasTag("Patient") or model:HasTag("InBed") or model:HasTag("NPC")) then
+                    kind = "treat"
+                end
+            end
+            if kind and base then
+                local patient = map[base]
+                if not patient then
+                    patient = {
+                        model = model, base = base,
+                        diag = nil, treat = {},
+                        pos = PromptPos(prompt),
+                        lastAction = 0, tries = 0, done = false,
+                        diagnosed = false, burned = false, d = math.huge
+                    }
+                    map[base] = patient
+                    table.insert(order, patient)
+                end
+                if kind == "diag" then
+                    patient.diag = patient.diag or prompt
+                else
+                    table.insert(patient.treat, prompt)
+                end
+                local ppos = PromptPos(prompt)
+                if ppos then patient.pos = ppos end
+            end
+        end
+    end
+    -- jogadores caídos (tag "DeadPlayer" confirmada no dump/DiedLocal)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p:HasTag("DeadPlayer") then
+            local patient = map[p]
+            if not patient then
+                patient = {
+                    model = p.Character, base = p,
+                    diag = nil, treat = {},
+                    pos = p.Character and p.Character.PrimaryPart and p.Character.PrimaryPart.Position,
+                    lastAction = 0, tries = 0, done = false,
+                    diagnosed = true, burned = false, d = math.huge
+                }
+                map[p] = patient
+                table.insert(order, patient)
+            end
+        end
+    end
+    return order
+end
+
+local function PatientHasFire(patient)
+    if patient.burned then return true end
+    local base = patient.base
+    if base and base:HasTag("OnFire") then return true end
+    if base and base:IsA("Model") then
+        for _, part in ipairs(base:GetDescendants()) do
+            if part:IsA("Fire") then return true end
+        end
+    end
+    return false
+end
+
+local function PatientIsDone(patient)
+    local base = patient.base
+    if not base or not base.Parent then return true end
+    -- atributos de cura (padrão do jogo)
+    for _, attr in ipairs({ "Treated", "Cured", "Healed" }) do
+        if base:GetAttribute(attr) == true then return true end
+    end
+    local hp, mhp = base:GetAttribute("Health"), base:GetAttribute("MaxHealth")
+    if type(hp) == "number" and type(mhp) == "number" and hp >= mhp then return true end
+    -- jogador caído que reviveu
+    if base:IsA("Player") and not base:HasTag("DeadPlayer") then return true end
+    -- prompts de tratamento ainda ativos?
+    local active = 0
+    for _, t in ipairs(patient.treat) do
+        if t and t.Parent and t.Enabled then active = active + 1 end
+    end
+    if patient.diag and patient.diag.Parent and patient.diag.Enabled then active = active + 1 end
+    if #patient.treat > 0 and active == 0 then return true end
+    -- queimado que apagou o fogo
+    if patient.burned and not PatientHasFire(patient) then return true end
+    return false
+end
+
+local function DoDiagnose(patient)
+    if not (patient.diag and patient.diag.Parent and patient.diag.Enabled) then
+        patient.diagnosed = true
+        return false
+    end
+    if patient.pos then TeleportNear(patient.pos, 3) end
+    FirePrompt(patient.diag)
+    patient.diagnosed = true
+    return true
+end
+
+local function DoTreat(patient)
+    local root = GetRoot()
+    local pos = patient.pos
+    -- queimado (tag OnFire/Fire confirmada no dump/VisualEffects):
+    -- prioriza item anti-burn, senão extintor, senão item médico genérico
+    local tool = nil
+    if PatientHasFire(patient) then
+        patient.burned = true
+        for _, name in ipairs({ "Treat Burns", "Ointment", "Bandages" }) do
+            for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
+                if t:IsA("Tool") and string.find(string.lower(t.Name), string.lower(name)) then
+                    tool = t break
+                end
+            end
+            if tool then break end
+        end
+        if not tool then
+            for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
+                if t:IsA("Tool") and string.find(string.lower(t.Name), "extinguish") then
+                    tool = t break
+                end
+            end
+        end
+    end
+    if not tool then
+        tool = FindMedItem()
+    end
+    -- aplica o item no paciente
+    if tool and pos then
+        if root then root.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0)) end
+        local hum = GetHumanoid()
+        if hum then pcall(function() hum:EquipTool(tool) end) end
+        task.wait(0.25)
+        pcall(function() tool:Activate() end)
+        patient.lastAction = os.clock() + 1.5 -- dá tempo do servidor processar
+        return true
+    end
+    -- sem item: tenta prompts de tratamento do próprio paciente
+    for _, t in ipairs(patient.treat) do
+        if t.Parent and t.Enabled then
+            if pos then TeleportNear(pos, 3) end
+            FirePrompt(t)
+            patient.lastAction = os.clock() + 1.0
+            return true
+        end
+    end
+    return false
+end
+
+-- AUTO DIAGNOSE v2: fila FIFO — diagnostica cada paciente UMA vez
+local function SetPatientDiagnose(enabled)
+    PatientDiagOn = enabled
+    if not enabled then
+        SafeNotify("Auto Diagnose", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local processed = {}
+        while PatientDiagOn and task.wait(1.2) do
+            pcall(function()
+                local patients = CollectPatients()
+                local root = GetRoot()
+                for _, p in ipairs(patients) do
+                    p.d = root and p.pos and (root.Position - p.pos).Magnitude or math.huge
+                end
+                table.sort(patients, function(a, b) return a.d < b.d end)
+                for _, patient in ipairs(patients) do
+                    if patient.done or processed[patient.base] then continue end
+                    processed[patient.base] = true
+                    DoDiagnose(patient)
+                    break -- um paciente por tick
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO ATENDIMENTO v2: fila FIFO completa (diagnose → trata → verifica → próximo)
+local function SetPatientFarm(enabled)
+    PatientFarmOn = enabled
+    if not enabled then
+        SafeNotify("Auto Atendimento", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while PatientFarmOn and task.wait(1.2) do
+            pcall(function()
+                local now = os.clock()
+                local patients = CollectPatients()
+                local root = GetRoot()
+                for _, p in ipairs(patients) do
+                    p.d = root and p.pos and (root.Position - p.pos).Magnitude or math.huge
+                end
+                table.sort(patients, function(a, b) return a.d < b.d end)
+                -- primeiro paciente não-concluído (fila FIFO — um por vez)
+                local current = nil
+                for _, patient in ipairs(patients) do
+                    if not patient.done then current = patient break end
+                end
+                if not current then
+                    if #patients > 0 then
+                        SafeNotify("Farm Pacientes", "Leva concluída — aguardando novos pacientes", 3)
+                        task.wait(6)
+                    end
+                    return
+                end
+                -- verificação de cura (avança sozinho quando conclui)
+                if PatientIsDone(current) then
+                    current.done = true
+                    return
+                end
+                -- cooldown entre ações no MESMO paciente (sem pular)
+                if now - current.lastAction < 1.2 then return end
+                -- 1) diagnose (uma vez por paciente)
+                if not current.diagnosed then
+                    if DoDiagnose(current) then return end
+                end
+                -- 2) tratamento
+                local worked = DoTreat(current)
+                current.tries = current.tries + 1
+                if worked then
+                    current.lastAction = now
+                    if current.tries >= 8 then
+                        -- força avanço após 8 tentativas (anti-stuck)
+                        current.done = true
+                    end
+                else
+                    if current.tries >= 3 then
+                        SafeNotify("Farm Pacientes", "Sem item/prompt p/ " .. tostring(current.base and current.base.Name) .. " — pulando", 3)
+                        current.done = true
+                    end
+                end
+            end)
+        end
+    end)
+end
+
 -- ===================== CONTEÚDO DAS ABAS =====================
 local P = TabPages
 
@@ -2224,9 +2496,9 @@ Section(P[4], "Automações de Farm")
 Spacer(P[4], 26)
 Toggle(P[4], "Auto Farm (Slime/Fogo)", "Extintor + teleport acima do hazard", false, SetAutoFarm)
 Spacer(P[4], 6)
-Toggle(P[4], "Auto Diagnose", "Dispara prompts Inspect", false, SetAutoDiagnose)
+Toggle(P[4], "Auto Diagnose (Fila)", "Fila FIFO: diagnostica cada paciente 1x", false, SetPatientDiagnose)
 Spacer(P[4], 6)
-Toggle(P[4], "Auto Atendimento", "Interage com TODOS os prompts/máquinas", false, SetAutoAttend)
+Toggle(P[4], "Auto Atendimento (Fila)", "Fila FIFO: diagnostica → trata → verifica → próximo", false, SetPatientFarm)
 Spacer(P[4], 6)
 Toggle(P[4], "Auto Revive", "Revive jogadores caídos (DeadPlayer)", false, SetAutoRevive)
 Spacer(P[4], 6)
