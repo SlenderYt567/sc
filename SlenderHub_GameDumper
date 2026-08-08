@@ -1,5 +1,5 @@
 --[[
-    SlenderHub | Game Dumper Universal — v1.0.3 (Fix: Delta / Mobile Compatibility)
+    SlenderHub | Game Dumper Universal — v1.0.3 (Universal Exec & Delta Fix)
     Dev: SlenderHub Team
 ]]
 
@@ -9,12 +9,11 @@ local SlenderHub = {}
 -- CONFIG
 --------------------------------------------------------------------------------
 SlenderHub.Config = {
-    OutputRoot   = "slenderhub_dumps",   -- pasta raiz (dentro da pasta do executor)
-    Sanitize     = true,                 -- remove caracteres inválidos de nomes de arquivo
+    OutputRoot   = "slenderhub_dumps",   -- pasta raiz
+    Sanitize     = true,                 -- remove caracteres inválidos
     WriteExtra   = true,                 -- salva closures extras do mesmo source
     KeyMode      = "none",               -- "none" = livre
 
-    -- Hardening p/ executores com decompile/scan instável (Delta/Wave/Codex):
     MaxDecompilePerDump = 250,           -- trava nº de decompile() por dump
     MaxHeapScan         = 8000,          -- limite de valores escaneados no heap
     HeapMissLimit       = 1500,          -- para cedo se N itens seguidos não trazem source novo
@@ -38,7 +37,7 @@ local function Notify(title, text, dur, type)
 end
 
 --------------------------------------------------------------------------------
--- MATRIZ DE EXECUTORES (universal — checa getgenv e _G com segurança)
+-- MATRIZ DE EXECUTORES
 --------------------------------------------------------------------------------
 local Env = (type(getgenv) == "function" and getgenv()) or _G or {}
 
