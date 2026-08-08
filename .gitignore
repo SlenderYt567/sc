@@ -26,32 +26,42 @@ local function line(fmt, ...)
 end
 
 local function copyToClipboard(text)
-	local ok = false
-	local okClip, res = pcall(function()
-		game:GetService("Clipboard"):SetText(text)
-	end)
-	if okClip then ok = true end
-	if not ok then
-		ok = pcall(function() clipboard:SetText(text) end)
-	end
-	return ok
+	-- 1) Função nativa de executor (a mais confiável no mobile): setclipboard
+	local ok = pcall(function() setclipboard(text) end)
+	if ok then return "setclipboard" end
+	-- 2) Clipboard service do Roblox (só funciona DENTRO do Roblox)
+	ok = pcall(function() game:GetService("Clipboard"):SetText(text) end)
+	if ok then return "clipboardService" end
+	-- 3) clipboard global
+	ok = pcall(function() clipboard:SetText(text) end)
+	if ok then return "clipboardGlobal" end
+	return nil
 end
 
--- Finaliza: monta o texto completo e tenta copiar
+-- Finaliza: monta o texto completo, tenta copiar e salvar em arquivo
 local function finish()
 	local text = table.concat(report, "\n")
-	local copiado = copyToClipboard(text)
+	local metodo = copyToClipboard(text)
+	-- Backup: salva em arquivo (executores com writefile; desktop costuma acessar a pasta)
+	local savedFile = nil
+	local okFile = pcall(function() writefile("SlenderHub_MLD.txt", text) end)
+	if okFile then savedFile = "SlenderHub_MLD.txt" end
 	print("")
-	if copiado then
-		print("[DBG] >>> RELATORIO COPIADO PARA O CLIPBOARD. Cole aqui no chat (toque longo > Colar). <<<")
+	if metodo then
+		print(("[DBG] >>> RELATORIO COPIADO (%s). Cole aqui no chat (toque longo > Colar). <<<"):format(metodo))
 	else
-		print("[DBG] Clipboard indisponivel neste executor. Use o comando: MLD.copy()")
+		print("[DBG] Clipboard indisponivel. Veja opcoes abaixo.")
 	end
+	if savedFile then
+		print(("[DBG] Backup salvo em: %s (writefile)"):format(savedFile))
+	end
+	print("[DBG] Se NAO copiar: tire um PRINT/SCREENSHOT do console do executor")
+	print("[DBG] e envie a imagem aqui no chat — eu leio a imagem e calibro o farm.")
 	getgenv().MLD = {
 		report = text,
 		copy = function()
-			local ok2 = copyToClipboard(getgenv().MLD.report)
-			print(ok2 and "[DBG] Copiado de novo! Cole no chat." or "[DBG] Clipboard indisponivel.")
+			local m2 = copyToClipboard(getgenv().MLD.report)
+			print(m2 and ("[DBG] Copiado de novo (%s)! Cole no chat."):format(m2) or "[DBG] Clipboard indisponivel.")
 		end,
 	}
 end
