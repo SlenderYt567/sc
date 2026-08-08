@@ -1,5 +1,5 @@
 --[[
-    SlenderHub | Game Dumper Universal — v1.0.6 (base v1.0.0 + antitrava)
+    SlenderHub | Game Dumper Universal — v1.0.7 (antitrava + modo pesado PS99)
     Dev: SlenderHub Team
 
     Dump automático estilo Dex, universal (Delta/Wave/Codex/Synapse/Fluxus...):
@@ -41,6 +41,16 @@ SlenderHub.Config = {
     MaxHeapScan         = 8000,          -- limite de valores escaneados no heap (debug.getinfo é caro no Delta)
     HeapMissLimit       = 1500,          -- para cedo se N itens seguidos não trazem source novo
     MinUniqueSources    = 20,            -- só deixa o early-exit agir depois de achar N sources
+
+    -- Modo pesado automático (PS99 e jogos gigantes): detecta pela árvore e
+    -- reduz os limites na hora. Evita o crash de decompile/scan no Delta.
+    HeavyAuto           = true,          -- liga a detecção automática
+    HeavyDescendants    = 100000,        -- acima de N instâncias = jogo gigante
+    HeavyDecompile      = 120,           -- orçamento de decompile no modo pesado
+    HeavyHeapScan       = 2500,          -- heap scan máximo no modo pesado
+    HeavyHeapMiss       = 400,           -- early-exit mais agressivo no modo pesado
+    SkipLoadstring      = true,          -- pula closures de loadstring (source @string):
+                                        --   PS99 ofusca tudo assim e o decompile crasha
 }
 
 --------------------------------------------------------------------------------
@@ -225,6 +235,7 @@ end
 local function CollectRemotes()
     local remotes = {}
     local seen = {}
+    local descCount = 0
 
     local function Add(inst)
         if seen[inst] then return end
@@ -233,12 +244,16 @@ local function CollectRemotes()
     end
 
     -- 1) árvore visível
-    for _, desc in ipairs(game:GetDescendants()) do
-        for _, cls in ipairs(REMOTE_CLASSES) do
-            if desc:IsA(cls) then Add(desc) end
-        end
-        if desc:IsA("BindableEvent") or desc:IsA("BindableFunction") then
-            Add(desc) -- informativo (não fireável pelo cliente)
+    local okDesc, descs = pcall(function() return game:GetDescendants() end)
+    if okDesc and type(descs) == "table" then
+        descCount = #descs
+        for _, desc in ipairs(descs) do
+            for _, cls in ipairs(REMOTE_CLASSES) do
+                if desc:IsA(cls) then Add(desc) end
+            end
+            if desc:IsA("BindableEvent") or desc:IsA("BindableFunction") then
+                Add(desc) -- informativo (não fireável pelo cliente)
+            end
         end
     end
 
@@ -270,15 +285,35 @@ local function CollectRemotes()
         end)
     end
 
-    return remotes
+    return remotes, descCount
 end
 
-local function CountConnections(remote)
-    local gc = Fn("GetConnections")
-    if not gc then return nil end
-    local ok, cons = pcall(gc, remote)
-    if not ok or type(cons) ~= "table" then return nil end
-    return #cons
+--------------------------------------------------------------------------------
+-- MODO PESADO AUTOMÁTICO (PS99 e jogos gigantes — antitrava reforçado)
+--------------------------------------------------------------------------------
+local HeavyModeActive = false
+
+local function ApplyHeavyMode(descCount)
+    if not SlenderHub.Config.HeavyAuto then return false end
+    if type(descCount) ~= "number" or descCount < SlenderHub.Config.HeavyDescendants then
+        return false
+    end
+    SlenderHub.Config.MaxDecompilePerDump = SlenderHub.Config.HeavyDecompile
+    SlenderHub.Config.MaxHeapScan         = SlenderHub.Config.HeavyHeapScan
+    SlenderHub.Config.HeapMissLimit       = SlenderHub.Config.HeavyHeapMiss
+    HeavyModeActive = true
+    return true
+end
+
+-- Closures de loadstring têm source genérico ("@string" ou "@<hash>") e não
+-- correspondem a nada na árvore do jogo. Decompilar isso é o que crasha o
+-- Delta em jogos ofuscados como PS99 — aqui identificamos e pulamos.
+local function IsLoadstringSource(src)
+    if type(src) ~= "string" then return true end
+    local s = src:gsub("^@", "")
+    if s == "string" or s == "" then return true end
+    if not s:find("/") and not s:find(":") then return true end -- @abc123
+    return false
 end
 
 --------------------------------------------------------------------------------
@@ -331,6 +366,12 @@ local function AddClosure(closure, info)
     if not info or type(info.source) ~= "string" then return end
     local src = info.source
     if src == "=[C]" or not src:find("^@") then return end -- C closure / builtin
+
+    -- modo pesado: pula closures de loadstring — decompile delas crasha o Delta
+    if SlenderHub.Config.SkipLoadstring and IsLoadstringSource(src) then
+        Stats.closures = Stats.closures + 1
+        return
+    end
 
     Stats.closures = Stats.closures + 1
     if SeenSources[src] then
@@ -531,7 +572,7 @@ end
 local function BuildMetadata(remotes, honeypots)
     local meta = {
         tool = "SlenderHub Game Dumper",
-        version = "1.0.6",
+        version = "1.0.7",
         game = GetGameName(),
         placeId = tostring(game.PlaceId),
         executor = tostring(ExecutorName),
@@ -571,18 +612,32 @@ local function RunDump()
     end
 
     Notify("SlenderHub", "Coletando remotes...", 2, nil)
-    local remotes = CollectRemotes()
+    local remotes, descCount = CollectRemotes()
+
+    -- jogo gigante (PS99 etc.): reforça antitrava ANTES do heap scan/decompile
+    if ApplyHeavyMode(descCount) then
+        Notify("SlenderHub", "Modo pesado ativo (jogo gigante) — limites reduzidos", 5, "Warning")
+    end
 
     Notify("SlenderHub", "Coletando scripts (heap scan)...", 3, nil)
     CollectScripts()
 
-    -- honeypots
+    -- honeypots + conexões (coleta UMA vez e reusa — getconnections é caro)
     local honeypots = {}
-    local connectionInfo = {}
+    local connectionInfo = {}    -- remote -> count (para o resumo)
+    local connectionTables = {}  -- remote -> tabela de conexões (para connections.txt)
+    local gcCons = Fn("GetConnections")
     for _, r in ipairs(remotes) do
-        local cons = CountConnections(r)
-        local susp = IsSuspiciousName(r.Name) or IsInsideSecurityFolder(r)
+        local cons
+        if gcCons then
+            local ok, t = pcall(gcCons, r)
+            if ok and type(t) == "table" then
+                connectionTables[r] = t
+                cons = #t
+            end
+        end
         connectionInfo[r] = cons
+        local susp = IsSuspiciousName(r.Name) or IsInsideSecurityFolder(r)
         if susp then
             table.insert(honeypots, r)
         end
@@ -662,23 +717,20 @@ local function RunDump()
         table.insert(hl, "o handler pode estar no servidor. Sempre teste com conta descartável.")
         WriteUniqueFile(root .. "/remotes/honeypots.txt", table.concat(hl, "\n"))
 
-        -- connections.txt
+        -- connections.txt (reusa a tabela coletada — zero chamadas extras)
         local cl = { "CONEXÕES (quem escuta no cliente)", "" }
         for _, r in ipairs(remotes) do
-            local gc = Fn("GetConnections")
-            if gc then
-                local ok, cons = pcall(gc, r)
-                if ok and type(cons) == "table" and #cons > 0 then
-                    table.insert(cl, string.format("[%s] %s — %d conexão(ões)", r.ClassName, r.Name, #cons))
-                    for i, c in ipairs(cons) do
-                        local fn = type(c) == "table" and c.Function
-                        local loc
-                        if type(fn) == "function" then
-                            local ok2, info = pcall(debug.getinfo, fn, "S")
-                            loc = ok2 and info and tostring(info.source) or "?"
-                        end
-                        table.insert(cl, string.format("    %d. handler em %s", i, loc or "?"))
+            local cons = connectionTables[r]
+            if cons and #cons > 0 then
+                table.insert(cl, string.format("[%s] %s — %d conexão(ões)", r.ClassName, r.Name, #cons))
+                for i, c in ipairs(cons) do
+                    local fn = type(c) == "table" and c.Function
+                    local loc
+                    if type(fn) == "function" then
+                        local ok2, info = pcall(debug.getinfo, fn, "S")
+                        loc = ok2 and info and tostring(info.source) or "?"
                     end
+                    table.insert(cl, string.format("    %d. handler em %s", i, loc or "?"))
                 end
             end
         end
@@ -688,24 +740,20 @@ local function RunDump()
         WriteUniqueFile(root .. "/metadata.json", BuildMetadata(remotes, honeypots))
     end
 
-    -- resumo
-    local cons = Fn("GetConnections")
+    -- resumo (reusa connectionInfo — zero chamadas extras)
     local handlersCount = 0
-    if cons then
-        pcall(function()
-            for _, r in ipairs(remotes) do
-                local c = CountConnections(r)
-                if c then handlersCount = handlersCount + c end
-            end
-        end)
+    for _, r in ipairs(remotes) do
+        local c = connectionInfo[r]
+        if c then handlersCount = handlersCount + c end
     end
 
     local summary = string.format(
-        "DUMP CONCLUÍDO\nJogo: %s (%s)\nExecutor: %s\n\nPasta: %s\n  • Scripts: %d (falhas: %d)\n  • Closures no heap: %d\n  • Closures extras: %d\n  • Remotes: %d (honeypots: %d)\n  • Handlers no cliente: %d",
+        "DUMP CONCLUÍDO\nJogo: %s (%s)\nExecutor: %s\n\nPasta: %s\n  • Scripts: %d (falhas: %d)\n  • Closures no heap: %d\n  • Closures extras: %d\n  • Remotes: %d (honeypots: %d)\n  • Handlers no cliente: %d%s",
         gameName, tostring(game.PlaceId), tostring(ExecutorName),
         root, written, failed,
         Stats.closures, Stats.extras,
-        #remotes, #honeypots, handlersCount)
+        #remotes, #honeypots, handlersCount,
+        HeavyModeActive and "\n\n⚠ MODO PESADO: limites reduzidos (jogo gigante)" or "")
 
     if SlenderHub.UI and SlenderHub.UI.SetResult then
         SlenderHub.UI.SetResult(summary)
