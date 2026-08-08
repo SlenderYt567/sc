@@ -1,30 +1,1560 @@
 --[[
-    SlenderHub | Animal Hospital — UPGRADE v4.5.0 (Addon)
-    ======================================================
-    Features novas descobertas na análise do Foxname Hub (27K views) + Overflow:
+    SlenderHub | Animal Hospital (Anomaly) — Script Premium
+    Versão: 4.5.1 (OP Edition: Check-In, Taser, Ask Leave, PutOutFire, Barney Coffee, Help Patient)
+    Upgrade 4.5.1: Auto Shutter, Fix Cam, Buy Shop, Treat v2, Anti-Anomaly, Queimado, Badge Órfã,
+    Anti-Stuck, Close Portal, Stamina Inf, Pickup, 3ª Pessoa, Server Hop (validado contra dump 104522435597696)
+]]
 
-    ✅ NOVAS:
-      • Auto Shutter (persianas)          — fecha persiana quando anomalia chega no check-in
-      • Auto Fix Cams                     — conserta câmeras quebradas (Cameras/Cameras2)
-      • Auto Buy Shop                     — compra itens médicos automaticamente (prioridade)
-      • Server Hop                        — troca de servidor no fim do turno / morte
-      • Auto Treat v2 (completo)          — ciclo médico: cama → item → entrega → cirurgia → queimado
-      • Detect Anomaly Check-In           — ABORTA check-in se o paciente for anomalia (anti-morte)
-      • Tratar Queimado                   — usa item Treat Burns no paciente em chamas
-      • Pega Badge Órfã                   — coleta badge impressa sem NPC no ciclo
-      • Anti-Stuck Prompts                — pula prompt preso após N tentativas
+-- =====================================
+-- CONFIG
+-- =====================================
+local Config = {
+    VerifyUrl   = "https://www.slenderhub.shop/api/exec",
+    AllowTrial  = true,
+    WalkSpeed   = 22,
+    SanityFloor = 100,
+    EspGood     = Color3.fromRGB(60, 255, 120),
+    EspDanger   = Color3.fromRGB(255, 60, 60),
+    EspTask     = Color3.fromRGB(250, 180, 60),
+    EspDoor     = Color3.fromRGB(60, 130, 250),
+    ScareGuis   = { "Jumpscare", "static", "DontLookUp", "EmergencyCounter" },
+    ToggleKey   = Enum.KeyCode.RightControl, -- Tecla para abrir/fechar a UI (RCTRL)
+}
 
-    Como integrar:
-      1) Copie este arquivo INTEIRO e cole NO FINAL do SlenderHub_AnimalHospital.lua,
-         ANTES do bloco "Boot Final" (linha ~1678) e DEPOIS dos helpers de UI.
-      2) Os trechos [UI - COLE NA ABA] adicionam os toggles/buttons nas abas existentes.
-      3) Rode o script normalmente.
+-- Notificação segura
+local SafeNotify = function(title, content, duration)
+    warn("[SlenderHub] " .. tostring(title) .. " — " .. tostring(content))
+end
 
-    Compatibilidade: usa apenas funções comuns a Synapse/Xeno/Solara/Delta/Fluxus.
---]]
+-- =====================================
+-- SERVICES
+-- =====================================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local CollectionService = game:GetService("CollectionService")
+local CoreGui = game:GetService("CoreGui")
+local TextService = game:GetService("TextService")
+
+local LocalPlayer = Players.LocalPlayer
+
+local function GetHumanoid()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+local function GetRoot()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+-- =====================================
+-- MATRIZ DE EXECUTORES
+-- =====================================
+local Env = getgenv and getgenv() or _G
+
+local function Fn2(tbl)
+    local ok, v = pcall(function() return tbl() end)
+    return ok and v or nil
+end
+
+local FirePromptFn = Fn2(function()
+    return type(fireproximityprompt) == "function" and fireproximityprompt or nil
+end)
+
+local function IdentifyExecutor()
+    local names = { "getexecutorname", "identifyexecutor", "get_identify" }
+    for _, n in ipairs(names) do
+        if type(Env[n]) == "function" then
+            local ok, name = pcall(Env[n])
+            if ok then return tostring(name) end
+        end
+    end
+    return "unknown"
+end
+
+-- =====================================
+-- HOOKS E EVENTOS (DECLARADOS ANTES DO LIB)
+-- =====================================
+local ServerEventHooks = {}
+local InjectHooks = {}
+
+local function OnServerEvents(events)
+    for name, handler in pairs(events or {}) do
+        if ServerEventHooks[name] then
+            for _, cb in ipairs(ServerEventHooks[name]) do
+                pcall(cb, handler, name)
+            end
+        end
+    end
+end
+
+local function OnInject(name, fn)
+    if name and InjectHooks[name] then
+        for _, cb in ipairs(InjectHooks[name]) do
+            pcall(cb, fn)
+        end
+    end
+end
+
+-- =====================================
+-- LIB INTEGRATION (ReplicatedStorage/Lib)
+-- =====================================
+local Lib = nil
+local LibReady = false
+local Data = nil
+
+do
+    local ok, lib = pcall(function()
+        return require(game:GetService("ReplicatedStorage"):WaitForChild("Lib", 10))
+    end)
+    if ok and lib then
+        Lib = lib
+        LibReady = true
+    end
+end
+
+if Lib then
+    pcall(function()
+        if Lib.Network and Lib.Network.BindEvents then
+            local old = Lib.Network.BindEvents
+            Lib.Network.BindEvents = function(self, events)
+                if type(events) == "table" then
+                    OnServerEvents(events)
+                end
+                return old(self, events)
+            end
+        end
+    end)
+    pcall(function()
+        if Lib.Inject then
+            local old = Lib.Inject
+            Lib.Inject = function(name, fn, ...)
+                OnInject(name, fn)
+                return old(name, fn, ...)
+            end
+        end
+    end)
+    pcall(function()
+        if Lib.dHandler and Lib.dHandler.UpdateData then
+            Lib.dHandler.UpdateData.Event:Connect(function()
+                Data = Lib.data
+            end)
+        end
+    end)
+    pcall(function()
+        if Lib.DS and Lib.DS.RequestData then
+            task.spawn(function()
+                local ok2, d = pcall(Lib.DS.RequestData)
+                if ok2 then Data = Lib.data or d end
+            end)
+        end
+    end)
+end
+
+-- Fire seguro por nome
+local function NetFire(name, ...)
+    local args = {...}
+    if Lib and Lib.Network and Lib.Network.FireServer then
+        local ok = pcall(function() Lib.Network:FireServer(name, unpack(args)) end)
+        if ok then return true end
+    end
+    pcall(function()
+        local util = game:GetService("ReplicatedStorage"):FindFirstChild("Util")
+        local net = util and util:FindFirstChild("Net")
+        local re = net and net:FindFirstChild("RE")
+        local gw = re and re:FindFirstChild("RequestRemoteEvent")
+        if gw and gw:IsA("RemoteEvent") then
+            gw:FireServer(name, unpack(args))
+        end
+    end)
+    return true
+end
+
+local function GetData()
+    if Lib and Lib.data then return Lib.data end
+    return Data
+end
+
+-- =====================================
+-- INF SANITY REAL
+-- =====================================
+local InfSanityOn = false
+local OrigPlayerLostSanity = Lib and Lib.PlayerLostSanity or nil
+
+local function SetInfSanity(enabled)
+    InfSanityOn = enabled
+    if not Lib then
+        SafeNotify("Lib", "Lib não encontrado — Inf Sanity indisponível", 4)
+        return
+    end
+    if enabled then
+        if not Lib.PlayerLostSanity then
+            SafeNotify("Lib", "PlayerLostSanity não existe no Lib", 4)
+            return
+        end
+        if not OrigPlayerLostSanity then OrigPlayerLostSanity = Lib.PlayerLostSanity end
+        -- Assinatura real (dump): Lib.PlayerLostSanity(amount, reason) — DOT call.
+        -- amount > 0 = perda, amount <= 0 = ganho (ex: -1 de StalkerStare "What...?").
+        -- Wrapper tolera também chamada como método (Lib:PlayerLostSanity(...)).
+        Lib.PlayerLostSanity = function(self, amount, reason)
+            local callSelf, amt, rs = self, amount, reason
+            if type(callSelf) == "number" then
+                -- chamado como dot: PlayerLostSanity(amount, reason) → self é o amount
+                amt, rs, callSelf = callSelf, amount, nil
+            end
+            if InfSanityOn and (not amt or amt > 0) then
+                return -- bloqueia perda (servidor nunca recebe)
+            end
+            if callSelf then
+                return OrigPlayerLostSanity(callSelf, amt, rs)
+            end
+            return OrigPlayerLostSanity(amt, rs)
+        end
+        task.spawn(function()
+            while InfSanityOn and task.wait(0.3) do
+                pcall(function()
+                    LocalPlayer:SetAttribute("Sanity", Config.SanityFloor)
+                    LocalPlayer:SetAttribute("SanityImpactMultiplier", 0)
+                end)
+            end
+        end)
+    else
+        if OrigPlayerLostSanity and Lib.PlayerLostSanity then
+            Lib.PlayerLostSanity = OrigPlayerLostSanity
+        end
+    end
+end
+
+-- =====================================
+-- AUTO HEARTBEAT
+-- =====================================
+local AutoHeartbeatOn = false
+
+do
+    ServerEventHooks["StartHeartbeatMinigame"] = {
+        function()
+            if AutoHeartbeatOn and Lib and Lib.HeartMinigameComplete then
+                task.defer(function()
+                    pcall(function() Lib.HeartMinigameComplete(true) end)
+                end)
+            end
+        end
+    }
+end
+
+local function SetAutoHeartbeat(enabled)
+    AutoHeartbeatOn = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while AutoHeartbeatOn and task.wait(0.25) do
+            pcall(function()
+                if not (Lib and Lib.HeartMinigameComplete) then return end
+                local ui = Lib.UI and Lib.UI.Get and Lib.UI.Get("HeartbeatMinigameUI")
+                if ui then
+                    local frame = ui:FindFirstChild("Frame")
+                    if frame and frame.Visible then
+                        Lib:HeartMinigameComplete(true)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- ANTI JUMPSCARE
+-- =====================================
+local AntiJumpscareOn = false
+
+do
+    local scareNames = {
+        "Jumpscare", "JumpscareHollow", "JumpscareShadow",
+        "JumpscareShadowWithEyesIMG", "JumpscareStalker",
+    }
+    local function IsScare(name)
+        for _, n in ipairs(scareNames) do
+            if name == n then return true end
+        end
+        return false
+    end
+
+    local function HookBindEventsForScares()
+        local lib = Lib
+        if not (lib and lib.Network and lib.Network.BindEvents) then return end
+        local old = lib.Network.BindEvents
+        lib.Network.BindEvents = function(self, events)
+            if type(events) == "table" and AntiJumpscareOn then
+                for name in pairs(events) do
+                    if IsScare(name) then
+                        events[name] = function() end
+                    end
+                end
+            end
+            OnServerEvents(events)
+            return old(self, events)
+        end
+    end
+    HookBindEventsForScares()
+end
+
+local function SetAntiJumpscare(enabled)
+    AntiJumpscareOn = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while AntiJumpscareOn and task.wait(0.3) do
+            pcall(function()
+                local pg = LocalPlayer:FindFirstChild("PlayerGui")
+                if pg then
+                    for _, guiName in ipairs(Config.ScareGuis) do
+                        local gui = pg:FindFirstChild(guiName)
+                        if gui and gui:IsA("ScreenGui") and gui.Enabled then
+                            gui.Enabled = false
+                        end
+                    end
+                end
+                for _, guiName in ipairs(Config.ScareGuis) do
+                    local gui = CoreGui:FindFirstChild(guiName)
+                    if gui and gui:IsA("ScreenGui") and gui.Enabled then
+                        gui.Enabled = false
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- ESP REAL
+-- =====================================
+local ESPOn = false
+
+local function ColorFor(model)
+    if model:HasTag("NPC") then return Config.EspGood end
+    if model:HasTag("Anomaly") or model:HasTag("StalkerMonster") or model:HasTag("TallMonsterSpawn")
+        or model:HasTag("Shadow") or model:HasTag("DontLookUp") then
+        return Config.EspDanger
+    end
+    if model:HasTag("Grime") or model:HasTag("EmergencyEventCounter") then return Config.EspTask end
+    if model:HasTag("Door") then return Config.EspDoor end
+    return nil
+end
+
+local function AddHighlight(m)
+    if m:FindFirstChildOfClass("Highlight") then return end
+    local color = ColorFor(m)
+    if not color then return end
+    local hl = Instance.new("Highlight")
+    hl.Name = "SlenderHubESP"
+    hl.FillColor = color
+    hl.FillTransparency = 0.6
+    hl.OutlineColor = color
+    hl.OutlineTransparency = 0
+    hl.Parent = m
+end
+
+local function SetESP(enabled)
+    ESPOn = enabled
+    if not enabled then
+        for _, hl in ipairs(workspace:GetDescendants()) do
+            if hl:IsA("Highlight") and hl.Name == "SlenderHubESP" then hl:Destroy() end
+        end
+        return
+    end
+    task.spawn(function()
+        while ESPOn and task.wait(0.5) do
+            pcall(function()
+                for _, m in ipairs(workspace:GetDescendants()) do
+                    if m:IsA("Model") and m.PrimaryPart then
+                        AddHighlight(m)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- AUTO INTERACT
+-- =====================================
+local AutoInteractOn = false
+
+local function FindPrompts()
+    local list = {}
+    for _, tag in ipairs({ "Inspect", "ShopItemPP" }) do
+        for _, inst in ipairs(CollectionService:GetTagged(tag)) do
+            if inst:IsA("ProximityPrompt") then
+                table.insert(list, inst)
+            else
+                for _, desc in ipairs(inst:GetDescendants()) do
+                    if desc:IsA("ProximityPrompt") then
+                        table.insert(list, desc)
+                    end
+                end
+            end
+        end
+    end
+    return list
+end
+
+local function SetAutoInteract(enabled)
+    AutoInteractOn = enabled
+    if not enabled then return end
+    if not FirePromptFn then
+        SafeNotify("Executor", "fireproximityprompt não disponível", 4)
+        return
+    end
+    task.spawn(function()
+        local last = {}
+        while AutoInteractOn and task.wait(0.8) do
+            pcall(function()
+                local root = GetRoot()
+                local now = os.clock()
+                for _, prompt in ipairs(FindPrompts()) do
+                    if not last[prompt] or now - last[prompt] > 6 then
+                        local parent = prompt.Parent
+                        local pos = parent and (parent:IsA("BasePart") and parent.Position
+                            or (parent.PrimaryPart and parent.PrimaryPart.Position)) or nil
+                        if root and pos and (root.Position - pos).Magnitude < 40 then
+                            FirePromptFn(prompt)
+                            last[prompt] = now
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- FARM ENGINE (estilo hubs OP: Auto Interact ALL + Slime/Fogo + Revive + Café)
+-- =====================================
+-- Mecânica real do jogo (dump):
+--   * Todo o fluxo de check-in/tratamento/diagnóstico é SERVER-SIDE via
+--     ProximityPrompts e ClickDetectors (sem remote dedicado). O farm é:
+--     varrer TODOS os prompts, teleportar perto e disparar (fireproximityprompt).
+--   * Slime (Grime, tag "Grime") e fogo (tag "OnFire"): o servidor spawna bolhas
+--     ("SprayingBubbles") quando o jogador USA o extintor; as bolhas ao tocar
+--     disparam FireServer("ExtinguisherBubbleHitGrime"/"ExtinguisherBubbleHit*")
+--     que paga cash. Teleportar ACIMA do hazard e ativar o extintor.
+--   * Reviver: tag "DeadPlayer" + FireServer("ReviveOther", player).
+--   * Sanidade: atributo do jogador "Sanity" (0-100); café recupera.
+local FarmOn = false
+local DiagnoseOn = false
+local AttendOn = false
+local ReviveOn = false
+local CoffeeOn = false
+local InstantPromptOn = false
+local FarmTargetPos = nil -- ESP/indicador do alvo atual (opcional)
+
+local function FindAllPrompts()
+    local list = {}
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("ProximityPrompt") then
+            table.insert(list, desc)
+        end
+    end
+    return list
+end
+
+local function PromptPos(prompt)
+    local p = prompt.Parent
+    if not p then return nil end
+    if p:IsA("BasePart") then return p.Position end
+    if p.PrimaryPart then return p.PrimaryPart.Position end
+    return nil
+end
+
+local function FirePrompt(prompt)
+    if FirePromptFn then
+        pcall(FirePromptFn, prompt)
+    else
+        -- Fallback: simula o input (métodos públicos do ProximityPrompt)
+        pcall(function() prompt:InputHoldBegin() end)
+        task.wait(0.15)
+        pcall(function() prompt:InputHoldEnd() end)
+    end
+end
+
+local function TeleportNear(pos, dist)
+    local root = GetRoot()
+    if not root or not pos then return end
+    local delta = pos - root.Position
+    local mag = delta.Magnitude
+    if mag < (dist or 6) then return end
+    root.CFrame = CFrame.new(root.Position + delta.Unit * (mag - (dist or 6)))
+end
+
+-- INSTANT PROMPTS: HoldDuration=0 + distância máxima em TODOS os PPs do mapa.
+-- Técnica universal dos hubs OP deste jogo (Patch Hub, 4479, etc.).
+local function ApplyInstantPrompt(prompt)
+    pcall(function()
+        prompt.HoldDuration = 0
+        prompt.MaxActivationDistance = math.max(prompt.MaxActivationDistance, 60)
+        prompt.RequiresLineOfSight = false
+        prompt.ClickablePrompt = true
+    end)
+end
+
+local function SetInstantPrompts(enabled)
+    InstantPromptOn = enabled
+    if not enabled then
+        SafeNotify("Instant Prompts", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while InstantPromptOn and task.wait(1) do
+            pcall(function()
+                for _, prompt in ipairs(FindAllPrompts()) do
+                    ApplyInstantPrompt(prompt)
+                end
+                -- também pega novos PPs que nascerem
+                for _, prompt in ipairs(workspace:GetDescendants()) do
+                    if prompt:IsA("ProximityPrompt") then ApplyInstantPrompt(prompt) end
+                end
+            end)
+        end
+    end)
+end
+
+-- Extintor: procura Tool no inventário/equipado (nome/atributo genérico)
+local function FindExtinguisher()
+    local function check(tool)
+        if not tool or not tool:IsA("Tool") then return false end
+        local n = string.lower(tool.Name)
+        if string.find(n, "extinguisher") or string.find(n, "extintor") then return true end
+        if tool:GetAttribute("FireExtinguisher") or tool:GetAttribute("IsFireExtinguisher") then return true end
+        return false
+    end
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if check(tool) then return tool end
+    end
+    local char = LocalPlayer.Character
+    if char then
+        for _, tool in ipairs(char:GetChildren()) do
+            if check(tool) then return tool end
+        end
+    end
+    return nil
+end
+
+local function FindHazards(tag)
+    local best, bestDist = nil, math.huge
+    local root = GetRoot()
+    for _, m in ipairs(CollectionService:GetTagged(tag)) do
+        local pos
+        if m:IsA("BasePart") then
+            pos = m.Position
+        elseif m:IsA("Model") and m.PrimaryPart then
+            pos = m.PrimaryPart.Position
+        end
+        if pos then
+            local d = root and (root.Position - pos).Magnitude or 0
+            if d < bestDist then best, bestDist = m, d end
+        end
+    end
+    return best
+end
+
+local function HazardPos(hazard)
+    if hazard:IsA("BasePart") then return hazard.Position end
+    if hazard:IsA("Model") and hazard.PrimaryPart then return hazard.PrimaryPart.Position end
+    return nil
+end
+
+local function UseExtinguisher(tool)
+    local hum = GetHumanoid()
+    if not hum or not tool then return end
+    pcall(function() hum:EquipTool(tool) end)
+    task.wait(0.15)
+    pcall(function() tool:Activate() end)
+end
+
+-- AUTO FARM: limpa slime (Grime) e apaga fogo (OnFire) teleportando ACIMA do hazard
+local function SetAutoFarm(enabled)
+    FarmOn = enabled
+    if not enabled then
+        SafeNotify("Auto Farm", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local warnedNoTool = false
+        while FarmOn and task.wait(1.2) do
+            pcall(function()
+                local tool = FindExtinguisher()
+                if not tool then
+                    if not warnedNoTool then
+                        SafeNotify("Auto Farm", "Extintor não encontrado no inventário", 4)
+                        warnedNoTool = true
+                    end
+                    return
+                end
+                warnedNoTool = false
+                local target = FindHazards("Grime") or FindHazards("OnFire")
+                if not target then return end
+                local pos = HazardPos(target)
+                if not pos then return end
+                FarmTargetPos = pos
+                -- Teleporta ACIMA (os hubs OP fazem isso: bolhas caem no alvo)
+                local root = GetRoot()
+                if root then
+                    local dest = CFrame.new(pos + Vector3.new(0, 6, 0))
+                    root.CFrame = dest
+                end
+                UseExtinguisher(tool)
+                task.wait(0.7)
+                UseExtinguisher(tool)
+            end)
+        end
+    end)
+end
+
+-- AUTO DIAGNOSE: dispara prompts de inspeção (tag Inspect)
+local function SetAutoDiagnose(enabled)
+    DiagnoseOn = enabled
+    if not enabled then
+        SafeNotify("Auto Diagnose", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local last = {}
+        while DiagnoseOn and task.wait(1.2) do
+            pcall(function()
+                local now = os.clock()
+                for _, prompt in ipairs(FindAllPrompts()) do
+                    if prompt:HasTag("Inspect") then
+                        local pos = PromptPos(prompt)
+                        if pos and (not last[prompt] or now - last[prompt] > 5) then
+                            TeleportNear(pos, 4)
+                            FirePrompt(prompt)
+                            last[prompt] = now
+                            task.wait(0.5)
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO ATENDIMENTO: dispara QUALQUER PP/ClickDetector do mapa (check-in,
+-- badges, máquinas, tratamento, pacientes). Técnica "Auto-Interact ALL"
+-- dos hubs OP: prioriza os mais próximos, teleporta e dispara.
+local function SetAutoAttend(enabled)
+    AttendOn = enabled
+    if not enabled then
+        SafeNotify("Auto Atendimento", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local last = {}
+        while AttendOn and task.wait(1.0) do
+            pcall(function()
+                local now = os.clock()
+                local root = GetRoot()
+                -- PPs ordenados por proximidade (mais próximo primeiro)
+                local prompts = FindAllPrompts()
+                local sorted = {}
+                for _, prompt in ipairs(prompts) do
+                    if prompt.Enabled and not prompt:HasTag("Inspect") then
+                        local pos = PromptPos(prompt)
+                        if pos then
+                            table.insert(sorted, { prompt = prompt, pos = pos,
+                                d = root and (root.Position - pos).Magnitude or math.huge })
+                        end
+                    end
+                end
+                table.sort(sorted, function(a, b) return a.d < b.d end)
+                for _, item in ipairs(sorted) do
+                    local prompt, pos = item.prompt, item.pos
+                    if not last[prompt] or now - last[prompt] > 4 then
+                        TeleportNear(pos, 3)
+                        FirePrompt(prompt)
+                        last[prompt] = now
+                        task.wait(0.35)
+                    end
+                end
+                -- ClickDetectors (algumas máquinas usam CD em vez de PP)
+                for _, cd in ipairs(workspace:GetDescendants()) do
+                    if cd:IsA("ClickDetector") and cd.Parent and cd.Parent:IsA("BasePart") then
+                        local pos = cd.Parent.Position
+                        if (not last[cd] or now - last[cd] > 4) then
+                            TeleportNear(pos, 3)
+                            pcall(function()
+                                if fireclickdetector then
+                                    fireclickdetector(cd)
+                                else
+                                    cd:Click()
+                                end
+                            end)
+                            last[cd] = now
+                            task.wait(0.35)
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO REVIVE: revive jogadores caídos (tag DeadPlayer)
+local function SetAutoRevive(enabled)
+    ReviveOn = enabled
+    if not enabled then
+        SafeNotify("Auto Revive", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local last = {}
+        while ReviveOn and task.wait(1.5) do
+            pcall(function()
+                local now = os.clock()
+                for _, p in ipairs(CollectionService:GetTagged("DeadPlayer")) do
+                    if p:IsA("Player") and p ~= LocalPlayer and (not last[p] or now - last[p] > 12) then
+                        last[p] = now
+                        NetFire("ReviveOther", p)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO CAFÉ: usa item de café quando a sanidade está baixa
+-- AUTO CAFÉ com teleporte para a máquina: se não há café no inventário,
+-- procura a máquina de café no mapa (nome contém coffee/café), teleporta e
+-- interage com o prompt dela para pegar um café.
+local function FindCoffeeMachine()
+    local root = GetRoot()
+    local best, bestD = nil, math.huge
+    for _, part in ipairs(workspace:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local n = string.lower(part.Name)
+            if string.find(n, "coffee") or string.find(n, "café") then
+                local d = root and (root.Position - part.Position).Magnitude or 0
+                if d < bestD then best, bestD = part, d end
+            end
+        end
+    end
+    return best
+end
+
+local function SetAutoCoffee(enabled)
+    CoffeeOn = enabled
+    if not enabled then
+        SafeNotify("Auto Café", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local warnedNoCoffee = false
+        while CoffeeOn and task.wait(2) do
+            pcall(function()
+                local sanity = LocalPlayer:GetAttribute("Sanity") or 100
+                if sanity > 60 then return end
+                -- 1) tenta café no inventário
+                for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        local n = string.lower(tool.Name)
+                        if string.find(n, "coffee") or string.find(n, "café") or string.find(n, "drink") then
+                            local hum = GetHumanoid()
+                            if hum then pcall(function() hum:EquipTool(tool) end) end
+                            task.wait(0.2)
+                            pcall(function() tool:Activate() end)
+                            warnedNoCoffee = false
+                            task.wait(4)
+                            return
+                        end
+                    end
+                end
+                -- 2) fallback: teleporta para a máquina e interage
+                local machine = FindCoffeeMachine()
+                if machine then
+                    TeleportNear(machine.Position, 3)
+                    task.wait(0.3)
+                    for _, prompt in ipairs(FindAllPrompts()) do
+                        if prompt.Parent == machine or (prompt.Parent and prompt.Parent:IsDescendantOf(machine)) then
+                            FirePrompt(prompt)
+                            break
+                        end
+                    end
+                    warnedNoCoffee = false
+                    task.wait(2)
+                    return
+                end
+                if not warnedNoCoffee then
+                    SafeNotify("Auto Café", "Nenhum café no inventário/máquina", 4)
+                    warnedNoCoffee = true
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO SHIFT LOOP: detecta o fim do turno (UI RoundStatsDetailed visível,
+-- evento DisplayRoundStats) e vota replay automaticamente = turnos infinitos.
+local ShiftLoopOn = false
+
+local function RoundStatsVisible()
+    pcall(function()
+        if not (Lib and Lib.UI and Lib.UI.Get) then return false end
+        local ui = Lib.UI.Get("RoundStatsDetailed")
+        return ui and ui.Visible == true
+    end)
+end
+
+local function SetAutoShiftLoop(enabled)
+    ShiftLoopOn = enabled
+    if not enabled then
+        SafeNotify("Auto Shift Loop", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local votedAt = 0
+        while ShiftLoopOn and task.wait(1.0) do
+            pcall(function()
+                if RoundStatsVisible() then
+                    local now = os.clock()
+                    if now - votedAt > 8 then
+                        votedAt = now
+                        NetFire("PlayAgainVote")
+                        SafeNotify("Auto Shift", "Voto em jogar novamente enviado", 3)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- HUD DE OBJETIVO: mostra o objetivo atual (UI Objective) em toast e
+-- (se ativo) teleporta até o alvo apontado pelo objetivo.
+local ObjHudOn = false
+local ObjTpOn = false
+
+local function GetObjectiveText()
+    pcall(function()
+        if not (Lib and Lib.UI and Lib.UI.Get) then return nil end
+        local ui = Lib.UI.Get("Objective")
+        if not ui then return nil end
+        local f = ui:FindFirstChild("Frame")
+        local t = f and f:FindFirstChild("objective")
+        return t and t.Text or nil
+    end)
+end
+
+local function SetObjHud(enabled)
+    ObjHudOn = enabled
+    if not enabled then
+        SafeNotify("HUD Objetivo", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local lastText = ""
+        while ObjHudOn and task.wait(1.5) do
+            pcall(function()
+                local txt = GetObjectiveText()
+                if txt and txt ~= lastText then
+                    lastText = txt
+                    SafeNotify("Objetivo", txt, 4)
+                end
+            end)
+        end
+    end)
+end
+
+local function SetObjTeleport(enabled)
+    ObjTpOn = enabled
+    if not enabled then
+        SafeNotify("TP Objetivo", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local lastTarget = nil
+        while ObjTpOn and task.wait(1.0) do
+            pcall(function()
+                -- alvo do ponteiro (SetPointerTarget) — procura o mais próximo
+                -- de uma instância marcada como objetivo pelo servidor
+                local root = GetRoot()
+                if not root then return end
+                local best, bestD = nil, 45
+                for _, part in ipairs(workspace:GetDescendants()) do
+                    if part:IsA("BasePart") and part:HasTag("ObjectiveTarget") then
+                        local d = (root.Position - part.Position).Magnitude
+                        if d < bestD then best, bestD = part, d end
+                    end
+                end
+                if best then
+                    TeleportNear(best.Position, 4)
+                    lastTarget = best
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO PACIENTES CAÍDOS: acha NPCs desmaiados (Humanoid.Health <= 0 que não
+-- são jogadores) e teleporta perto para o prompt de carregar aparecer/ser disparado.
+local CarryOn = false
+
+local function SetAutoCarry(enabled)
+    CarryOn = enabled
+    if not enabled then
+        SafeNotify("Auto Carregar", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while CarryOn and task.wait(1.5) do
+            pcall(function()
+                local root = GetRoot()
+                if not root then return end
+                local best, bestD = nil, math.huge
+                for _, model in ipairs(workspace:GetDescendants()) do
+                    if model:IsA("Model") and model ~= LocalPlayer.Character then
+                        local hum = model:FindFirstChildOfClass("Humanoid")
+                        if hum and hum.Health <= 0 and hum.MaxHealth > 0 then
+                            local prim = model.PrimaryPart
+                            if prim then
+                                local d = (root.Position - prim.Position).Magnitude
+                                if d < bestD then best, bestD = model, d end
+                            end
+                        end
+                    end
+                end
+                if best and best.PrimaryPart then
+                    FarmTargetPos = best.PrimaryPart.Position
+                    TeleportNear(best.PrimaryPart.Position, 4)
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- FEATURES OP (tags/prompts reais confirmadas via strings do Foxname Hub):
+--   * Auto Check-In: tags "VisitorAtCheckIn"/"VisitorAtCheckIn2", badges
+--     "PrintedBadge"/"PatientBadgeBase"/"VisitorBadgeBase", "CompletedCheckIn"
+--   * Auto Taser: tag "TaserStation", remote "RE/TaserFired", "FoxnameTasered"
+--   * Auto Ask Leave / Put Out Fire: prompts com ActionText "ask to leave"/"put out fire"
+--   * Auto Barney Coffee: "CoffeeMachine2" + NPC Barney ("AutoBarneyCoffee")
+--   * Auto Help Patient: prompt "help" (tag "AlwaysFaints")
+-- =====================================
+local CheckInOn = false
+local TaserOn = false
+local AskLeaveOn = false
+local PutOutFireOn = false
+local BarneyCoffeeOn = false
+local HelpPatientOn = false
+
+local function FindPromptByText(texts)
+    for _, prompt in ipairs(FindAllPrompts()) do
+        if prompt.Enabled then
+            local at = string.lower(prompt.ActionText or "")
+            for _, t in ipairs(texts) do
+                if string.find(at, t) then return prompt end
+            end
+        end
+    end
+    return nil
+end
+
+-- AUTO CHECK-IN: encontra o prompt de check-in do NPC na fila, dispara,
+-- espera a badge sair da impressora e pega. Tags confirmadas do jogo.
+local function SetAutoCheckIn(enabled)
+    CheckInOn = enabled
+    if not enabled then
+        SafeNotify("Auto Check-In", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while CheckInOn and task.wait(1.0) do
+            pcall(function()
+                -- 1) dispara prompt de check-in do visitante
+                local prompt = FindPromptByText({ "check", "check-in", "checkin", "register" })
+                if not prompt then
+                    -- fallback: tag VisitorAtCheckIn
+                    for _, tag in ipairs({ "VisitorAtCheckIn", "VisitorAtCheckIn2" }) do
+                        for _, inst in ipairs(CollectionService:GetTagged(tag)) do
+                            local pp = inst:FindFirstChildWhichIsA("ProximityPrompt")
+                                or inst:FindFirstChildOfClass("ProximityPrompt")
+                            if pp then prompt = pp break end
+                        end
+                        if prompt then break end
+                    end
+                end
+                if prompt then
+                    TeleportNear(PromptPos(prompt) or Vector3.new(), 3)
+                    FirePrompt(prompt)
+                    task.wait(0.4)
+                end
+                -- 2) pega a badge impressa
+                local badge = nil
+                for _, tag in ipairs({ "PrintedBadge", "PatientBadgeBase", "VisitorBadgeBase" }) do
+                    for _, inst in ipairs(CollectionService:GetTagged(tag)) do
+                        local pos = inst:IsA("BasePart") and inst.Position
+                            or (inst.PrimaryPart and inst.PrimaryPart.Position) or nil
+                        if pos then badge = { inst = inst, pos = pos } break end
+                    end
+                    if badge then break end
+                end
+                if badge then
+                    TeleportNear(badge.pos, 3)
+                    local pp = badge.inst:FindFirstChildWhichIsA("ProximityPrompt")
+                        or badge.inst:FindFirstChildOfClass("ProximityPrompt")
+                    if pp then FirePrompt(pp) end
+                    task.wait(0.3)
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO TASER: quando uma anomalia está ativa, procura a estação de taser,
+-- pega e dispara. Tags confirmadas: "TaserStation", remote "RE/TaserFired".
+local function SetAutoTaser(enabled)
+    TaserOn = enabled
+    if not enabled then
+        SafeNotify("Auto Taser", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local lastFire = 0
+        while TaserOn and task.wait(1.2) do
+            pcall(function()
+                local now = os.clock()
+                if now - lastFire < 8 then return end
+                -- procura a estação de taser
+                local station = nil
+                for _, inst in ipairs(CollectionService:GetTagged("TaserStation")) do
+                    local pos = inst:IsA("BasePart") and inst.Position
+                        or (inst.PrimaryPart and inst.PrimaryPart.Position) or nil
+                    if pos then station = { inst = inst, pos = pos } break end
+                end
+                if not station then return end
+                -- equipa o taser se estiver no inventário
+                local taser = nil
+                for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+                    if tool:IsA("Tool") and string.find(string.lower(tool.Name), "taser") then
+                        taser = tool break
+                    end
+                end
+                -- vai até a estação para pegar o taser
+                TeleportNear(station.pos, 4)
+                local pp = station.inst:FindFirstChildWhichIsA("ProximityPrompt")
+                    or station.inst:FindFirstChildOfClass("ProximityPrompt")
+                if pp then FirePrompt(pp) end
+                task.wait(0.5)
+                if taser then
+                    local hum = GetHumanoid()
+                    if hum then pcall(function() hum:EquipTool(taser) end) end
+                    task.wait(0.2)
+                    pcall(function() taser:Activate() end)
+                    lastFire = now
+                    NetFire("TaserFired")
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO ASK TO LEAVE: quando uma anomalia está com "ask to leave", dispara
+-- o prompt para ela sair (evita que o turno acabe).
+local function SetAutoAskLeave(enabled)
+    AskLeaveOn = enabled
+    if not enabled then
+        SafeNotify("Auto Ask Leave", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while AskLeaveOn and task.wait(1.0) do
+            pcall(function()
+                local prompt = FindPromptByText({ "ask to leave", "leave" })
+                if prompt then
+                    TeleportNear(PromptPos(prompt) or Vector3.new(), 3)
+                    FirePrompt(prompt)
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO PUT OUT FIRE: complementa o Auto Farm de fogo — dispara o prompt
+-- "put out fire" quando existe (algumas salas usam prompt em vez de extintor).
+local function SetAutoPutOutFire(enabled)
+    PutOutFireOn = enabled
+    if not enabled then
+        SafeNotify("Auto Apagar Fogo", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while PutOutFireOn and task.wait(1.0) do
+            pcall(function()
+                local prompt = FindPromptByText({ "put out fire", "extinguish", "extinguisher" })
+                if prompt then
+                    TeleportNear(PromptPos(prompt) or Vector3.new(), 3)
+                    FirePrompt(prompt)
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end)
+end
+
+-- AUTO BARNEY COFFEE: dá café para o Barney (NPC que sempre pede café).
+-- Tags confirmadas: "CoffeeMachine2", NPC "Barney".
+local function SetAutoBarneyCoffee(enabled)
+    BarneyCoffeeOn = enabled
+    if not enabled then
+        SafeNotify("Auto Café Barney", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while BarneyCoffeeOn and task.wait(2) do
+            pcall(function()
+                -- procura o Barney
+                local barney = nil
+                for _, npc in ipairs(workspace:GetDescendants()) do
+                    if npc:IsA("Model") and string.find(string.lower(npc.Name), "barney") then
+                        local prim = npc.PrimaryPart
+                        if prim then barney = { model = npc, pos = prim.Position } break end
+                    end
+                end
+                if not barney then return end
+                -- se o Barney precisa de café (café na mão dele)
+                local needs = false
+                for _, tag in ipairs({ "AutoBarneyCoffee", "NeedsCoffee", "Coffee" }) do
+                    if barney.model:HasTag(tag) then needs = true break end
+                end
+                if not needs then return end
+                -- pega café na máquina
+                local machine = workspace.Misc and workspace.Misc:FindFirstChild("CoffeeMachine2")
+                local pos = machine and (machine:IsA("BasePart") and machine.Position
+                    or (machine.PrimaryPart and machine.PrimaryPart.Position)) or nil
+                if pos then
+                    TeleportNear(pos, 3)
+                    local pp = machine:FindFirstChildWhichIsA("ProximityPrompt")
+                        or machine:FindFirstChildOfClass("ProximityPrompt")
+                    if pp then FirePrompt(pp) end
+                    task.wait(0.5)
+                end
+                -- entrega para o Barney
+                TeleportNear(barney.pos, 4)
+                local pp = barney.model:FindFirstChildWhichIsA("ProximityPrompt")
+                    or barney.model:FindFirstChildOfClass("ProximityPrompt")
+                if pp then FirePrompt(pp) end
+                task.wait(0.5)
+            end)
+        end
+    end)
+end
+
+-- AUTO HELP PATIENT: dispara prompts de ajuda de pacientes (tag "AlwaysFaints"
+-- ou ActionText "help").
+local function SetAutoHelpPatient(enabled)
+    HelpPatientOn = enabled
+    if not enabled then
+        SafeNotify("Auto Ajudar Paciente", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while HelpPatientOn and task.wait(1.2) do
+            pcall(function()
+                local prompt = FindPromptByText({ "help" })
+                if not prompt then
+                    for _, inst in ipairs(CollectionService:GetTagged("AlwaysFaints")) do
+                        local pp = inst:FindFirstChildWhichIsA("ProximityPrompt")
+                            or inst:FindFirstChildOfClass("ProximityPrompt")
+                        if pp then prompt = pp break end
+                    end
+                end
+                if prompt then
+                    TeleportNear(PromptPos(prompt) or Vector3.new(), 3)
+                    FirePrompt(prompt)
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================
+-- MOVEMENT
+-- =====================================
+local NoclipOn = false
+local FlyOn = false
+local NoclipConn = nil
+
+local function SetWalkSpeed(v)
+    local hum = GetHumanoid()
+    if hum then hum.WalkSpeed = v end
+end
+
+local function SetNoclip(enabled)
+    NoclipOn = enabled
+    if not enabled then
+        if NoclipConn then NoclipConn:Disconnect() NoclipConn = nil end
+        return
+    end
+    if NoclipConn then NoclipConn:Disconnect() end
+    NoclipConn = RunService.Stepped:Connect(function()
+        local hum = GetHumanoid()
+        if not hum then return end
+        hum:ChangeState(Enum.HumanoidStateType.Physics)
+        local root = GetRoot()
+        if root then root.Velocity = Vector3.new(0, 0, 0) end
+    end)
+end
+
+local function SetFly(enabled)
+    FlyOn = enabled
+    if not enabled then return end
+    task.spawn(function()
+        while FlyOn and task.wait() do
+            local hum = GetHumanoid()
+            local root = GetRoot()
+            if not hum or not root then break end
+            local vel = root.AssemblyLinearVelocity or Vector3.new(0, 0, 0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0, 60, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then vel = vel - Vector3.new(0, 60, 0) end
+            root.AssemblyLinearVelocity = Vector3.new(vel.X, vel.Y, vel.Z)
+        end
+    end)
+end
+
+-- =====================================
+-- MISC
+-- =====================================
+local function TeleportToLobby()
+    NetFire("TeleportToLobby")
+    SafeNotify("SlenderHub", "Teleportando para o lobby...", 2)
+end
+
+local function VotePlayAgain()
+    NetFire("PlayAgainVote")
+    SafeNotify("SlenderHub", "Voto em jogar novamente enviado", 2)
+end
+
+local function ShowStats()
+    local data = GetData()
+    if data and data.Stats then
+        SafeNotify("Dados", "Cash: $" .. tostring(data.Stats.LocalCash or 0)
+            .. " | Classe: " .. tostring(data.Stats.Class or "?"), 5)
+    else
+        SafeNotify("Dados", "Dados indisponíveis (jogo não sincronizou)", 4)
+    end
+end
+
+-- =====================================
+-- UI NATIVA (ScreenGui)
+-- =====================================
+local UiGui = Instance.new("ScreenGui")
+UiGui.Name = "SlenderHubAnimalHospital"
+UiGui.ResetOnSpawn = false
+UiGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Suporte a executores mobile e restrições de permissão no CoreGui:
+-- tenta parent no CoreGui; se o executor rejeitar (identity), usa gethui() e por fim PlayerGui
+local ParentContainer = nil
+if not pcall(function() UiGui.Parent = CoreGui end) then
+    local okH, hui = pcall(function()
+        if gethui then return gethui() end
+        return nil
+    end)
+    if okH and hui then
+        ParentContainer = hui
+    else
+        ParentContainer = LocalPlayer:WaitForChild("PlayerGui")
+    end
+    pcall(function() UiGui.Parent = ParentContainer end)
+end
+
+local ThemeUI = {
+    Bg      = Color3.fromRGB(18, 22, 32),
+    Panel   = Color3.fromRGB(24, 30, 44),
+    Card    = Color3.fromRGB(31, 38, 56),
+    Line    = Color3.fromRGB(45, 54, 80),
+    Text    = Color3.fromRGB(235, 240, 250),
+    Sub     = Color3.fromRGB(150, 160, 185),
+    Accent  = Color3.fromRGB(64, 190, 255),
+    Accent2 = Color3.fromRGB(38, 110, 190),
+    Good    = Color3.fromRGB(60, 255, 120),
+    Danger  = Color3.fromRGB(255, 70, 70),
+}
+
+local function Mk(className, props)
+    local inst = Instance.new(className)
+    for k, v in pairs(props) do inst[k] = v end
+    return inst
+end
+
+local function Corner(parent, r)
+    return Mk("UICorner", { Parent = parent, CornerRadius = UDim.new(0, r or 8) })
+end
+
+local function Stroke(parent, color, th)
+    return Mk("UIStroke", { Parent = parent, Color = color or ThemeUI.Line, Thickness = th or 1 })
+end
+
+-- Janela principal
+local Window = Mk("Frame", {
+    Name = "Window",
+    Parent = UiGui,
+    BackgroundColor3 = ThemeUI.Bg,
+    BorderSizePixel = 0,
+    Position = UDim2.fromOffset(40, 60),
+    Size = UDim2.fromOffset(560, 460),
+})
+Corner(Window, 12)
+Stroke(Window, ThemeUI.Line, 1.5)
+
+-- Dragging
+do
+    local dragging, dragStart, winStart
+    local function update(input)
+        local delta = input.Position - dragStart
+        Window.Position = UDim2.fromOffset(winStart.X + delta.X, winStart.Y + delta.Y)
+    end
+    Window.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            winStart = Window.AbsolutePosition
+        end
+    end)
+    Window.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            update(input)
+        end
+    end)
+    Window.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+end
+
+-- Atalho de teclado para abrir/fechar a UI (RCTRL)
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if not gpe and input.KeyCode == Config.ToggleKey then
+        UiGui.Enabled = not UiGui.Enabled
+    end
+end)
+
+-- Header
+local Header = Mk("Frame", { Name = "Header", Parent = Window, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 46) })
+Mk("TextLabel", {
+    Parent = Header, BackgroundTransparency = 1, Font = Enum.Font.GothamBold,
+    Text = "SlenderHub | Animal Hospital", TextColor3 = ThemeUI.Text, TextSize = 18,
+    Position = UDim2.fromOffset(16, 6), Size = UDim2.fromOffset(380, 26), TextXAlignment = Enum.TextXAlignment.Left,
+})
+Mk("TextLabel", {
+    Parent = Header, BackgroundTransparency = 1, Font = Enum.Font.Gotham,
+    Text = "By Slender (LIB " .. (LibReady and "OK" or "FAIL") .. ")", TextColor3 = ThemeUI.Sub, TextSize = 13,
+    Position = UDim2.fromOffset(16, 26), Size = UDim2.fromOffset(380, 18), TextXAlignment = Enum.TextXAlignment.Left,
+})
+
+-- Botão fechar
+local CloseBtn = Mk("TextButton", {
+    Parent = Header, BackgroundColor3 = Color3.fromRGB(40, 48, 70), Text = "X",
+    Font = Enum.Font.GothamBold, TextColor3 = ThemeUI.Text, TextSize = 16,
+    Position = UDim2.new(1, -40, 0, 8), Size = UDim2.fromOffset(30, 30),
+})
+Corner(CloseBtn, 8)
+CloseBtn.MouseButton1Click:Connect(function() UiGui.Enabled = false end)
+
+-- Abas
+local TabsBar = Mk("Frame", { Parent = Window, BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 58), Size = UDim2.fromOffset(150, 390) })
+
+local TabDefs = {
+    { Name = "Main",     Icon = "👤" },
+    { Name = "Sanidade", Icon = "❤️" },
+    { Name = "Auto",     Icon = "⚡" },
+    { Name = "Farm",     Icon = "🧹" },
+    { Name = "Visual",   Icon = "👁" },
+    { Name = "Movimento", Icon = "🎮" },
+    { Name = "Settings", Icon = "⚙️" },
+}
+
+local TabsContent = Mk("Frame", { Parent = Window, BackgroundColor3 = ThemeUI.Panel, Position = UDim2.fromOffset(170, 58), Size = UDim2.new(1, -182, 1, -70) })
+Corner(TabsContent, 10)
+Stroke(TabsContent, ThemeUI.Line, 1)
+
+local TabButtons = {}
+local TabPages = {}
+local CurrentTab = 1
+
+local function ShowTab(idx)
+    CurrentTab = idx
+    for i, btn in ipairs(TabButtons) do
+        local active = (i == idx)
+        TweenService:Create(btn, TweenInfo.new(0.15), { BackgroundColor3 = active and ThemeUI.Accent2 or ThemeUI.Card }):Play()
+        local lbl = btn:FindFirstChild("Label")
+        if lbl then lbl.TextColor3 = active and Color3.fromRGB(255,255,255) or ThemeUI.Sub end
+    end
+    for i, page in ipairs(TabPages) do page.Visible = (i == idx) end
+end
+
+for i, def in ipairs(TabDefs) do
+    local btn = Mk("TextButton", {
+        Parent = TabsBar, BackgroundColor3 = ThemeUI.Card, Text = "",
+        Position = UDim2.fromOffset(0, (i-1) * 50), Size = UDim2.fromOffset(150, 44),
+        ZIndex = 2,
+    })
+    Corner(btn, 8)
+    Stroke(btn, ThemeUI.Line, 1)
+    Mk("TextLabel", {
+        Parent = btn, Name = "Icon", BackgroundTransparency = 1, Font = Enum.Font.Gotham,
+        Text = def.Icon, TextColor3 = ThemeUI.Text, TextSize = 16,
+        Position = UDim2.fromOffset(8, 3), Size = UDim2.fromOffset(28, 28),
+    })
+    Mk("TextLabel", {
+        Parent = btn, Name = "Label", BackgroundTransparency = 1, Font = Enum.Font.GothamBold,
+        Text = def.Name, TextColor3 = ThemeUI.Sub, TextSize = 14,
+        Position = UDim2.fromOffset(40, 0), Size = UDim2.fromOffset(104, 44),
+        TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    btn.MouseButton1Click:Connect(function() ShowTab(i) end)
+    TabButtons[i] = btn
+
+    local page = Mk("ScrollingFrame", {
+        Parent = TabsContent, BackgroundTransparency = 1, Visible = false,
+        Position = UDim2.fromOffset(10, 10), Size = UDim2.new(1, -20, 1, -20),
+        CanvasSize = UDim2.new(0, 0, 2, 0), ScrollBarThickness = 4,
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    })
+    TabPages[i] = page
+end
+
+-- Layout Helpers
+local PageCursor = {}
+local function NextY(page, h)
+    local y = PageCursor[page] or 0
+    PageCursor[page] = y + h
+    return y
+end
+
+local function Section(page, title)
+    local y = NextY(page, 34)
+    Mk("TextLabel", {
+        Parent = page, BackgroundTransparency = 1, Font = Enum.Font.GothamBold,
+        Text = title, TextColor3 = ThemeUI.Accent, TextSize = 14,
+        Position = UDim2.fromOffset(6, y), Size = UDim2.fromOffset(320, 24),
+        TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    local line = Mk("Frame", { Parent = page, BackgroundColor3 = ThemeUI.Line, Position = UDim2.fromOffset(6, y + 26), Size = UDim2.new(1, -12, 0, 1) })
+    return line
+end
+
+local function Spacer(page, h)
+    NextY(page, h or 8)
+end
+
+local function Toggle(page, title, desc, default, cb)
+    local y = NextY(page, 58)
+    local card = Mk("Frame", { Parent = page, BackgroundColor3 = ThemeUI.Card, Position = UDim2.fromOffset(0, y), Size = UDim2.new(1, 0, 0, 52) })
+    Corner(card, 8)
+    Stroke(card, ThemeUI.Line, 1)
+    Mk("TextLabel", {
+        Parent = card, BackgroundTransparency = 1, Font = Enum.Font.Gotham,
+        Text = title, TextColor3 = ThemeUI.Text, TextSize = 14,
+        Position = UDim2.fromOffset(12, 5), Size = UDim2.fromOffset(300, 20), TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    if desc and #desc > 0 then
+        Mk("TextLabel", {
+            Parent = card, BackgroundTransparency = 1, Font = Enum.Font.Gotham,
+            Text = desc, TextColor3 = ThemeUI.Sub, TextSize = 11,
+            Position = UDim2.fromOffset(12, 25), Size = UDim2.fromOffset(300, 18), TextXAlignment = Enum.TextXAlignment.Left,
+        })
+    end
+    local knob = Mk("Frame", {
+        Parent = card, Name = "Knob", BackgroundColor3 = default and ThemeUI.Accent or ThemeUI.Line,
+        Position = UDim2.new(1, -42, 0, 11), Size = UDim2.fromOffset(30, 30),
+    })
+    Corner(knob, 15)
+    local dot = Mk("Frame", { Parent = knob, Name = "Dot", BackgroundColor3 = Color3.fromRGB(255,255,255), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.fromOffset(12, 12) })
+    Corner(dot, 6)
+    local state = default or false
+    local function refresh()
+        TweenService:Create(knob, TweenInfo.new(0.15), { BackgroundColor3 = state and ThemeUI.Accent or ThemeUI.Line }):Play()
+        dot.Visible = state
+    end
+    refresh()
+    local btn = Mk("TextButton", { Parent = card, BackgroundTransparency = 1, Text = "", Size = UDim2.new(1, 0, 1, 0) })
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        refresh()
+        pcall(cb, state)
+    end)
+    return {
+        Set = function(v) state = v; refresh(); pcall(cb, v) end,
+        Get = function() return state end,
+    }
+end
+
+local function Button(page, title, cb)
+    local y = NextY(page, 46)
+    local btn = Mk("TextButton", {
+        Parent = page, BackgroundColor3 = ThemeUI.Accent2, Text = title,
+        Font = Enum.Font.GothamBold, TextColor3 = Color3.fromRGB(255,255,255), TextSize = 14,
+        Position = UDim2.fromOffset(0, y), Size = UDim2.new(1, 0, 0, 40),
+    })
+    Corner(btn, 8)
+    Stroke(btn, ThemeUI.Line, 1)
+    btn.MouseButton1Click:Connect(function() pcall(cb) end)
+    return btn
+end
+
+local function Slider(page, title, min, max, def, cb)
+    local y = NextY(page, 70)
+    local card = Mk("Frame", { Parent = page, BackgroundColor3 = ThemeUI.Card, Position = UDim2.fromOffset(0, y), Size = UDim2.new(1, 0, 0, 64) })
+    Corner(card, 8)
+    Stroke(card, ThemeUI.Line, 1)
+    Mk("TextLabel", {
+        Parent = card, BackgroundTransparency = 1, Font = Enum.Font.Gotham,
+        Text = title, TextColor3 = ThemeUI.Text, TextSize = 14,
+        Position = UDim2.fromOffset(12, 5), Size = UDim2.fromOffset(240, 20), TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    local valLbl = Mk("TextLabel", {
+        Parent = card, BackgroundTransparency = 1, Font = Enum.Font.GothamBold,
+        Text = tostring(def), TextColor3 = ThemeUI.Accent, TextSize = 14,
+        Position = UDim2.new(1, -60, 0, 5), Size = UDim2.fromOffset(50, 20), TextXAlignment = Enum.TextXAlignment.Right,
+    })
+    local bar = Mk("Frame", { Parent = card, BackgroundColor3 = ThemeUI.Line, Position = UDim2.fromOffset(12, 34), Size = UDim2.new(1, -24, 0, 6) })
+    Corner(bar, 3)
+    local fill = Mk("Frame", { Parent = bar, Name = "Fill", BackgroundColor3 = ThemeUI.Accent, Size = UDim2.new((def-min)/(max-min), 0, 1, 0) })
+    Corner(fill, 3)
+    local value = def
+    local function setFrom(input)
+        local localX = math.clamp(input.Position.X - bar.AbsolutePosition.X, 0, bar.AbsoluteSize.X)
+        value = min + (max - min) * (localX / math.max(bar.AbsoluteSize.X, 1))
+        value = math.floor(value * 10 + 0.5) / 10
+        fill.Size = UDim2.new((value-min)/(max-min), 0, 1, 0)
+        valLbl.Text = tostring(value)
+        pcall(cb, value)
+    end
+    local dragBtn = Mk("TextButton", { Parent = bar, BackgroundTransparency = 1, Text = "", Size = UDim2.new(1, 0, 1, 0) })
+    dragBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            setFrom(input)
+        end
+    end)
+    dragBtn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            setFrom(input)
+        end
+    end)
+    return {
+        Set = function(v) value = v; fill.Size = UDim2.new((value-min)/(max-min), 0, 1, 0); valLbl.Text = tostring(v); pcall(cb, v) end,
+        Get = function() return value end,
+    }
+end
 
 -- ============================================================
--- UPGRADE 4.5.0 — NOVAS FEATURES (dados reais do Foxname Hub)
+-- UPGRADE v4.5.1 — FEATURES (7 hubs: Foxname/Vexus/Cyraa/HexHubX/MiniHub/Overflow/OP Gui)
+-- Validado contra dump do jogo (remotes.txt + scripts_rodando)
 -- ============================================================
 
 -- ============================================================
@@ -34,7 +1564,7 @@ local ShutterOn = false
 local ShutterClosed = false
 
 local function FindShutterButton()
-    -- tags/strings reais do jogo: "ShutterButton", "DesignatedRoom", "Room6"
+    -- tag real (Foxname): "ShutterButton"
     local best, bestD = nil, math.huge
     local root = GetRoot()
     for _, inst in ipairs(workspace:GetDescendants()) do
@@ -47,15 +1577,12 @@ local function FindShutterButton()
 end
 
 local function ThreatNearCheckIn()
-    -- anomalia (tags reais) perto do check-in = perigo
+    -- tags REAIS de anomalia/monstros confirmadas no dump:
+    -- GhostAnomaly (CameraSystem), StalkerMonster (StalkerStare), TallMonsterSpawn,
+    -- Shadow (Jumpscares), DontLookUp, Anomaly (ESP)
     local root = GetRoot()
     if not root then return false end
-    for _, inst in ipairs(CollectionService:GetTagged("Anomaly")) do
-        local pos = inst:IsA("BasePart") and inst.Position
-            or (inst.PrimaryPart and inst.PrimaryPart.Position) or nil
-        if pos and (root.Position - pos).Magnitude < 40 then return true end
-    end
-    for _, tag in ipairs({ "Skinwalker", "StalkerMonster", "Fake" }) do
+    for _, tag in ipairs({ "Anomaly", "GhostAnomaly", "Skinwalker", "StalkerMonster", "TallMonsterSpawn", "Shadow", "DontLookUp", "Fake" }) do
         for _, inst in ipairs(CollectionService:GetTagged(tag)) do
             local pos = inst:IsA("BasePart") and inst.Position
                 or (inst.PrimaryPart and inst.PrimaryPart.Position) or nil
@@ -112,17 +1639,18 @@ local function SetAutoShutter(enabled)
 end
 
 -- ============================================================
--- AUTO FIX CAMS: conserta câmeras quebradas ("Cameras"/"Cameras2")
+-- AUTO FIX CAMS: conserta câmeras quebradas
+-- Tags REAIS do dump (CameraSystem.lua): "SecurityCamera" + "BrokenCam"
 -- ============================================================
 local FixCamOn = false
 
 local function FindBrokenCamera()
-    for _, tag in ipairs({ "Cameras", "Cameras2" }) do
+    for _, tag in ipairs({ "BrokenCam", "SecurityCamera" }) do
         for _, inst in ipairs(CollectionService:GetTagged(tag)) do
             if inst:IsA("Model") or inst:IsA("BasePart") then return inst end
         end
     end
-    -- fallback: nome contém camera + prompt de conserto
+    -- fallback: parte com nome camera + prompt de conserto
     for _, desc in ipairs(workspace:GetDescendants()) do
         if desc:IsA("BasePart") and string.find(string.lower(desc.Name), "camera") then
             local pp = desc:FindFirstChildWhichIsA("ProximityPrompt")
@@ -160,6 +1688,7 @@ end
 
 -- ============================================================
 -- AUTO BUY SHOP: compra itens médicos por prioridade
+-- Tag REAL confirmada (PlayerUpgradeShopLocal): "ShopItemPP" (+ ItemInfo.UI)
 -- ============================================================
 local BuyShopOn = false
 local ShopPriority = { "Medkit", "Bandages", "Medicine", "Antibiotics", "Eye Drops", "Thermo" }
@@ -183,14 +1712,12 @@ local function SetAutoBuyShop(enabled)
             pcall(function()
                 local now = os.clock()
                 local cash = GetLocalCash()
-                -- varre itens da loja (tag ShopItemPP — real do jogo)
                 for _, inst in ipairs(CollectionService:GetTagged("ShopItemPP")) do
                     if inst:IsA("ProximityPrompt") or inst:FindFirstChildWhichIsA("ProximityPrompt") then
                         local pp = inst:IsA("ProximityPrompt") and inst or inst:FindFirstChildWhichIsA("ProximityPrompt")
                         local parent = pp.Parent
                         local pos = parent and (parent:IsA("BasePart") and parent.Position
                             or (parent.PrimaryPart and parent.PrimaryPart.Position)) or nil
-                        -- prioridade por nome
                         local name = string.lower(parent and parent.Name or "")
                         local prio = 999
                         for i, item in ipairs(ShopPriority) do
@@ -218,7 +1745,6 @@ local function HopServer()
         local TeleportService = game:GetService("TeleportService")
         local placeId = game.PlaceId
         local jobId = game.JobId
-        -- teleporta para o MESMO lugar (novo servidor)
         TeleportService:TeleportToPlaceInstance(placeId, jobId)
     end)
 end
@@ -230,14 +1756,13 @@ end
 
 -- ============================================================
 -- DETECT ANOMALY CHECK-IN: aborta check-in se paciente for anomalia
--- (strings reais do Foxname: "Aborting check-in because patient is an anomaly",
---  "Skipping anomaly talk", tags: Skinwalker/StalkerMonster/Fake/Anomaly)
+-- Tags REAIS do dump: GhostAnomaly/StalkerMonster/TallMonsterSpawn/Shadow/DontLookUp
 -- ============================================================
 local DetectAnomalyOn = false
 
 local function IsAnomalyModel(model)
     if not model then return false end
-    for _, tag in ipairs({ "Anomaly", "Skinwalker", "StalkerMonster", "Fake" }) do
+    for _, tag in ipairs({ "Anomaly", "GhostAnomaly", "Skinwalker", "StalkerMonster", "TallMonsterSpawn", "Shadow", "DontLookUp", "Fake" }) do
         if model:HasTag(tag) then return true end
     end
     -- fallback: nome contém anomalia/skin/strange
@@ -256,56 +1781,6 @@ end
 local function SetDetectAnomaly(enabled)
     DetectAnomalyOn = enabled
     if not enabled then return end
-    -- hook: intercepta FirePrompt de check-in e aborta se for anomalia
-    local origFire = FirePrompt
-    if not origFire then return end
-    local hooked = false
-    FirePrompt = function(prompt, ...)
-        if DetectAnomalyOn and prompt and IsCheckInPrompt(prompt) then
-            local model = prompt.Parent
-            -- sobe a hierarquia até o Model do NPC
-            local up = model
-            while up and not up:IsA("Model") do up = up.Parent end
-            -- verifica o modelo e filhos imediatos
-            local target = up or model
-            local danger = IsAnomalyModel(target)
-            if not danger and target then
-                for _, child in ipairs(target:GetChildren()) do
-                    if IsAnomalyModel(child) then danger = true break end
-                end
-            end
-            -- verifica também qualquer anomalia DENTRO de 10 studs do prompt
-            if not danger then
-                local pos = PromptPos(prompt)
-                if pos then
-                    for _, tag in ipairs({ "Anomaly", "Skinwalker", "StalkerMonster", "Fake" }) do
-                        for _, inst in ipairs(CollectionService:GetTagged(tag)) do
-                            local ipos = inst:IsA("BasePart") and inst.Position
-                                or (inst.PrimaryPart and inst.PrimaryPart.Position) or nil
-                            if ipos and (pos - ipos).Magnitude < 10 then danger = true break end
-                        end
-                        if danger then break end
-                    end
-                end
-            end
-            if danger then
-                SafeNotify("Anti-Anomaly", "Check-in ABORTADO (paciente é anomalia!)", 5)
-                task.wait(3) -- espera o ciclo do Foxname "skip anomaly talk"
-                return
-            end
-        end
-        return origFire(prompt, ...)
-    end
-    hooked = true
-    task.spawn(function()
-        while DetectAnomalyOn and task.wait(0.5) do
-            if not hooked then break end
-        end
-        -- quando desligar, restaura
-        if not DetectAnomalyOn and hooked then
-            FirePrompt = origFire
-        end
-    end)
     SafeNotify("Anti-Anomaly", "Detecção de anomalia no check-in ativada", 2)
 end
 
@@ -316,7 +1791,6 @@ local TreatV2On = false
 local TreatItems = { "Medicine", "Medkit", "Bandages", "Antibiotics", "Ointment", "Cough Syrup", "Eye Drops", "Herbs", "Maple Syrup", "IV Drops" }
 
 local function FindPatientBed()
-    -- camas com paciente (InBed) ou prompts de cama ("Pressing bed prompt")
     local root = GetRoot()
     local best, bestD = nil, math.huge
     for _, tag in ipairs({ "InBed", "Patient" }) do
@@ -363,12 +1837,10 @@ local function SetAutoTreatV2(enabled)
         while TreatV2On and task.wait(1.5) do
             pcall(function()
                 local now = os.clock()
-                -- 1) acha cama/paciente
                 local bed = FindPatientBed()
                 if not bed then return end
                 local pos = PromptPos(bed) or (bed.PrimaryPart and bed.PrimaryPart.Position) or nil
                 if not pos then return end
-                -- 2) teleporta e dispara prompt da cama
                 if not last[bed] or now - last[bed] > 8 then
                     TeleportNear(pos, 3)
                     local pp = bed:IsA("ProximityPrompt") and bed or bed:FindFirstChildWhichIsA("ProximityPrompt")
@@ -376,7 +1848,6 @@ local function SetAutoTreatV2(enabled)
                     last[bed] = now
                     task.wait(0.5)
                 end
-                -- 3) equipa/usa item médico no paciente
                 local tool = FindMedItem()
                 if tool then
                     local hum = GetHumanoid()
@@ -390,14 +1861,21 @@ local function SetAutoTreatV2(enabled)
 end
 
 -- ============================================================
--- TRATAR QUEIMADO: usa item Treat Burns em paciente em chamas
+-- TRATAR QUEIMADO: usa item em paciente em chamas
+-- Tag REAL confirmada (VisualEffects): "OnFire" (parte) / "NPC"+"OnFire"
 -- ============================================================
 local TreatBurnOn = false
 
 local function FindBurningPatient()
-    for _, tag in ipairs({ "Burning", "OnFire", "Burnt" }) do
+    for _, tag in ipairs({ "OnFire", "Burning", "Burnt" }) do
         for _, inst in ipairs(CollectionService:GetTagged(tag)) do
             if inst:IsA("Model") and inst.PrimaryPart then return inst end
+            -- partes em chamas dentro de NPC: sobe para o Model
+            if inst:IsA("BasePart") then
+                local up = inst.Parent
+                while up and not up:IsA("Model") do up = up.Parent end
+                if up and up.PrimaryPart then return up end
+            end
         end
     end
     -- fallback: paciente com fire parts
@@ -425,7 +1903,6 @@ local function SetAutoTreatBurns(enabled)
                 if not patient or not patient.PrimaryPart then return end
                 local now = os.clock()
                 if last[patient] and now - last[patient] < 8 then return end
-                -- procura item Treat Burns / Ointment / Bandages
                 local tool = nil
                 for _, name in ipairs({ "Treat Burns", "Ointment", "Bandages" }) do
                     for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
@@ -436,7 +1913,6 @@ local function SetAutoTreatBurns(enabled)
                     if tool then break end
                 end
                 if not tool then return end
-                -- teleporta e aplica
                 TeleportNear(patient.PrimaryPart.Position, 3)
                 local hum = GetHumanoid()
                 if hum then pcall(function() hum:EquipTool(tool) end) end
@@ -495,9 +1971,211 @@ local function SetAntiStuck(enabled)
         SafeNotify("Anti-Stuck", "Desativado", 2)
         return
     end
-    -- hook: envolve FirePrompt para contar tentativas
-    local oldFirePrompt = FirePrompt
+    SafeNotify("Anti-Stuck", "Ativado (limite: " .. StuckLimit .. " tentativas)", 2)
+end
+
+-- ============================================================
+-- [4.5.1] AUTO CLOSE PORTAL: fecha portal aberto por anomalia
+-- (Vexus Hub: "Auto Close Portal")
+-- ============================================================
+local ClosePortalOn = false
+
+local function FindPortal()
+    for _, tag in ipairs({ "Portal", "OpenPortal", "DeathRitual" }) do
+        for _, inst in ipairs(CollectionService:GetTagged(tag)) do
+            if inst:IsA("BasePart") or (inst:IsA("Model") and inst.PrimaryPart) then return inst end
+        end
+    end
+    -- fallback: parte com nome portal
+    for _, part in ipairs(workspace:GetDescendants()) do
+        if part:IsA("BasePart") and string.find(string.lower(part.Name), "portal") then return part end
+    end
+    return nil
+end
+
+local function SetAutoClosePortal(enabled)
+    ClosePortalOn = enabled
+    if not enabled then
+        SafeNotify("Auto Portal", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local last = {}
+        while ClosePortalOn and task.wait(1.0) do
+            pcall(function()
+                local portal = FindPortal()
+                if not portal then return end
+                local pos = portal:IsA("BasePart") and portal.Position
+                    or (portal.PrimaryPart and portal.PrimaryPart.Position) or nil
+                if not pos then return end
+                local now = os.clock()
+                if last[portal] and now - last[portal] < 6 then return end
+                local pp = portal:FindFirstChildWhichIsA("ProximityPrompt")
+                    or portal:FindFirstChildOfClass("ProximityPrompt")
+                if pp then
+                    TeleportNear(pos, 3)
+                    FirePrompt(pp)
+                    last[portal] = now
+                    SafeNotify("Portal", "Fechando portal da anomalia!", 3)
+                end
+            end)
+        end
+    end)
+end
+
+-- ============================================================
+-- [4.5.1] INFINITE STAMINA: trava a stamina do personagem no máx
+-- (Vexus Hub: "Infinite Stamina")
+-- ============================================================
+local InfStaminaOn = false
+
+local function SetInfStamina(enabled)
+    InfStaminaOn = enabled
+    if not enabled then
+        SafeNotify("Stamina Infinita", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        while InfStaminaOn and task.wait(0.5) do
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char then
+                    char:SetAttribute("Stamina", 100)
+                    char:SetAttribute("StaminaValue", 100)
+                    LocalPlayer:SetAttribute("Stamina", 100)
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                    end
+                    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+                    if pg then
+                        local bar = pg:FindFirstChild("StaminaBar", true)
+                        if bar and bar:IsA("Frame") then bar.Size = UDim2.fromScale(1, 1) end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- ============================================================
+-- [4.5.1] AUTO PICKUP ITENS: coleta itens dropados no chão
+-- (Cyraa Hub: "Item Pickup")
+-- ============================================================
+local PickupOn = false
+
+local function SetAutoPickup(enabled)
+    PickupOn = enabled
+    if not enabled then
+        SafeNotify("Auto Pickup", "Desativado", 2)
+        return
+    end
+    task.spawn(function()
+        local last = {}
+        while PickupOn and task.wait(1.2) do
+            pcall(function()
+                local now = os.clock()
+                for _, tag in ipairs({ "ItemInfo", "Pickup", "DroppedItem" }) do
+                    for _, inst in ipairs(CollectionService:GetTagged(tag)) do
+                        local pos = inst:IsA("BasePart") and inst.Position
+                            or (inst.PrimaryPart and inst.PrimaryPart.Position) or nil
+                        if pos and (not last[inst] or now - last[inst] > 8) then
+                            TeleportNear(pos, 3)
+                            local pp = inst:FindFirstChildWhichIsA("ProximityPrompt")
+                                or inst:FindFirstChildOfClass("ProximityPrompt")
+                            if pp then
+                                FirePrompt(pp)
+                                last[inst] = now
+                                break
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- ============================================================
+-- [4.5.1] 3RD PERSON: destrava a câmera (o jogo força 1ª pessoa)
+-- Correção dump: Client.lua seta CameraMaxZoomDistance=20; o ZoomController
+-- lê CameraMin/MaxZoomDistance do LocalPlayer → aumentar o max destrava o zoom
+-- ============================================================
+local ThirdPersonOn = false
+
+local function SetThirdPerson(enabled)
+    ThirdPersonOn = enabled
+    if not enabled then
+        pcall(function()
+            LocalPlayer.CameraMaxZoomDistance = 20
+            LocalPlayer.CameraMinZoomDistance = 0.5
+            game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
+        end)
+        SafeNotify("3ª Pessoa", "Desativado", 2)
+        return
+    end
+    pcall(function()
+        LocalPlayer.CameraMaxZoomDistance = 500
+        LocalPlayer.CameraMinZoomDistance = 0.5
+    end)
+    task.spawn(function()
+        while ThirdPersonOn and task.wait(0.3) do
+            pcall(function()
+                local cam = workspace.CurrentCamera
+                local char = LocalPlayer.Character
+                if cam and char then
+                    cam.CameraType = Enum.CameraType.Custom
+                    cam.CameraSubject = char:FindFirstChild("Humanoid")
+                    cam.FieldOfView = 90
+                end
+                local UIS = game:GetService("UserInputService")
+                if UIS.MouseBehavior == Enum.MouseBehavior.LockCenter then
+                    UIS.MouseBehavior = Enum.MouseBehavior.Default
+                end
+            end)
+        end
+    end)
+end
+
+-- ============================================================
+-- HOOK CENTRAL FirePrompt (upgrade 4.5.1)
+-- Um único hook encadeia DetectAnomaly + AntiStuck sem conflito
+-- ============================================================
+do
+    local BaseFirePrompt = FirePrompt
     FirePrompt = function(prompt, ...)
+        -- Detect Anomaly Check-In (aborta check-in se for anomalia)
+        if DetectAnomalyOn and prompt and IsCheckInPrompt(prompt) then
+            local model = prompt.Parent
+            local up = model
+            while up and not up:IsA("Model") do up = up.Parent end
+            local target = up or model
+            local danger = IsAnomalyModel(target)
+            if not danger and target then
+                for _, child in ipairs(target:GetChildren()) do
+                    if IsAnomalyModel(child) then danger = true break end
+                end
+            end
+            if not danger then
+                local pos = PromptPos(prompt)
+                if pos then
+                    for _, tag in ipairs({ "Anomaly", "GhostAnomaly", "Skinwalker", "StalkerMonster", "TallMonsterSpawn", "Shadow", "DontLookUp", "Fake" }) do
+                        for _, inst in ipairs(CollectionService:GetTagged(tag)) do
+                            local ipos = inst:IsA("BasePart") and inst.Position
+                                or (inst.PrimaryPart and inst.PrimaryPart.Position) or nil
+                            if ipos and (pos - ipos).Magnitude < 10 then danger = true break end
+                        end
+                        if danger then break end
+                    end
+                end
+            end
+            if danger then
+                SafeNotify("Anti-Anomaly", "Check-in ABORTADO (paciente é anomalia!)", 5)
+                task.wait(3)
+                return
+            end
+        end
+        -- Anti-Stuck (pula prompt preso após N tentativas)
         if AntiStuckOn and prompt then
             PromptTries[prompt] = (PromptTries[prompt] or 0) + 1
             if PromptTries[prompt] >= StuckLimit then
@@ -507,34 +2185,163 @@ local function SetAntiStuck(enabled)
                 return
             end
         end
-        return oldFirePrompt(prompt, ...)
+        return BaseFirePrompt(prompt, ...)
     end
 end
 
--- ============================================================
--- [UI - COLE NA ABA "FARM" ANTES DA SECTION "Geral"]
--- ============================================================
--- Section(P[4], "Upgrade 4.5 (Foxname)")  Spacer(P[4], 26)
--- Toggle(P[4], "Auto Shutter", "Fecha persiana se anomalia no check-in", false, SetAutoShutter)
--- Spacer(P[4], 6)
--- Toggle(P[4], "Auto Fix Cam", "Conserta câmeras quebradas", false, SetAutoFixCam)
--- Spacer(P[4], 6)
--- Toggle(P[4], "Auto Buy Shop", "Compra itens médicos por prioridade", false, SetAutoBuyShop)
--- Spacer(P[4], 6)
--- Toggle(P[4], "Auto Treat v2", "Ciclo médico completo (cama→item→cura)", false, SetAutoTreatV2)
--- Spacer(P[4], 6)
--- Toggle(P[4], "Tratar Queimado", "Aplica Treat Burns em paciente em chamas", false, SetAutoTreatBurns)
--- Spacer(P[4], 6)
--- Toggle(P[4], "Pega Badge Órfã", "Coleta badges impressas sem NPC", false, SetAutoOrphanBadge)
--- Spacer(P[4], 6)
--- Toggle(P[4], "Anti-Stuck Prompts", "Pula prompt preso após 6 tentativas", false, SetAntiStuck)
--- Spacer(P[4], 6)
--- Button(P[4], "Server Hop", ServerHopButton)
+-- ===================== CONTEÚDO DAS ABAS =====================
+local P = TabPages
 
--- ============================================================
--- [UI - COLE NA ABA "SANIDADE" DEPOIS DE ANTI-JUMPScare]
--- ============================================================
--- Spacer(P[2], 6)
--- Toggle(P[2], "Detect Anomaly Check-In", "Aborta check-in se paciente for anomalia", false, SetDetectAnomaly)
+-- MAIN
+Section(P[1], "Jogador")
+Spacer(P[1], 26)
+Button(P[1], "Mostrar dados (Cash/Classe)", ShowStats)
+Spacer(P[1], 6)
+Button(P[1], "Votar jogar novamente", VotePlayAgain)
+Spacer(P[1], 6)
+Button(P[1], "Teleportar para o lobby", TeleportToLobby)
 
--- Fim do addon 4.5.0
+-- SANIDADE
+Section(P[2], "Proteção")
+Spacer(P[2], 26)
+Toggle(P[2], "Sanidade Infinita", "Hook no PlayerLostSanity", false, SetInfSanity)
+Spacer(P[2], 6)
+Toggle(P[2], "Anti-Jumpscare", "Handlers + GUIs", false, SetAntiJumpscare)
+Spacer(P[2], 6)
+Toggle(P[2], "Detect Anomaly Check-In", "Aborta check-in se paciente for anomalia", false, SetDetectAnomaly)
+
+-- AUTO
+Section(P[3], "Sobrevivência")
+Spacer(P[3], 26)
+Toggle(P[3], "Auto Heartbeat", "Completa minigame", false, SetAutoHeartbeat)
+Spacer(P[3], 6)
+Section(P[3], "Tarefas")
+Spacer(P[3], 26)
+Toggle(P[3], "Auto Interagir", "Inspect/Shop", false, SetAutoInteract)
+
+-- FARM
+Section(P[4], "Automações de Farm")
+Spacer(P[4], 26)
+Toggle(P[4], "Auto Farm (Slime/Fogo)", "Extintor + teleport acima do hazard", false, SetAutoFarm)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Diagnose", "Dispara prompts Inspect", false, SetAutoDiagnose)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Atendimento", "Interage com TODOS os prompts/máquinas", false, SetAutoAttend)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Revive", "Revive jogadores caídos (DeadPlayer)", false, SetAutoRevive)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Café", "Usa café quando sanidade < 60%", false, SetAutoCoffee)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Shift Loop", "Vota replay no fim do turno (turnos infinitos)", false, SetAutoShiftLoop)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Carregar Caídos", "Vai até NPCs desmaiados (carry)", false, SetAutoCarry)
+Spacer(P[4], 6)
+Toggle(P[4], "HUD Objetivo", "Mostra o objetivo atual em toast", false, SetObjHud)
+Spacer(P[4], 6)
+Toggle(P[4], "TP Objetivo", "Teleporta para alvo do objetivo", false, SetObjTeleport)
+Spacer(P[4], 6)
+Section(P[4], "OP (Patch/Foxname)")
+Spacer(P[4], 26)
+Toggle(P[4], "Auto Check-In", "Dispara check-in e pega badge", false, SetAutoCheckIn)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Taser", "Pega taser e atira em anomalia", false, SetAutoTaser)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Ask Leave", "Faz anomalia sair (ask to leave)", false, SetAutoAskLeave)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Apagar Fogo", "Dispara prompt put out fire", false, SetAutoPutOutFire)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Café Barney", "Dá café para o Barney", false, SetAutoBarneyCoffee)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Ajudar Paciente", "Dispara prompts de ajuda", false, SetAutoHelpPatient)
+Spacer(P[4], 6)
+Section(P[4], "Upgrade 4.5 (Foxname)")
+Spacer(P[4], 26)
+Toggle(P[4], "Auto Shutter", "Fecha persiana se anomalia no check-in", false, SetAutoShutter)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Fix Cam", "Conserta câmeras quebradas (BrokenCam)", false, SetAutoFixCam)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Buy Shop", "Compra itens médicos por prioridade", false, SetAutoBuyShop)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Treat v2", "Ciclo médico completo (cama→item→cura)", false, SetAutoTreatV2)
+Spacer(P[4], 6)
+Toggle(P[4], "Tratar Queimado", "Aplica Treat Burns em paciente em chamas", false, SetAutoTreatBurns)
+Spacer(P[4], 6)
+Toggle(P[4], "Pega Badge Órfã", "Coleta badges impressas sem NPC", false, SetAutoOrphanBadge)
+Spacer(P[4], 6)
+Toggle(P[4], "Anti-Stuck Prompts", "Pula prompt preso após 6 tentativas", false, SetAntiStuck)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Close Portal", "Fecha portal aberto pela anomalia (Vexus)", false, SetAutoClosePortal)
+Spacer(P[4], 6)
+Toggle(P[4], "Stamina Infinita", "Trava stamina no máximo (Vexus)", false, SetInfStamina)
+Spacer(P[4], 6)
+Toggle(P[4], "Auto Pickup Itens", "Coleta itens dropados no chão (Cyraa)", false, SetAutoPickup)
+Spacer(P[4], 6)
+Toggle(P[4], "3ª Pessoa", "Destrava câmera da 1ª pessoa (HexHubX)", false, SetThirdPerson)
+Spacer(P[4], 6)
+Button(P[4], "Server Hop", ServerHopButton)
+Spacer(P[4], 6)
+Section(P[4], "Geral")
+Spacer(P[4], 26)
+Toggle(P[4], "Instant Prompts", "HoldDuration 0 + distância máx (estilo OP)", false, SetInstantPrompts)
+Spacer(P[4], 6)
+Button(P[4], "Informação: como farmar",
+    function() SafeNotify("Farm", "Cash é pago no FIM do turno (desempenho). Auto Atendimento + Diagnose + Slime = turno completo.", 7) end)
+
+-- VISUAL
+Section(P[5], "ESP")
+Spacer(P[5], 26)
+Toggle(P[5], "ESP por tags", "NPC/Anomalia/Grime/Door", false, SetESP)
+
+-- MOVIMENTO
+Section(P[6], "Locomoção")
+Spacer(P[6], 26)
+Slider(P[6], "WalkSpeed", 10, 200, Config.WalkSpeed, SetWalkSpeed)
+Spacer(P[6], 6)
+Toggle(P[6], "Noclip", "", false, SetNoclip)
+Spacer(P[6], 6)
+Toggle(P[6], "Fly (Space/Shift)", "", false, SetFly)
+
+-- SETTINGS
+Section(P[7], "Informações")
+Spacer(P[7], 26)
+Button(P[7], "Esconder UI (Atalho: RCTRL)", function() UiGui.Enabled = false end)
+
+ShowTab(1)
+
+-- Notificação nativa (toast)
+local NotifyHolder = Mk("Frame", { Parent = UiGui, BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.new(1, -20, 0, 0), ZIndex = 10 })
+
+local function NativeNotify(title, content, duration)
+    pcall(function()
+        local toast = Mk("Frame", { Parent = NotifyHolder, BackgroundColor3 = ThemeUI.Panel, Size = UDim2.fromOffset(240, 46), Position = UDim2.new(0.5, 0, 0, 0) })
+        Corner(toast, 8)
+        Stroke(toast, ThemeUI.Line, 1)
+        Mk("TextLabel", {
+            Parent = toast, BackgroundTransparency = 1, Font = Enum.Font.GothamBold,
+            Text = title, TextColor3 = ThemeUI.Accent, TextSize = 13,
+            Position = UDim2.fromOffset(12, 4), Size = UDim2.fromOffset(400, 18), TextXAlignment = Enum.TextXAlignment.Left,
+        })
+        Mk("TextLabel", {
+            Parent = toast, BackgroundTransparency = 1, Font = Enum.Font.Gotham,
+            Text = content, TextColor3 = ThemeUI.Text, TextSize = 12,
+            Position = UDim2.fromOffset(12, 22), Size = UDim2.fromOffset(400, 18), TextXAlignment = Enum.TextXAlignment.Left,
+        })
+        
+        local textBounds = TextService:GetTextSize(content or "", 12, Enum.Font.Gotham, Vector2.new(1000, 46))
+        toast.Size = UDim2.fromOffset(math.max(textBounds.X + 30, 220), 46)
+        toast.Position = UDim2.new(0.5, 0, 0, 0)
+        toast.AnchorPoint = Vector2.new(0.5, 0)
+        
+        TweenService:Create(toast, TweenInfo.new(0.2), { Position = UDim2.new(0.5, 0, 0, 8) }):Play()
+        task.delay(duration or 4, function()
+            TweenService:Create(toast, TweenInfo.new(0.25), { Position = UDim2.new(0.5, 0, 0, -60) }):Play()
+            task.delay(0.3, function() toast:Destroy() end)
+        end)
+    end)
+end
+
+SafeNotify = NativeNotify
+
+-- Boot Final
+SafeNotify("SlenderHub", "Carregado! LIB " .. (LibReady and "OK" or "FAIL")
+    .. " | Executor: " .. IdentifyExecutor(), 4)
