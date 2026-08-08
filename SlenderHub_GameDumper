@@ -1,40 +1,1105 @@
--- Diagnóstico SlenderHub | "TIXEOlmYIUCVBKywi: attempt to call nil"
-local alvo = "TIXEOlmYIUCVBKywi"
-local found, n = {}, 0
+--[[
+    SlenderHub | Game Dumper Universal — v1.0.4 (cópia p/ celular + API report)
+    Dev: SlenderHub Team
 
--- 1) Procura closures vivas com esse source no heap
-local gc = getgc and getgc() or {}
-for _, v in ipairs(gc) do
-    if type(v) == "function" then
+    Dump automático estilo Dex, universal (Delta/Wave/Codex/Synapse/Fluxus...):
+      • Scripts (closures Luau) separados por PASTA e NOME
+      • Remotes catalogados (RemoteEvent/RemoteFunction/UnreliableRemoteEvent)
+      • Honeypot / backdoor detection (nomes suspeitos + sem handler)
+      • Export em disco: slenderhub_dumps/<jogo>/
+          scripts/<pasta>/<nome>.lua
+          scripts/_closures/*.lua        (closures extras do mesmo source)
+          remotes/remotes.txt            (catálogo completo)
+          remotes/honeypots.txt          (suspeitos)
+          remotes/connections.txt        (quem escuta cada remote)
+          remotes/runtime_log.txt        (chamadas FireServer/InvokeServer, se ativado)
+          metadata.json                  (resumo estruturado)
+
+    IMPORTANTE:
+    • "Scripts" aqui = código do CLIENTE (LocalScripts/Módulos). Código
+      server-side não sai pelo cliente — isso é limitação do Roblox, não do script.
+    • decompile() reconstrói o código (variáveis viram v1/v2...). Se o jogo
+      for ofuscado (Luraph/MoonSec), o resultado sai ilegível — aí use a
+      pipeline de desofuscação do SlenderHub.
+    • Tudo roda com pcall + matriz de fallback: nada quebra em executor fraco,
+      só perde recursos.
+]]
+
+local SlenderHub = {}
+
+--------------------------------------------------------------------------------
+-- CONFIG
+--------------------------------------------------------------------------------
+SlenderHub.Config = {
+    OutputRoot   = "slenderhub_dumps",   -- pasta raiz (dentro da pasta do executor)
+    Sanitize     = true,                 -- remove caracteres inválidos de nomes de arquivo
+    WriteExtra   = true,                 -- salva closures extras do mesmo source
+    KeyMode      = "none",               -- "none" = livre; "api" = pluga VerifyKey depois
+
+    -- Hardening p/ executores com decompile/scan instável (Delta/Wave/Codex):
+    MaxDecompilePerDump = 250,           -- trava nº de decompile() por dump (Delta: baixo!)
+    MaxHeapScan         = 8000,          -- limite de valores escaneados no heap (debug.getinfo é caro no Delta)
+    HeapMissLimit       = 1500,          -- para cedo se N itens seguidos não trazem source novo
+    MinUniqueSources    = 20,            -- só deixa o early-exit agir depois de achar N sources
+    AutoCopySummary     = true,          -- copia o resumo p/ área de transferência ao terminar (mobile)
+}
+
+--------------------------------------------------------------------------------
+-- SERVICES + UTILS
+--------------------------------------------------------------------------------
+local Players        = game:GetService("Players")
+local RunService     = game:GetService("RunService")
+local HttpService    = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local CoreGui        = game:GetService("CoreGui")
+local LocalPlayer    = Players.LocalPlayer
+
+local ClipboardService = (function()
+    local ok, svc = pcall(function() return game:GetService("ClipboardService") end)
+    return ok and svc or nil
+end)()
+
+local function Notify(title, text, dur, type)
+    if SlenderHub.UI and SlenderHub.UI.Notify then
+        SlenderHub.UI.Notify(title, text, dur, type)
+    end
+end
+
+--------------------------------------------------------------------------------
+-- MATRIZ DE EXECUTORES (universal — nunca assuma que a função existe)
+--------------------------------------------------------------------------------
+local Env = getgenv and getgenv() or _G
+
+local FunctionMap = {
+    CheckCaller     = function() return type(checkcaller) == "function" and checkcaller or nil end,
+    NewCClosure     = function() return type(newcclosure) == "function" and newcclosure or nil end,
+    HookMetaMethod  = function() return type(hookmetamethod) == "function" and hookmetamethod or nil end,
+    GetNamecall     = function() return type(getnamecallmethod) == "function" and getnamecallmethod or nil end,
+    GetGC           = function() return type(getgc) == "function" and getgc or nil end,
+    GetReg          = function() return type(getreg) == "function" and getreg or nil end,
+    GetNilInstances = function() return type(getnilinstances) == "function" and getnilinstances or nil end,
+    GetRunning      = function() return type(getrunningscripts) == "function" and getrunningscripts or nil end,
+    GetConnections  = function() return type(getconnections) == "function" and getconnections or nil end,
+    GetRawMetaTable = function() return type(getrawmetatable) == "function" and getrawmetatable or nil end,
+    IsClosure       = function() return type(isclosure) == "function" and isclosure or nil end,
+    IsCClosure      = function() return type(iscclosure) == "function" and iscclosure or nil end,
+    Decompile       = function() return type(decompile) == "function" and decompile or nil end,
+    ScriptBytecode  = function() return type(getscriptbytecode) == "function" and getscriptbytecode or nil end,
+    DumpString      = function() return type(dumpstring) == "function" and dumpstring or nil end,
+    WriteFile       = function() return type(writefile) == "function" and writefile or nil end,
+    MakeFolder      = function() return type(makefolder) == "function" and makefolder or nil end,
+    IsFolder        = function() return type(isfolder) == "function" and isfolder or nil end,
+    IsFile          = function() return type(isfile) == "function" and isfile or nil end,
+    ListFiles       = function() return type(listfiles) == "function" and listfiles or nil end,
+    SetClipboard    = function()
+        if type(setclipboard) == "function" then return setclipboard end
+        if type(toclipboard) == "function" then return toclipboard end
+        return nil
+    end,
+    Identify        = function()
+        local names = { "getexecutorname", "identifyexecutor", "get_identify" }
+        for _, n in ipairs(names) do
+            if type(Env[n]) == "function" then
+                local ok, v = pcall(Env[n])
+                if ok and v then return tostring(v) end
+            end
+        end
+        return "unknown"
+    end,
+}
+
+local function Fn(name)
+    local ok, val = pcall(FunctionMap[name])
+    return ok and val or nil
+end
+
+local ExecutorName = Fn("Identify")
+
+-------------------------------------------------------------------------------
+-- RELATÓRIO DE API (console do executor — útil para depurar no Delta)
+-------------------------------------------------------------------------------
+do
+    local found, total = {}, 0
+    for name in pairs(FunctionMap) do
+        total = total + 1
+        if Fn(name) then table.insert(found, name) end
+    end
+    warn(("[SlenderHubDumper] API %s: %d/%d disponíveis | %s")
+        :format(tostring(ExecutorName), #found, total, table.concat(found, ", ")))
+end
+
+-------------------------------------------------------------------------------
+-- ORÇAMENTO DE DECOMPILE (estabilidade em executores fracos)
+-------------------------------------------------------------------------------
+local DecompileBudget = 0
+
+local function UseBudget()
+    DecompileBudget = DecompileBudget + 1
+    return DecompileBudget <= SlenderHub.Config.MaxDecompilePerDump
+end
+
+--------------------------------------------------------------------------------
+-- NOME DO JOGO (com cache — GetProductInfo tem rate limit)
+--------------------------------------------------------------------------------
+local GameNameCache
+
+local function GetGameName()
+    if GameNameCache then return GameNameCache end
+    local ok, info = pcall(function()
+        return MarketplaceService:GetProductInfo(game.PlaceId).Name
+    end)
+    local name = ok and info or ("place_" .. tostring(game.PlaceId))
+    name = (name or ""):gsub("[<>:\"/\\|?*]", "_")
+    GameNameCache = name ~= "" and name or ("place_" .. tostring(game.PlaceId))
+    return GameNameCache
+end
+
+--------------------------------------------------------------------------------
+-- FILESYSTEM (writefile/makefolder com fallback)
+--------------------------------------------------------------------------------
+local HasWrite = Fn("WriteFile") ~= nil
+
+local function SanitizeName(name)
+    if not SlenderHub.Config.Sanitize then return name end
+    name = name:gsub("[<>:\"/\\|?*%c]", "_")
+    name = name:gsub("^_+", ""):gsub("_+$", "")
+    return name ~= "" and name or "unnamed"
+end
+
+local function EnsureFolder(path)
+    local mk = Fn("MakeFolder")
+    local isf = Fn("IsFolder")
+    if not mk then return false end
+    local cur = ""
+    for _, part in ipairs(string.split(path, "/")) do
+        cur = cur .. part
+        local exists = false
+        if isf then
+            local ok, e = pcall(isf, cur)
+            exists = ok and e == true
+        end
+        if not exists then
+            local ok = pcall(mk, cur)
+            if not ok then return false end
+        end
+        cur = cur .. "/"
+    end
+    return true
+end
+
+local function WriteUniqueFile(path, content)
+    local wf = Fn("WriteFile")
+    local isf = Fn("IsFile")
+    if not wf then return nil end
+    local final = path
+    local n = 1
+    while isf do
+        local ok, e = pcall(isf, final)
+        if not (ok and e) then break end
         n = n + 1
-        if n > 200000 then break end
-        local ok, info = pcall(debug.getinfo, v, "S")
-        if ok and info and info.source == alvo then
-            table.insert(found, v)
+        final = path:gsub("(.+)%.(lua|txt|json|bin)$", "%1_" .. n .. ".%2")
+        if final == path then final = path .. "_" .. n end
+    end
+    local ok = pcall(wf, final, content)
+    return ok and final or nil
+end
+
+--------------------------------------------------------------------------------
+-- COLETA DE REMOTES
+--------------------------------------------------------------------------------
+local REMOTE_CLASSES = {
+    "RemoteEvent", "RemoteFunction", "UnreliableRemoteEvent",
+}
+
+-- Palavras de honeypot: exigimos >= 3 letras e match de palavra inteira
+-- (evita falso positivo tipo "ac" em "Character")
+local SUSPICIOUS_WORDS = {
+    "ban", "admin", "detect", "cheat", "exploit", "check", "verify", "kick",
+    "anti", "honeypot", "report", "flag", "punish", "moderation", "security",
+    "backdoor", "scan", "validate", "guard", "log", "monitor",
+}
+
+-- Remotes padrão do Roblox (nunca são honeypots do jogo)
+local ROBLOX_SYSTEM = {
+    "IntegrityCheck", "CharacterSoundEvent", "SetDialogInUse", "ReadUpdateLog",
+    "GetServerType", "GetServerVersion", "GetServerChannel", "WhisperChat",
+    "CanChatWith", "SetPlayerBlockList", "UpdatePlayerBlockList",
+    "NewPlayerGroupDetails", "NewPlayerCanManageDetails", "SendNotificationInfo",
+    "RequestDeviceCameraOrientationCapability", "ReferredPlayerJoin",
+    "PlatformLeaderboard", "SendPlayerProfileSettings", "RequestPlayerProfileSettings",
+    "UpdatePlayerProfileSettings", "ShowPlayerJoinedFriendsToast",
+    "ShowFriendJoinedPlayerToast", "CreateOrJoinParty", "ModerateChatSettingUpdated",
+    "ExpChatFeatureValueChanged", "ServerSideBulkPurchaseEvent",
+    "BuildExperiencePlaytestTeleport", "CmdrFunction", "CmdrEvent",
+    "GameAnalytics", "PostieSent", "PostieReceived",
+}
+
+local SECURITY_FOLDERS = { "anticheat", "anti-cheat", "security", "moderation", "detection" }
+
+local function IsSystemRemote(name)
+    local n = name
+    for _, w in ipairs(ROBLOX_SYSTEM) do
+        if n:find(w, 1, true) then return true end
+    end
+    return false
+end
+
+local function IsSuspiciousName(name)
+    local n = name:lower()
+    for _, w in ipairs(SUSPICIOUS_WORDS) do
+        if n:find(w, 1, true) then return true end
+    end
+    return false
+end
+
+local function IsInsideSecurityFolder(inst)
+    local cur = inst.Parent
+    while cur do
+        local cname = cur.Name:lower()
+        for _, f in ipairs(SECURITY_FOLDERS) do
+            if cname == f then return true end
+        end
+        cur = cur.Parent
+    end
+    return false
+end
+
+local function GetRemotePath(inst)
+    local parts = {}
+    local cur = inst
+    while cur and cur ~= game do
+        table.insert(parts, 1, cur.Name)
+        cur = cur.Parent
+    end
+    return table.concat(parts, "/")
+end
+
+local function CollectRemotes()
+    local remotes = {}
+    local seen = {}
+
+    local function Add(inst)
+        if seen[inst] then return end
+        seen[inst] = true
+        table.insert(remotes, inst)
+    end
+
+    -- 1) árvore visível
+    for _, desc in ipairs(game:GetDescendants()) do
+        for _, cls in ipairs(REMOTE_CLASSES) do
+            if desc:IsA(cls) then Add(desc) end
+        end
+        if desc:IsA("BindableEvent") or desc:IsA("BindableFunction") then
+            Add(desc) -- informativo (não fireável pelo cliente)
+        end
+    end
+
+    -- 2) heap (remotes não expostos na árvore pública)
+    local gc = Fn("GetGC")
+    if gc then
+        pcall(function()
+            for _, v in ipairs(gc()) do
+                if type(v) == "userdata" and typeof(v) == "Instance" then
+                    for _, cls in ipairs(REMOTE_CLASSES) do
+                        if v:IsA(cls) then Add(v) end
+                    end
+                end
+            end
+        end)
+    end
+
+    -- 3) instâncias ocultas
+    local nilInst = Fn("GetNilInstances")
+    if nilInst then
+        pcall(function()
+            for _, v in ipairs(nilInst()) do
+                if typeof(v) == "Instance" then
+                    for _, cls in ipairs(REMOTE_CLASSES) do
+                        if v:IsA(cls) then Add(v) end
+                    end
+                end
+            end
+        end)
+    end
+
+    return remotes
+end
+
+local function CountConnections(remote)
+    local gc = Fn("GetConnections")
+    if not gc then return nil end
+    local ok, cons = pcall(gc, remote)
+    if not ok or type(cons) ~= "table" then return nil end
+    return #cons
+end
+
+-------------------------------------------------------------------------------
+-- CLIPBOARD (copia resumo — essencial no mobile, console é ilegível)
+-------------------------------------------------------------------------------
+SlenderHub.LastCopy = nil
+
+local function CopyToClipboard(text)
+    local fn = Fn("SetClipboard")
+    if fn then
+        local ok = pcall(fn, text)
+        if ok then return true, "setclipboard" end
+    end
+    if ClipboardService then
+        local ok = pcall(function() ClipboardService:SetClipboard(text) end)
+        if ok then return true, "ClipboardService" end
+    end
+    return false, nil
+end
+
+local function BuildCopyText(summary, remotes, honeypots)
+    local lines = { summary }
+    if honeypots and #honeypots > 0 then
+        table.insert(lines, "")
+        table.insert(lines, "HONEYPOTS / SUSPEITOS (NAO FIRE):")
+        local limit = math.min(#honeypots, 10)
+        for i = 1, limit do
+            local h = honeypots[i]
+            table.insert(lines, ("  * %s (%s)"):format(h.Name, GetRemotePath(h)))
+        end
+        if #honeypots > limit then
+            table.insert(lines, ("  * ... +%d"):format(#honeypots - limit))
+        end
+    end
+    if remotes and #remotes > 0 then
+        table.insert(lines, "")
+        table.insert(lines, string.format("REMOTES (%d):", #remotes))
+        local limit = math.min(#remotes, 15)
+        for i = 1, limit do
+            local r = remotes[i]
+            table.insert(lines, ("  * [%s] %s"):format(r.ClassName, r.Name))
+        end
+        if #remotes > limit then
+            table.insert(lines, ("  * ... +%d (veja remotes/remotes.txt)"):format(#remotes - limit))
+        end
+    end
+    return table.concat(lines, "\n")
+end
+
+--------------------------------------------------------------------------------
+-- COLETA DE SCRIPTS
+--------------------------------------------------------------------------------
+local ScriptStore = {}   -- { path = caminho no disco, content = string, kind = "code"|"bytecode"|"note" }
+local ExtraStore = {}    -- closures extras por source
+local SeenSources = {}
+local Stats = { scripts = 0, closures = 0, extras = 0, errors = 0 }
+
+local function SourceToPath(source)
+    -- source: "@ReplicatedStorage/ModuleScript:42" | "@ModuleScript:42"
+    local s = source:gsub("^@", ""):gsub(":%d+$", "")
+    local parts = {}
+    for part in s:gmatch("[^/]+") do
+        table.insert(parts, part)
+    end
+    local folder, name
+    if #parts == 0 then
+        folder, name = "unknown", "unknown"
+    elseif #parts == 1 then
+        folder, name = "unknown", parts[1]
+    else
+        folder, name = parts[1], parts[#parts]
+    end
+    return SanitizeName(folder), SanitizeName(name)
+end
+
+local function DecompileOne(closure)
+    if not UseBudget() then return nil, nil end -- orçamento esgotado: não arrisca crash
+    local dc = Fn("Decompile")
+    if dc then
+        local ok, code = pcall(dc, closure)
+        if ok and type(code) == "string" and #code > 0 then
+            return code, "code"
+        end
+    end
+    local sb = Fn("ScriptBytecode") or Fn("DumpString")
+    if sb then
+        local ok, bin = pcall(sb, closure)
+        if ok and type(bin) == "string" and #bin > 0 then
+            return bin, "bytecode"
+        end
+    end
+    return nil, nil
+end
+
+local function AddClosure(closure, info)
+    info = info or debug.getinfo(closure)
+    if not info or type(info.source) ~= "string" then return end
+    local src = info.source
+    if src == "=[C]" or not src:find("^@") then return end -- C closure / builtin
+
+    Stats.closures = Stats.closures + 1
+    if SeenSources[src] then
+        if SlenderHub.Config.WriteExtra then
+            table.insert(ExtraStore, { source = src, closure = closure, info = info })
+        end
+        return
+    end
+    SeenSources[src] = true
+
+    local folder, name = SourceToPath(src)
+    local content, kind = DecompileOne(closure)
+    local note
+    if not content then
+        kind = "note"
+        note = string.format("-- Closure sem decompilador disponível.\n-- Executor: %s\n-- source: %s\n", tostring(ExecutorName), tostring(src))
+    end
+    local filePath = string.format("scripts/%s/%s.lua", folder, name)
+    table.insert(ScriptStore, {
+        path = filePath,
+        folder = folder,
+        name = name,
+        content = content,
+        kind = kind,
+        note = note,
+        source = src,
+    })
+    Stats.scripts = Stats.scripts + 1
+end
+
+local function CollectScripts()
+    -- A) scripts rodando (instâncias) — melhor precisão de nome/pasta
+    local running = Fn("GetRunning")
+    if running then
+        pcall(function()
+            for _, inst in ipairs(running()) do
+                if typeof(inst) == "Instance" then
+                    local okClass = pcall(function() return inst:IsA("LuaSourceContainer") end)
+                    if okClass then
+                        local content, kind
+                        local okSrc, src = pcall(function() return inst.Source end)
+                        if okSrc and type(src) == "string" and #src > 0 then
+                            content, kind = src, "code"
+                        else
+                            local dc = Fn("Decompile")
+                            if dc then
+                                local ok2, code = pcall(dc, inst)
+                                if ok2 and type(code) == "string" and #code > 0 then
+                                    content, kind = code, "code"
+                                end
+                            end
+                        end
+                        local folder, name = "scripts_rodando", SanitizeName(inst.Name)
+                        local filePath = string.format("scripts/%s/%s.lua", folder, name)
+                        table.insert(ScriptStore, {
+                            path = filePath, folder = folder, name = name,
+                            content = content, kind = kind or "note",
+                            note = kind and nil or ("-- Script sem código recuperável: " .. tostring(inst:GetFullName())),
+                            source = inst:GetFullName(),
+                        })
+                        Stats.scripts = Stats.scripts + 1
+                    end
+                end
+            end
+        end)
+    end
+
+    -- B) heap scan (closures vivas) — síncrono, LIMITADO e com early-exit.
+    --    (task.wait() dentro de pcall travou no Delta; aqui é tudo reto e rápido)
+    local gc = Fn("GetGC")
+    if gc then
+        pcall(function()
+            local scanned = 0
+            local misses = 0
+            local isC = Fn("IsCClosure")
+            for _, v in ipairs(gc()) do
+                scanned = scanned + 1
+                if scanned > SlenderHub.Config.MaxHeapScan then break end
+                if type(v) == "function" then
+                    -- pula C closures (maioria do heap) — debug.getinfo é caro no Delta
+                    if isC then
+                        local okC, isCClosure = pcall(isC, v)
+                        if okC and isCClosure then continue end -- nativa, sem "@" source
+                    end
+                    local ok, info = pcall(debug.getinfo, v, "S")
+                    if ok and info and type(info.source) == "string" and info.source:find("^@") then
+                        local before = #SeenSources
+                        AddClosure(v, info)
+                        misses = #SeenSources > before and 0 or (misses + 1)
+                    else
+                        misses = misses + 1
+                    end
+                    -- já achou o essencial? sai cedo em vez de varrer o heap inteiro
+                    if misses >= SlenderHub.Config.HeapMissLimit
+                        and #SeenSources >= SlenderHub.Config.MinUniqueSources then
+                        break
+                    end
+                end
+            end
+        end)
+    end
+
+    -- C) instâncias ocultas
+    local nilInst = Fn("GetNilInstances")
+    if nilInst then
+        pcall(function()
+            for _, v in ipairs(nilInst()) do
+                if typeof(v) == "Instance" and pcall(function() return v:IsA("LuaSourceContainer") end) then
+                    local content
+                    local okSrc, src = pcall(function() return v.Source end)
+                    if okSrc and type(src) == "string" and #src > 0 then
+                        content = src
+                    else
+                        local dc = Fn("Decompile")
+                        if dc then
+                            local ok2, code = pcall(dc, v)
+                            if ok2 and type(code) == "string" and #code > 0 then content = code end
+                        end
+                    end
+                    local folder, name = "ocultos", SanitizeName(v.Name)
+                    local filePath = string.format("scripts/%s/%s.lua", folder, name)
+                    table.insert(ScriptStore, {
+                        path = filePath, folder = folder, name = name,
+                        content = content or ("-- Instância oculta (sem código): " .. tostring(v:GetFullName())),
+                        kind = content and "code" or "note",
+                        source = v:GetFullName(),
+                    })
+                    Stats.scripts = Stats.scripts + 1
+                end
+            end
+        end)
+    end
+end
+
+--------------------------------------------------------------------------------
+-- LOG RUNTIME DE REMOTES (feature premium — off por padrão, hook detectável)
+--------------------------------------------------------------------------------
+SlenderHub.RemoteLog = { Enabled = false, Buffer = {}, Hooked = false, OldNamecall = nil }
+
+local function FlushRemoteLog()
+    local base = string.format("%s/%s/remotes/runtime_log.txt", SlenderHub.Config.OutputRoot, GetGameName())
+    EnsureFolder(SlenderHub.Config.OutputRoot .. "/" .. GetGameName() .. "/remotes")
+    local content = table.concat(SlenderHub.RemoteLog.Buffer, "\n")
+    WriteUniqueFile(base, content)
+end
+
+local function EnableRemoteLog()
+    local hook = Fn("HookMetaMethod")
+    local nm   = Fn("GetNamecall")
+    local cc   = Fn("CheckCaller")
+    local ncc  = Fn("NewCClosure")
+    if not hook or not nm then
+        Notify("SlenderHub", "Executor sem hookmetamethod — log runtime indisponível", 3, "Error")
+        return false
+    end
+    -- recupera o metamétodo ORIGINAL sem gambiarra de hook com 2 args
+    local old
+    local raw = Fn("GetRawMetaTable")
+    if raw then
+        local okMT, mt = pcall(raw, game)
+        if okMT and type(mt) == "table" then old = mt.__namecall end
+    end
+    if not old then
+        Notify("SlenderHub", "Metamétodo __namecall não recuperável — log desativado", 3, "Error")
+        return false
+    end
+    SlenderHub.RemoteLog.OldNamecall = old
+    local function callback(self, ...)
+        local method = nm()
+        if (method == "FireServer" or method == "InvokeServer") and typeof(self) == "Instance" then
+            if not (cc and cc()) then
+                pcall(function() -- nunca deixe o log quebrar a chamada real
+                    local args = { ... }
+                    local argStr = {}
+                    for i = 1, math.min(6, #args) do
+                        local v = args[i]
+                        local str
+                        if typeof(v) == "Instance" then
+                            str = "Inst:" .. v.ClassName .. ":" .. v.Name
+                        elseif typeof(v) == "Vector3" or typeof(v) == "CFrame" or typeof(v) == "Color3" then
+                            str = tostring(v)
+                        else
+                            str = string.format("%q", tostring(v))
+                        end
+                        table.insert(argStr, str)
+                    end
+                    local line = string.format("[%s] %s %s(%s)",
+                        os.clock() > 0 and tostring(os.clock()) or tostring(0),
+                        self.ClassName, self.Name, table.concat(argStr, ", "))
+                    table.insert(SlenderHub.RemoteLog.Buffer, line)
+                end)
+            end
+        end
+        return old(self, ...)
+    end
+    local hookedFn = ncc and ncc(callback) or callback
+    local okHook = pcall(hook, game, "__namecall", hookedFn)
+    if not okHook then
+        Notify("SlenderHub", "hookmetamethod falhou — log desativado", 3, "Error")
+        return false
+    end
+    SlenderHub.RemoteLog.Hooked = true
+    return true
+end
+
+local function DisableRemoteLog()
+    if SlenderHub.RemoteLog.Hooked then
+        -- restaura SEMPRE com o original; nunca seta nil (quebraria todo namecall)
+        if SlenderHub.RemoteLog.OldNamecall then
+            pcall(hookmetamethod, game, "__namecall", SlenderHub.RemoteLog.OldNamecall)
+        end
+        SlenderHub.RemoteLog.Hooked = false
+    end
+    FlushRemoteLog()
+end
+
+--------------------------------------------------------------------------------
+-- DUMP COMPLETO
+--------------------------------------------------------------------------------
+local function BuildMetadata(remotes, honeypots)
+    local meta = {
+        tool = "SlenderHub Game Dumper",
+        version = "1.0.4",
+        game = GetGameName(),
+        placeId = tostring(game.PlaceId),
+        executor = tostring(ExecutorName),
+        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
+        stats = {
+            scripts = Stats.scripts,
+            closures_scanned = Stats.closures,
+            extra_closures = Stats.extras,
+            remotes = #remotes,
+            honeypots = #honeypots,
+            errors = Stats.errors,
+        },
+        remotes_summary = {},
+    }
+    for _, r in ipairs(remotes) do
+        table.insert(meta.remotes_summary, {
+            name = r.Name,
+            className = r.ClassName,
+            path = GetRemotePath(r),
+            bindable = r:IsA("BindableEvent") or r:IsA("BindableFunction"),
+        })
+    end
+    return HttpService:JSONEncode(meta)
+end
+
+local function RunDump()
+    Stats = { scripts = 0, closures = 0, extras = 0, errors = 0 }
+    ScriptStore = {}
+    ExtraStore = {}
+    SeenSources = {}
+    DecompileBudget = 0
+
+    local gameName = GetGameName()
+    local root = string.format("%s/%s", SlenderHub.Config.OutputRoot, gameName)
+
+    if not HasWrite then
+        Notify("SlenderHub", "Executor sem writefile — só exibindo na tela", 4, "Warning")
+    end
+
+    if SlenderHub.UI and SlenderHub.UI.SetResult then
+        SlenderHub.UI.SetResult("Fase 1/3 — Coletando remotes...")
+    end
+    Notify("SlenderHub", "Coletando remotes...", 2, nil)
+    local remotes = CollectRemotes()
+
+    if SlenderHub.UI and SlenderHub.UI.SetResult then
+        SlenderHub.UI.SetResult("Fase 2/3 — Heap scan (jogos grandes demoram)...")
+    end
+    Notify("SlenderHub", "Coletando scripts (heap scan)...", 3, nil)
+    CollectScripts()
+
+    -- honeypots (ignora remotes do sistema Roblox — falsos positivos)
+    local honeypots = {}
+    local connectionInfo = {}
+    for _, r in ipairs(remotes) do
+        local cons = CountConnections(r)
+        local susp = (not IsSystemRemote(r.Name))
+            and (IsSuspiciousName(r.Name) or IsInsideSecurityFolder(r))
+        connectionInfo[r] = cons
+        if susp then
+            table.insert(honeypots, r)
+        end
+    end
+
+    -- export
+    local okWrite = HasWrite
+    if okWrite then
+        EnsureFolder(root .. "/scripts")
+        EnsureFolder(root .. "/remotes")
+    end
+
+    local written = 0
+    local failed = 0
+    if okWrite then
+        if SlenderHub.UI and SlenderHub.UI.SetResult then
+            SlenderHub.UI.SetResult("Fase 3/3 — Escrevendo arquivos (" .. #ScriptStore .. " scripts)...")
+        end
+        -- cache de pastas: evita chamada nativa (isfolder/makefolder) por script
+        local madeFolders = {}
+        local function EnsureCached(path)
+            if madeFolders[path] then return end
+            madeFolders[path] = true
+            EnsureFolder(path)
+        end
+        for _, s in ipairs(ScriptStore) do
+            local full = string.format("%s/%s", root, s.path)
+            EnsureCached(root .. "/scripts/" .. s.folder)
+            local content = s.content
+            if s.kind == "bytecode" then
+                content = "-- BYTECODE (use descompilador externo)\n" .. content
+            elseif s.kind == "note" then
+                content = s.note
+            else
+                content = "--// SlenderHub Dump | " .. gameName .. " | source: " .. (s.source or "") .. "\n\n" .. content
+            end
+            local ok = WriteUniqueFile(full, content)
+            if ok then written = written + 1 else failed = failed + 1 end
+        end
+        -- extras
+        if SlenderHub.Config.WriteExtra then
+            local done = {}
+            for _, ex in ipairs(ExtraStore) do
+                local folder, name = SourceToPath(ex.source)
+                local content, kind = DecompileOne(ex.closure)
+                if content then
+                    local n = (done[ex.source] or 0) + 1
+                    done[ex.source] = n
+                    local full = string.format("%s/scripts/_closures/%s_%d.lua", root, name, n)
+                    EnsureFolder(root .. "/scripts/_closures")
+                    WriteUniqueFile(full, "--// SlenderHub Dump (closure extra)\n" .. content)
+                end
+            end
+            Stats.extras = #ExtraStore
+        end
+
+        -- remotes.txt
+        local lines = { string.format("REMOTES — %s (%s)", gameName, tostring(game.PlaceId)) }
+        for _, r in ipairs(remotes) do
+            local bind = r:IsA("BindableEvent") or r:IsA("BindableFunction")
+            local cons = connectionInfo[r]
+            local consStr = cons and tostring(cons) or "?"
+            table.insert(lines, string.format("[%s] %s | caminho: %s | handlers: %s%s",
+                r.ClassName, r.Name, GetRemotePath(r), consStr,
+                bind and " | BINDABLE (local, não fireável)" or ""))
+        end
+        WriteUniqueFile(root .. "/remotes/remotes.txt", table.concat(lines, "\n"))
+
+        -- honeypots.txt
+        local hl = { "HONEYPOTS / SUSPEITOS — NÃO FIRE sem investigar", "" }
+        for _, r in ipairs(honeypots) do
+            local reason = {}
+            if IsSuspiciousName(r.Name) then table.insert(reason, "nome suspeito") end
+            if IsInsideSecurityFolder(r) then table.insert(reason, "dentro de pasta de segurança") end
+            table.insert(hl, string.format("[%s] %s (%s) | %s",
+                r.ClassName, r.Name, GetRemotePath(r), table.concat(reason, ", ")))
+        end
+        table.insert(hl, "")
+        table.insert(hl, "OBS: remote SEM handlers no cliente não é necessariamente honeypot —")
+        table.insert(hl, "o handler pode estar no servidor. Sempre teste com conta descartável.")
+        WriteUniqueFile(root .. "/remotes/honeypots.txt", table.concat(hl, "\n"))
+
+        -- connections.txt
+        local cl = { "CONEXÕES (quem escuta no cliente)", "" }
+        for _, r in ipairs(remotes) do
+            local gc = Fn("GetConnections")
+            if gc then
+                local ok, cons = pcall(gc, r)
+                if ok and type(cons) == "table" and #cons > 0 then
+                    table.insert(cl, string.format("[%s] %s — %d conexão(ões)", r.ClassName, r.Name, #cons))
+                    for i, c in ipairs(cons) do
+                        local fn = type(c) == "table" and c.Function
+                        local loc
+                        if type(fn) == "function" then
+                            local ok2, info = pcall(debug.getinfo, fn, "S")
+                            loc = ok2 and info and tostring(info.source) or "?"
+                        end
+                        table.insert(cl, string.format("    %d. handler em %s", i, loc or "?"))
+                    end
+                end
+            end
+        end
+        WriteUniqueFile(root .. "/remotes/connections.txt", table.concat(cl, "\n"))
+
+        -- metadata.json
+        WriteUniqueFile(root .. "/metadata.json", BuildMetadata(remotes, honeypots))
+    end
+
+    -- resumo
+    local cons = Fn("GetConnections")
+    local handlersCount = 0
+    if cons then
+        pcall(function()
+            for _, r in ipairs(remotes) do
+                local c = CountConnections(r)
+                if c then handlersCount = handlersCount + c end
+            end
+        end)
+    end
+
+    local summary = string.format(
+        "DUMP CONCLUÍDO\nJogo: %s (%s)\nExecutor: %s\n\nPasta: %s\n  • Scripts: %d (falhas: %d)\n  • Closures no heap: %d\n  • Closures extras: %d\n  • Remotes: %d (honeypots: %d)\n  • Handlers no cliente: %d",
+        gameName, tostring(game.PlaceId), tostring(ExecutorName),
+        root, written, failed,
+        Stats.closures, Stats.extras,
+        #remotes, #honeypots, handlersCount)
+
+    if SlenderHub.UI and SlenderHub.UI.SetResult then
+        SlenderHub.UI.SetResult(summary)
+    end
+
+    -- cópia automática do resumo (mobile: console ilegível — cola no WhatsApp/notas)
+    local copyText = BuildCopyText(summary, remotes, honeypots)
+    SlenderHub.LastCopy = copyText
+    if SlenderHub.Config.AutoCopySummary then
+        local ok, how = CopyToClipboard(copyText)
+        if ok then
+            Notify("SlenderHub", "Resumo copiado! Cole no WhatsApp/notas (" .. tostring(how) .. ")", 5, "Success")
+        else
+            Notify("SlenderHub", "Sem suporte a clipboard — use o botao COPIAR ou leia os arquivos", 4, "Warning")
         end
     end
 end
-print(("Closures com source %q: %d (varridos: %d)"):format(alvo, #found, n))
 
--- 2) Se achou, mostra de onde veio
-if #found > 0 then
-    local ok, info = pcall(debug.getinfo, found[1], "S")
-    print("short_src:", ok and info and info.short_src, "| line:", ok and info and info.linedefined)
-    local ok2, name = pcall(getnamecallmethod)
-    print("getnamecallmethod:", ok2 and name or "?")
+--------------------------------------------------------------------------------
+-- UI SLENDERWIND (enxuta — mesma identidade do hub)
+--------------------------------------------------------------------------------
+SlenderHub.UI = {}
+
+local function CreateUI()
+    local theme = {
+        MainBg  = Color3.fromRGB(18, 18, 22),
+        Sidebar = Color3.fromRGB(23, 23, 27),
+        Element = Color3.fromRGB(30, 30, 36),
+        Text    = Color3.fromRGB(240, 240, 240),
+        SubText = Color3.fromRGB(160, 160, 160),
+        Accent  = Color3.fromRGB(60, 130, 250),
+        Stroke  = Color3.fromRGB(45, 45, 50),
+        Success = Color3.fromRGB(60, 250, 100),
+        Warning = Color3.fromRGB(250, 180, 60),
+        Error   = Color3.fromRGB(255, 85, 85),
+    }
+
+    local parent = CoreGui
+    if parent:FindFirstChild("SlenderHubDumper") then parent.SlenderHubDumper:Destroy() end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "SlenderHubDumper"
+    sg.ResetOnSpawn = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    sg.Parent = parent
+
+    local main = Instance.new("Frame")
+    main.BackgroundColor3 = theme.MainBg
+    main.Size = UDim2.new(0, 460, 0, 460)
+    main.Position = UDim2.new(0.5, -230, 0.5, -230)
+    main.Parent = sg
+    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 10); corner.Parent = main
+    local stroke = Instance.new("UIStroke"); stroke.Color = theme.Stroke; stroke.Parent = main
+
+    -- topbar (drag)
+    local topbar = Instance.new("Frame")
+    topbar.BackgroundTransparency = 1
+    topbar.Size = UDim2.new(1, 0, 0, 36)
+    topbar.Parent = main
+
+    local title = Instance.new("TextLabel")
+    title.Text = "SlenderHub | Game Dumper"
+    title.TextColor3 = theme.Text
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 15
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.new(0, 14, 0, 0)
+    title.Size = UDim2.new(1, -60, 1, 0)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = topbar
+
+    local dragging, dragInput, startPos
+    topbar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; startPos = input.Position; dragInput = input
+        end
+    end)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - startPos
+            main.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset + delta.X, main.Position.Y.Scale, main.Position.Y.Offset + delta.Y)
+        end
+    end)
+    game:GetService("UserInputService").InputEnded:Connect(function(input)
+        if input == dragInput then dragging = false end
+    end)
+
+    local close = Instance.new("TextButton")
+    close.Text = "X"
+    close.TextColor3 = theme.SubText
+    close.BackgroundTransparency = 1
+    close.Size = UDim2.new(0, 32, 0, 32)
+    close.Position = UDim2.new(1, -36, 0, 2)
+    close.Font = Enum.Font.GothamBold
+    close.TextSize = 14
+    close.Parent = topbar
+    close.MouseButton1Click:Connect(function() sg:Destroy() end)
+
+    -- corpo
+    local body = Instance.new("Frame")
+    body.BackgroundTransparency = 1
+    body.Position = UDim2.new(0, 12, 0, 44)
+    body.Size = UDim2.new(1, -24, 1, -56)
+    body.Parent = main
+
+    local info = Instance.new("TextLabel")
+    info.Text = string.format("Jogo: %s | Executor: %s", GetGameName(), tostring(ExecutorName))
+    info.TextColor3 = theme.SubText
+    info.Font = Enum.Font.Gotham
+    info.TextSize = 12
+    info.BackgroundTransparency = 1
+    info.Size = UDim2.new(1, 0, 0, 24)
+    info.TextXAlignment = Enum.TextXAlignment.Left
+    info.Parent = body
+
+    local btnDump = Instance.new("TextButton")
+    btnDump.Text = "▶  DUMPAR JOGO"
+    btnDump.TextColor3 = theme.Text
+    btnDump.Font = Enum.Font.GothamBold
+    btnDump.TextSize = 14
+    btnDump.BackgroundColor3 = theme.Accent
+    btnDump.Size = UDim2.new(1, 0, 0, 40)
+    btnDump.Position = UDim2.new(0, 0, 0, 30)
+    btnDump.Parent = body
+    local bcorner = Instance.new("UICorner"); bcorner.CornerRadius = UDim.new(0, 6); bcorner.Parent = btnDump
+
+    local btnLog = Instance.new("TextButton")
+    btnLog.Text = "●  LOG DE REMOTES (runtime)"
+    btnLog.TextColor3 = theme.Text
+    btnLog.Font = Enum.Font.GothamBold
+    btnLog.TextSize = 13
+    btnLog.BackgroundColor3 = theme.Element
+    btnLog.Size = UDim2.new(1, 0, 0, 36)
+    btnLog.Position = UDim2.new(0, 0, 0, 78)
+    btnLog.Parent = body
+    local bcorner2 = Instance.new("UICorner"); bcorner2.CornerRadius = UDim.new(0, 6); bcorner2.Parent = btnLog
+
+    local logActive = false
+    btnLog.MouseButton1Click:Connect(function()
+        logActive = not logActive
+        if logActive then
+            local ok = EnableRemoteLog()
+            if ok then
+                btnLog.Text = "●  LOG DE REMOTES (runtime) — ATIVO"
+                btnLog.BackgroundColor3 = theme.Success
+            else
+                logActive = false
+            end
+        else
+            DisableRemoteLog()
+            btnLog.Text = "●  LOG DE REMOTES (runtime)"
+            btnLog.BackgroundColor3 = theme.Element
+        end
+    end)
+
+    local dumping = false
+    btnDump.MouseButton1Click:Connect(function()
+        if dumping then return end -- ignora duplo clique
+        dumping = true
+        task.spawn(function()
+            btnDump.Text = "⏳  Dumpando... (não feche)"
+            btnDump.BackgroundColor3 = theme.Warning
+            local ok, err = pcall(RunDump)
+            if not ok then
+                -- nunca deixa o botão preso em "Dumpando..." por erro silencioso
+                Notify("SlenderHub", "Erro no dump: " .. tostring(err), 6, "Error")
+                if SlenderHub.UI and SlenderHub.UI.SetResult then
+                    SlenderHub.UI.SetResult("ERRO no dump:\n" .. tostring(err) ..
+                        "\n\nSe persistir, reduza MaxDecompilePerDump / MaxHeapScan no topo do script.")
+                end
+            end
+            btnDump.Text = "▶  DUMPAR JOGO"
+            btnDump.BackgroundColor3 = theme.Accent
+            dumping = false
+        end)
+    end)
+
+    local result = Instance.new("TextLabel")
+    result.Text = "Clique em DUMPAR JOGO.\nO dump será salvo em: " .. SlenderHub.Config.OutputRoot .. "/<nome_do_jogo>/"
+    result.TextColor3 = theme.Text
+    result.Font = Enum.Font.Gotham
+    result.TextSize = 12
+    result.TextWrapped = true
+    result.TextXAlignment = Enum.TextXAlignment.Left
+    result.TextYAlignment = Enum.TextYAlignment.Top
+    result.BackgroundColor3 = theme.Element
+    result.Size = UDim2.new(1, 0, 1, -164)
+    result.Position = UDim2.new(0, 0, 0, 162)
+    result.Parent = body
+    local rcorner = Instance.new("UICorner"); rcorner.CornerRadius = UDim.new(0, 6); rcorner.Parent = result
+    local padding = Instance.new("UIPadding"); padding.PaddingLeft = UDim.new(0, 10); padding.PaddingTop = UDim.new(0, 8); padding.Parent = result
+
+    -- botão copiar (mobile: console ilegível — cola no WhatsApp/notas)
+    local btnCopy = Instance.new("TextButton")
+    btnCopy.Text = "📋  COPIAR RESULTADO"
+    btnCopy.TextColor3 = theme.Text
+    btnCopy.Font = Enum.Font.GothamBold
+    btnCopy.TextSize = 12
+    btnCopy.BackgroundColor3 = theme.Element
+    btnCopy.Size = UDim2.new(1, 0, 0, 32)
+    btnCopy.Position = UDim2.new(0, 0, 0, 122)
+    btnCopy.Parent = body
+    local bcorner3 = Instance.new("UICorner"); bcorner3.CornerRadius = UDim.new(0, 6); bcorner3.Parent = btnCopy
+    btnCopy.MouseButton1Click:Connect(function()
+        local txt = SlenderHub.LastCopy or result.Text
+        if not txt or txt == "" then
+            Notify("SlenderHub", "Nada para copiar — rode um dump primeiro", 3, "Warning")
+            return
+        end
+        local ok, how = CopyToClipboard(txt)
+        if ok then
+            Notify("SlenderHub", "Copiado! Cole onde quiser (" .. tostring(how) .. ")", 3, "Success")
+        else
+            Notify("SlenderHub", "Executor sem setclipboard/ClipboardService", 3, "Error")
+        end
+    end)
+
+    -- notificações
+    local notifyContainer = Instance.new("Frame")
+    notifyContainer.BackgroundTransparency = 1
+    notifyContainer.AnchorPoint = Vector2.new(0, 1)
+    notifyContainer.Position = UDim2.new(1, -300, 1, -16)
+    notifyContainer.Size = UDim2.new(0, 280, 1, 0)
+    notifyContainer.Parent = sg
+    local nlist = Instance.new("UIListLayout"); nlist.Padding = UDim.new(0, 6); nlist.VerticalAlignment = Enum.VerticalAlignment.Bottom; nlist.Parent = notifyContainer
+
+    SlenderHub.UI.Notify = function(titleText, text, dur, type)
+        local typeColor = theme.Accent
+        if type == "Success" then typeColor = theme.Success
+        elseif type == "Warning" then typeColor = theme.Warning
+        elseif type == "Error" then typeColor = theme.Error end
+        local frame = Instance.new("Frame")
+        frame.BackgroundColor3 = theme.Sidebar
+        frame.Size = UDim2.new(1, 0, 0, 48)
+        frame.Parent = notifyContainer
+        local fcorner = Instance.new("UICorner"); fcorner.CornerRadius = UDim.new(0, 8); fcorner.Parent = frame
+        local fstroke = Instance.new("UIStroke"); fstroke.Color = typeColor; fstroke.Parent = frame
+        local t1 = Instance.new("TextLabel")
+        t1.Text = titleText; t1.TextColor3 = typeColor; t1.Font = Enum.Font.GothamBold; t1.TextSize = 13
+        t1.BackgroundTransparency = 1; t1.Position = UDim2.new(0, 10, 0, 5); t1.Size = UDim2.new(1, -20, 0, 18)
+        t1.TextXAlignment = Enum.TextXAlignment.Left; t1.Parent = frame
+        local t2 = Instance.new("TextLabel")
+        t2.Text = text or ""; t2.TextColor3 = theme.Text; t2.Font = Enum.Font.Gotham; t2.TextSize = 11
+        t2.BackgroundTransparency = 1; t2.Position = UDim2.new(0, 10, 0, 23); t2.Size = UDim2.new(1, -20, 0, 18)
+        t2.TextXAlignment = Enum.TextXAlignment.Left; t2.TextWrapped = true; t2.Parent = frame
+        task.delay(dur or 3, function() frame:Destroy() end)
+    end
+
+    SlenderHub.UI.SetResult = function(text)
+        result.Text = text
+    end
 end
 
--- 3) O dumper está de pé?
-local dumper = game:GetService("CoreGui"):FindFirstChild("SlenderHubDumper")
-print("Dumper UI ativa:", dumper ~= nil)
-
--- 4) Ambiente do Delta — o que existe/falta
-print("Executor:", (identifyexecutor and identifyexecutor()) or "?")
-for _, f in ipairs({
-    "getgenv", "getgc", "getreg", "decompile", "getscriptbytecode",
-    "hookmetamethod", "getnamecallmethod", "checkcaller", "newcclosure",
-    "writefile", "makefolder", "getconnections", "getnilinstances",
-    "getrunningscripts", "getrawmetatable", "iscclosure", "isclosure",
-}) do
-    print(("  %-20s %s"):format(f, type(_G[f]) == "function" and "OK" or "FALTA"))
+--------------------------------------------------------------------------------
+-- BOOT
+--------------------------------------------------------------------------------
+local ok, err = pcall(function()
+    CreateUI()
+    Notify("SlenderHub", "Game Dumper pronto. Executor: " .. tostring(ExecutorName), 4, nil)
+end)
+if not ok then
+    warn("[SlenderHubDumper] Erro no boot: " .. tostring(err))
 end
+
+return SlenderHub
