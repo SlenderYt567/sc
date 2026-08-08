@@ -1,5 +1,5 @@
 --[[
-    SlenderHub | Game Dumper Universal — v1.0.1 (Delta-hardened)
+    SlenderHub | Game Dumper Universal — v1.0.5 (base v1.0.0 + caps — sem extras)
     Dev: SlenderHub Team
 
     Dump automático estilo Dex, universal (Delta/Wave/Codex/Synapse/Fluxus...):
@@ -36,10 +36,11 @@ SlenderHub.Config = {
     WriteExtra   = true,                 -- salva closures extras do mesmo source
     KeyMode      = "none",               -- "none" = livre; "api" = pluga VerifyKey depois
 
-    -- Hardening p/ executores com decompile instável (Delta/Wave/Codex):
-    MaxDecompilePerDump = 600,           -- trava nº de decompile() por dump (evita hard-crash)
-    MaxHeapScan         = 40000,         -- limite de valores escaneados no heap
-    YieldEvery          = 400,           -- cede a cada N iterações (UI não congela)
+    -- Hardening p/ executores com decompile/scan instável (Delta/Wave/Codex):
+    MaxDecompilePerDump = 250,           -- trava nº de decompile() por dump (Delta: baixo!)
+    MaxHeapScan         = 8000,          -- limite de valores escaneados no heap (debug.getinfo é caro no Delta)
+    HeapMissLimit       = 1500,          -- para cedo se N itens seguidos não trazem source novo
+    MinUniqueSources    = 20,            -- só deixa o early-exit agir depois de achar N sources
 }
 
 --------------------------------------------------------------------------------
@@ -74,8 +75,6 @@ local FunctionMap = {
     GetRunning      = function() return type(getrunningscripts) == "function" and getrunningscripts or nil end,
     GetConnections  = function() return type(getconnections) == "function" and getconnections or nil end,
     GetRawMetaTable = function() return type(getrawmetatable) == "function" and getrawmetatable or nil end,
-    IsClosure       = function() return type(isclosure) == "function" and isclosure or nil end,
-    IsCClosure      = function() return type(iscclosure) == "function" and iscclosure or nil end,
     Decompile       = function() return type(decompile) == "function" and decompile or nil end,
     ScriptBytecode  = function() return type(getscriptbytecode) == "function" and getscriptbytecode or nil end,
     DumpString      = function() return type(dumpstring) == "function" and dumpstring or nil end,
@@ -104,22 +103,13 @@ end
 local ExecutorName = Fn("Identify")
 
 -------------------------------------------------------------------------------
--- ORÇAMENTO DE DECOMPILE + YIELD (estabilidade em executores fracos)
+-- ORÇAMENTO DE DECOMPILE (estabilidade em executores fracos)
 -------------------------------------------------------------------------------
 local DecompileBudget = 0
-local YieldTick = 0
 
 local function UseBudget()
     DecompileBudget = DecompileBudget + 1
     return DecompileBudget <= SlenderHub.Config.MaxDecompilePerDump
-end
-
-local function MaybeYield()
-    YieldTick = YieldTick + 1
-    if YieldTick >= SlenderHub.Config.YieldEvery then
-        YieldTick = 0
-        task.wait()
-    end
 end
 
 --------------------------------------------------------------------------------
@@ -283,7 +273,6 @@ local function CollectRemotes()
     if gc then
         pcall(function()
             for _, v in ipairs(gc()) do
-                MaybeYield()
                 if type(v) == "userdata" and typeof(v) == "Instance" then
                     for _, cls in ipairs(REMOTE_CLASSES) do
                         if v:IsA(cls) then Add(v) end
@@ -435,24 +424,35 @@ local function CollectScripts()
         end)
     end
 
-    -- B) heap scan (closures vivas) — com limite + yield + skip de C closures
+    -- B) heap scan (closures vivas) — igual ao v1.0.0, só com limite + early-exit
+    --    (sem task.wait, sem continue, sem iscclosure: 100% compatível com o Delta)
     local gc = Fn("GetGC")
     if gc then
         pcall(function()
             local scanned = 0
-            local isC = Fn("IsCClosure")
+            local misses = 0
             for _, v in ipairs(gc()) do
                 scanned = scanned + 1
                 if scanned > SlenderHub.Config.MaxHeapScan then break end
                 if type(v) == "function" then
-                    if isC then
-                        local okC, isCClosure = pcall(isC, v)
-                        if okC and isCClosure then continue end -- nativa, sem "@" source
-                    end
                     local ok, info = pcall(debug.getinfo, v, "S")
-                    if ok and info then AddClosure(v, info) end
+                    if ok and info then
+                        local before = Stats.scripts
+                        AddClosure(v, info)
+                        if Stats.scripts > before then
+                            misses = 0
+                        else
+                            misses = misses + 1
+                        end
+                    else
+                        misses = misses + 1
+                    end
+                    -- já achou o essencial? sai cedo em vez de varrer o heap inteiro
+                    if misses >= SlenderHub.Config.HeapMissLimit
+                        and Stats.scripts >= SlenderHub.Config.MinUniqueSources then
+                        break
+                    end
                 end
-                MaybeYield()
             end
         end)
     end
@@ -462,7 +462,6 @@ local function CollectScripts()
     if nilInst then
         pcall(function()
             for _, v in ipairs(nilInst()) do
-                MaybeYield()
                 if typeof(v) == "Instance" and pcall(function() return v:IsA("LuaSourceContainer") end) then
                     local content
                     local okSrc, src = pcall(function() return v.Source end)
@@ -578,7 +577,7 @@ end
 local function BuildMetadata(remotes, honeypots)
     local meta = {
         tool = "SlenderHub Game Dumper",
-        version = "1.0.1",
+        version = "1.0.5",
         game = GetGameName(),
         placeId = tostring(game.PlaceId),
         executor = tostring(ExecutorName),
@@ -752,7 +751,6 @@ local function RunDump()
     if SlenderHub.UI and SlenderHub.UI.SetResult then
         SlenderHub.UI.SetResult(summary)
     end
-    Notify("SlenderHub", "Dump salvo em " .. root, 6, "Success")
 end
 
 --------------------------------------------------------------------------------
@@ -892,13 +890,25 @@ local function CreateUI()
         end
     end)
 
+    local dumping = false
     btnDump.MouseButton1Click:Connect(function()
+        if dumping then return end -- ignora duplo clique
+        dumping = true
         task.spawn(function()
             btnDump.Text = "⏳  Dumpando... (não feche)"
             btnDump.BackgroundColor3 = theme.Warning
-            RunDump()
+            local ok, err = pcall(RunDump)
+            if not ok then
+                -- nunca deixa o botão preso em "Dumpando..." por erro silencioso
+                Notify("SlenderHub", "Erro no dump: " .. tostring(err), 6, "Error")
+                if SlenderHub.UI and SlenderHub.UI.SetResult then
+                    SlenderHub.UI.SetResult("ERRO no dump:\n" .. tostring(err) ..
+                        "\n\nSe persistir, reduza MaxDecompilePerDump / MaxHeapScan no topo do script.")
+                end
+            end
             btnDump.Text = "▶  DUMPAR JOGO"
             btnDump.BackgroundColor3 = theme.Accent
+            dumping = false
         end)
     end)
 
