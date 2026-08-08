@@ -1,1027 +1,1835 @@
 --[[
-    SlenderHub | Game Dumper Universal — v1.0.8 (crash PS99 corrigido)
-    Dev: SlenderHub Team
+	SlenderHub — Mining Legends! (place 138805779586842)
+	======================================================
+	Baseado no dump SlenderHub: remotes/ClientPackets-ServerPackets, sistema
+	conch_networking (admin) e estrutura de mundo (Workspace/Worlds).
 
-    Dump automático estilo Dex, universal (Delta/Wave/Codex/Synapse/Fluxus...):
-      • Scripts (closures Luau) separados por PASTA e NOME
-      • Remotes catalogados (RemoteEvent/RemoteFunction/UnreliableRemoteEvent)
-      • Honeypot / backdoor detection (nomes suspeitos + sem handler)
-      • Export em disco: slenderhub_dumps/<jogo>/
-          scripts/<pasta>/<nome>.lua
-          scripts/_closures/*.lua        (closures extras do mesmo source)
-          remotes/remotes.txt            (catálogo completo)
-          remotes/honeypots.txt          (suspeitos)
-          remotes/connections.txt        (quem escuta cada remote)
-          remotes/runtime_log.txt        (chamadas FireServer/InvokeServer, se ativado)
-          metadata.json                  (resumo estruturado)
+	Rede do jogo:
+	  require(ReplicatedStorage.Packages.Network)         -> lib custom
+	  require(ReplicatedStorage.Shared.Modules.ClientPackets) -> cliente -> servidor (.send)
+	  require(ReplicatedStorage.Shared.Modules.ServerPackets) -> servidor -> cliente (.listen)
 
-    IMPORTANTE:
-    • "Scripts" aqui = código do CLIENTE (LocalScripts/Módulos). Código
-      server-side não sai pelo cliente — isso é limitação do Roblox, não do script.
-    • decompile() reconstrói o código (variáveis viram v1/v2...). Se o jogo
-      for ofuscado (Luraph/MoonSec), o resultado sai ilegível — aí use a
-      pipeline de desofuscação do SlenderHub.
-    • Tudo roda com pcall + matriz de fallback: nada quebra em executor fraco,
-      só perde recursos.
-]]
+	Packets exploráveis (do dump):
+	  DamageBlock{Mine,GUID}  HatchEgg{EggName,Multi}  AutoHatchEgg{egg}  StopAutoHatchEgg{}
+	  Rebirth{uint8}  EquipPet{Equip,str}  UseBoost{name}  UseFlag{name}  BuyUpgrade{name}
+	  ClaimRankReward{uint8}  OpenMysteryBox{uint8}  RollEnchant{str}  StartAutoEnchant{Pet,Target}
+	  SpinWheel{}  ClaimSpinnyToken{}  ClaimPlaytimeGift{uint8}  RedeemCode{str}
+	  EquipBest{}  UnequipAllPets{}  ThrowTNT{TNT,X,Y,Z}  HatchExclusiveEgg{EggName,amt}
+	  ReplayHatch{EggName,PetName,Tier}  MerchantPurchase{MerchantName,index}
 
-local SlenderHub = {}
+	HONEYPOTS (NÃO FIRE): IntegrityCheckProcessorKey2_*, SetDialogInUse,
+	conch_networking/log, conch_networking/log_command.
 
---------------------------------------------------------------------------------
--- CONFIG
---------------------------------------------------------------------------------
-SlenderHub.Config = {
-    OutputRoot   = "slenderhub_dumps",   -- pasta raiz (dentro da pasta do executor)
-    Sanitize     = true,                 -- remove caracteres inválidos de nomes de arquivo
-    WriteExtra   = true,                 -- salva closures extras do mesmo source
-    KeyMode      = "none",               -- "none" = livre; "api" = pluga VerifyKey depois
+	UI: FluentUI (dawid-scripts/Fluent) — carregada da release oficial.
+--]]
 
-    -- Antitrava p/ executores com decompile/scan instável (Delta/Wave/Codex):
-    MaxDecompilePerDump = 250,           -- trava nº de decompile() por dump (Delta: baixo!)
-    MaxHeapScan         = 8000,          -- limite de valores escaneados no heap (debug.getinfo é caro no Delta)
-    HeapMissLimit       = 1500,          -- para cedo se N itens seguidos não trazem source novo
-    MinUniqueSources    = 20,            -- só deixa o early-exit agir depois de achar N sources
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
+local StarterPlayer = game:GetService("StarterPlayer")
 
-    -- Modo pesado automático (PS99 e jogos gigantes): detecta pela árvore e
-    -- reduz os limites na hora. Evita o crash de decompile/scan no Delta.
-    HeavyAuto           = true,          -- liga a detecção automática
-    HeavyPlaceIds       = { "8737899170" }, -- PlaceIds conhecidos gigantes (PS99) — detecta ANTES de qualquer scan
-    HeavyDescendants    = 100000,        -- acima de N instâncias = jogo gigante
-    HeavyDecompile      = 120,           -- orçamento de decompile no modo pesado
-    HeavyHeapScan       = 0,             -- heap scan no modo pesado (0 = desliga: getgc() gigante crasha)
-    HeavyHeapMiss       = 400,           -- early-exit mais agressivo no modo pesado
-    HeavyTreeScan       = 40000,         -- varredura manual da árvore (nós) no modo pesado
-    SkipLoadstring      = true,          -- pula closures de loadstring (source @string):
-                                        --   PS99 ofusca tudo assim e o decompile crasha
-}
+local LocalPlayer = Players.LocalPlayer
 
---------------------------------------------------------------------------------
--- SERVICES + UTILS
---------------------------------------------------------------------------------
-local Players        = game:GetService("Players")
-local RunService     = game:GetService("RunService")
-local HttpService    = game:GetService("HttpService")
-local MarketplaceService = game:GetService("MarketplaceService")
-local CoreGui        = game:GetService("CoreGui")
-local LocalPlayer    = Players.LocalPlayer
-
-local function Notify(title, text, dur, type)
-    if SlenderHub.UI and SlenderHub.UI.Notify then
-        SlenderHub.UI.Notify(title, text, dur, type)
-    end
-end
-
---------------------------------------------------------------------------------
--- MATRIZ DE EXECUTORES (universal — nunca assuma que a função existe)
---------------------------------------------------------------------------------
+-- ============================================================
+-- 1) ENV GLOBAL (permite re-executar sem duplicar UI)
+-- ============================================================
 local Env = getgenv and getgenv() or _G
+local HUB_NAME = "SlenderHub_ML"
+if Env[HUB_NAME] then
+	local old = Env[HUB_NAME]
+	if old.cleanup then pcall(old.cleanup) end
+	if old.window then pcall(old.window.Destroy, old.window) end
+	task.wait(0.3)
+	Env[HUB_NAME] = nil
+end
+local Hub = { window = nil, __connections = {}, __threads = {} }
+Env[HUB_NAME] = Hub
 
-local FunctionMap = {
-    CheckCaller     = function() return type(checkcaller) == "function" and checkcaller or nil end,
-    NewCClosure     = function() return type(newcclosure) == "function" and newcclosure or nil end,
-    HookMetaMethod  = function() return type(hookmetamethod) == "function" and hookmetamethod or nil end,
-    GetNamecall     = function() return type(getnamecallmethod) == "function" and getnamecallmethod or nil end,
-    GetGC           = function() return type(getgc) == "function" and getgc or nil end,
-    GetReg          = function() return type(getreg) == "function" and getreg or nil end,
-    GetNilInstances = function() return type(getnilinstances) == "function" and getnilinstances or nil end,
-    GetRunning      = function() return type(getrunningscripts) == "function" and getrunningscripts or nil end,
-    GetConnections  = function() return type(getconnections) == "function" and getconnections or nil end,
-    Decompile       = function() return type(decompile) == "function" and decompile or nil end,
-    ScriptBytecode  = function() return type(getscriptbytecode) == "function" and getscriptbytecode or nil end,
-    DumpString      = function() return type(dumpstring) == "function" and dumpstring or nil end,
-    WriteFile       = function() return type(writefile) == "function" and writefile or nil end,
-    MakeFolder      = function() return type(makefolder) == "function" and makefolder or nil end,
-    IsFolder        = function() return type(isfolder) == "function" and isfolder or nil end,
-    IsFile          = function() return type(isfile) == "function" and isfile or nil end,
-    ListFiles       = function() return type(listfiles) == "function" and listfiles or nil end,
-    Identify        = function()
-        local names = { "getexecutorname", "identifyexecutor", "get_identify" }
-        for _, n in ipairs(names) do
-            if type(Env[n]) == "function" then
-                local ok, v = pcall(Env[n])
-                if ok and v then return tostring(v) end
-            end
-        end
-        return "unknown"
-    end,
+local function onConnection(cn)
+	if cn then table.insert(Hub.__connections, cn) end
+end
+
+local function cleanupAll()
+	for _, cn in ipairs(Hub.__connections) do
+		pcall(function()
+			cn:Disconnect()
+		end)
+	end
+	Hub.__connections = {}
+	for name, th in pairs(Hub.__threads) do
+		pcall(task.cancel, th)
+	end
+	Hub.__threads = {}
+end
+Hub.cleanup = cleanupAll
+
+-- ============================================================
+-- 2) SETTINGS
+-- ============================================================
+local Settings = {
+	farmEnabled = false,
+	farmCps = 10,                -- packets/sec de DamageBlock (rateLimit do jogo: 60)
+	targetMode = "LookForward",  -- "LookForward" | "Crosshair"
+	oresOnly = false,
+	autoRebirth = false,
+	rebirthInterval = 15,        -- segundos
+	autoHatch = false,
+	hatchEgg = nil,
+	hatchMulti = false,
+	autoEquipBest = false,
+	autoSpin = false,
+	autoBoost = false,
+	boostName = nil,
+	autoClaimPlaytime = false,
+	redeemCode = "",
+	noclip = false,
+	walkspeed = 16,
+	jumppower = 50,
+	espOres = false,
+	espAllOres = false,
+	teleportZone = nil,
+	adminEnabled = false,
+	adminPrefix = ";",
+	adminCommand = "",
+	autoTNT = false,
+	tntInterval = 2,
+	tntName = nil,
+	autoMystery = false,
+	craftSlot = 1,
+	craftRecipe = "",
+	craftAmount = 1,
+	claimCraftSlot = 1,
+	autoEnchant = false,
+	enchantPet = nil,
+	enchantTarget = nil,
+	enchantInterval = 5,
 }
 
-local function Fn(name)
-    local ok, val = pcall(FunctionMap[name])
-    return ok and val or nil
+-- ============================================================
+-- 3) CARREGAMENTO DA UI (FluentUI)
+-- ============================================================
+local Fluent = nil
+do
+	local ok, res = pcall(function()
+		return loadstring(game:HttpGet(
+			"https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"
+		))()
+	end)
+	if ok and res then
+		Fluent = res
+	else
+		warn("[SlenderHub] Falha ao carregar FluentUI: " .. tostring(res))
+		-- fallback: tenta fonte local (docs da pasta UI/FluentUI)
+		local ok2, res2 = pcall(function()
+			return loadstring(readfile("UI/FluentUI"))()
+		end)
+		if ok2 and res2 then
+			Fluent = res2
+		end
+	end
+	if not Fluent then
+		error("SlenderHub_ML: FluentUI indisponível", 0)
+	end
 end
 
-local ExecutorName = Fn("Identify")
+local Window = Fluent:CreateWindow({
+	Title = "SlenderHub — Mining Legends",
+	SubTitle = "dump v1 | network packets nativos",
+	TabWidth = 140,
+	Size = UDim2.fromOffset(590, 480),
+	Acrylic = true,
+	Theme = "Dark",
+	MinimizeKey = Enum.KeyCode.LeftControl,
+})
+Hub.window = Window
 
---------------------------------------------------------------------------------
--- ORÇAMENTO DE DECOMPILE (antitrava — não deixa o decompile estourar o jogo)
---------------------------------------------------------------------------------
-local DecompileBudget = 0
-
-local function UseBudget()
-    DecompileBudget = DecompileBudget + 1
-    return DecompileBudget <= SlenderHub.Config.MaxDecompilePerDump
-end
-
---------------------------------------------------------------------------------
--- NOME DO JOGO (com cache — GetProductInfo tem rate limit)
---------------------------------------------------------------------------------
-local GameNameCache
-
-local function GetGameName()
-    if GameNameCache then return GameNameCache end
-    local ok, info = pcall(function()
-        return MarketplaceService:GetProductInfo(game.PlaceId).Name
-    end)
-    local name = ok and info or ("place_" .. tostring(game.PlaceId))
-    name = (name or ""):gsub("[<>:\"/\\|?*]", "_")
-    GameNameCache = name ~= "" and name or ("place_" .. tostring(game.PlaceId))
-    return GameNameCache
-end
-
---------------------------------------------------------------------------------
--- FILESYSTEM (writefile/makefolder com fallback)
---------------------------------------------------------------------------------
-local HasWrite = Fn("WriteFile") ~= nil
-
-local function SanitizeName(name)
-    if not SlenderHub.Config.Sanitize then return name end
-    name = name:gsub("[<>:\"/\\|?*%c]", "_")
-    name = name:gsub("^_+", ""):gsub("_+$", "")
-    return name ~= "" and name or "unnamed"
-end
-
-local function EnsureFolder(path)
-    local mk = Fn("MakeFolder")
-    local isf = Fn("IsFolder")
-    if not mk then return false end
-    local cur = ""
-    for _, part in ipairs(string.split(path, "/")) do
-        cur = cur .. part
-        local exists = false
-        if isf then
-            local ok, e = pcall(isf, cur)
-            exists = ok and e == true
-        end
-        if not exists then
-            local ok = pcall(mk, cur)
-            if not ok then return false end
-        end
-        cur = cur .. "/"
-    end
-    return true
-end
-
-local function WriteUniqueFile(path, content)
-    local wf = Fn("WriteFile")
-    local isf = Fn("IsFile")
-    if not wf then return nil end
-    local final = path
-    local n = 1
-    while isf do
-        local ok, e = pcall(isf, final)
-        if not (ok and e) then break end
-        n = n + 1
-        final = path:gsub("(.+)%.(lua|txt|json|bin)$", "%1_" .. n .. ".%2")
-        if final == path then final = path .. "_" .. n end
-    end
-    local ok = pcall(wf, final, content)
-    return ok and final or nil
-end
-
---------------------------------------------------------------------------------
--- COLETA DE REMOTES
---------------------------------------------------------------------------------
--- Lookup por ClassName: MUITO mais rápido que 5 chamadas IsA() por instância.
--- Em jogos gigantes (PS99) o IsA em loop sobre centenas de milhares de
--- instâncias é o que derruba o cliente.
-local REMOTE_LOOKUP = {
-    RemoteEvent = true,
-    RemoteFunction = true,
-    UnreliableRemoteEvent = true,
-    BindableEvent = true,
-    BindableFunction = true,
+local Tabs = {
+	Farm = Window:AddTab({ Title = "Farm", Icon = "zap" }),
+	Player = Window:AddTab({ Title = "Player", Icon = "user" }),
+	Visual = Window:AddTab({ Title = "Visual", Icon = "eye" }),
+	Itens = Window:AddTab({ Title = "Itens", Icon = "package" }),
+	Admin = Window:AddTab({ Title = "Admin", Icon = "terminal" }),
+	Info = Window:AddTab({ Title = "Info", Icon = "info" }),
+	Config = Window:AddTab({ Title = "Config", Icon = "settings" }),
 }
 
-local REMOTE_CLASSES = {
-    "RemoteEvent", "RemoteFunction", "UnreliableRemoteEvent",
+local function Notify(title, content, duration)
+	pcall(function()
+		Fluent:Notify({ Title = title, Content = content, Duration = duration or 4 })
+	end)
+end
+
+-- ============================================================
+-- 4) INTEGRAÇÃO COM A REDE DO JOGO (nativo, via require)
+-- ============================================================
+local Network = {
+	ok = false,
+	Client = nil,   -- ClientPackets
+	Server = nil,   -- ServerPackets
+	Data = {},      -- módulos de dados (BlockModule, EggModule, ...)
+}
+local MODULE_NAMES = {
+	"BlockModule", "BoostModule", "FlagModule", "UpgradeModule",
+	"EggModule", "ExclusiveEggs", "PetModule", "EnchantModule",
+	"TNTModule", "MysteryBoxModule", "PetChance",
 }
 
-local SUSPICIOUS_WORDS = {
-    "ban", "admin", "detect", "cheat", "exploit", "check", "verify", "kick",
-    "anti", "honeypot", "log", "report", "ac", "detection", "flag", "punish",
-    "moderation", "security", "backdoor",
+do
+	local ok, err = pcall(function()
+		local NetLib = require(ReplicatedStorage.Packages.Network)
+		Network.Client = require(ReplicatedStorage.Shared.Modules.ClientPackets)
+		Network.Server = require(ReplicatedStorage.Shared.Modules.ServerPackets)
+		Network.ok = (NetLib ~= nil) and (Network.Client ~= nil) and (Network.Server ~= nil)
+	end)
+	if not ok or not Network.ok then
+		Network.ok = false
+		warn("[SlenderHub] Rede do jogo indisponível: " .. tostring(err))
+	end
+
+	for _, name in ipairs(MODULE_NAMES) do
+		local mok, mod = pcall(require, ReplicatedStorage.Shared.Modules[name])
+		if mok and type(mod) == "table" then
+			Network.Data[name] = mod
+		end
+	end
+end
+
+-- Rarity colors fallback (se RarityColors não for acessível)
+local RARITY_COLORS = {
+	Common = Color3.fromRGB(160, 160, 160),
+	Uncommon = Color3.fromRGB(90, 220, 120),
+	Rare = Color3.fromRGB(80, 150, 255),
+	Epic = Color3.fromRGB(170, 100, 255),
+	Legendary = Color3.fromRGB(255, 200, 60),
+	Mythic = Color3.fromRGB(255, 80, 80),
+	Secret = Color3.fromRGB(255, 90, 200),
+	Paradox = Color3.fromRGB(0, 240, 255),
+}
+do
+	local mok, rc = pcall(require, StarterPlayer.StarterPlayerScripts.Client.Modules.RarityColors)
+	if mok and type(rc) == "table" then
+		for k, v in pairs(rc) do
+			if type(v) == "userdata" then RARITY_COLORS[k] = v end
+		end
+	end
+end
+
+-- ============================================================
+-- 5) ESTADO DO SERVIDOR (listeners ServerPackets)
+-- ============================================================
+local State = {
+	currencies = {},       -- string -> number
+	rebirths = 0,
+	blocksMined = 0,
+	rankXp = 0,
+	boosts = {},           -- string -> count
+	flags = {},
+	upgrades = {},
+	ores = {},
+	tnt = {},
+	pets = {},             -- quantidades
+	petsSingulars = {},
+	blockStates = {},      -- GUID -> {Mine, BlockType, Amount, MaxAmount, Destroyed}
+	zones = {},
+	loaded = false,
+	playtimeCounter = 0,
+	exclusiveEggs = {},
+	craftSlots = {},
+	petEnchants = {},      -- petName -> {Name=, Tier=}
+	mysteryBoxes = 0,
+	enchantCrystals = 0,
+	enchantStatus = nil,
+	spinny = nil,
 }
 
-local SECURITY_FOLDERS = { "anticheat", "anti-cheat", "ac", "security", "moderation", "detection" }
-
-local function IsSuspiciousName(name)
-    local n = name:lower()
-    for _, w in ipairs(SUSPICIOUS_WORDS) do
-        if n:find(w, 1, true) then return true end
-    end
-    return false
+local function listenServer(packetName, handler)
+	if not (Network.ok and Network.Server and Network.Server[packetName]) then return nil end
+	local ok, cn = pcall(Network.Server[packetName].listen, Network.Server[packetName], handler)
+	if ok and cn then
+		table.insert(Hub.__connections, cn)
+		return cn
+	end
+	return nil
 end
 
-local function IsInsideSecurityFolder(inst)
-    local cur = inst.Parent
-    while cur do
-        local cname = cur.Name:lower()
-        for _, f in ipairs(SECURITY_FOLDERS) do
-            if cname == f then return true end
-        end
-        cur = cur.Parent
-    end
-    return false
+-- Hooks de UI: rodam DEPOIS que o State é atualizado.
+-- Evita registrar múltiplos .listen() no mesmo packet (modelo desconhecido da lib).
+local StateHooks = {}
+local function hookState(packetName, fn)
+	if not StateHooks[packetName] then StateHooks[packetName] = {} end
+	table.insert(StateHooks[packetName], fn)
+end
+local function emitHooks(packetName, ...)
+	local list = StateHooks[packetName]
+	if not list then return end
+	for _, fn in ipairs(list) do
+		pcall(fn, ...)
+	end
 end
 
-local function GetRemotePath(inst)
-    local parts = {}
-    local cur = inst
-    while cur and cur ~= game do
-        table.insert(parts, 1, cur.Name)
-        cur = cur.Parent
-    end
-    return table.concat(parts, "/")
-end
-
-local function CollectRemotes()
-    local remotes = {}
-    local seen = {}
-    local descCount = 0
-
-    local function Add(inst)
-        if seen[inst] then return end
-        seen[inst] = true
-        table.insert(remotes, inst)
-    end
-
-    -- 1) árvore visível
-    if HeavyModeActive then
-        -- Modo pesado: varredura MANUAL com GetChildren (não aloca a árvore
-        -- inteira como GetDescendants) e limite de nós — PS99: nunca explode.
-        local maxNodes = SlenderHub.Config.HeavyTreeScan
-        local stack = { game }
-        local visited = 0
-        while #stack > 0 and visited < maxNodes do
-            local inst = table.remove(stack, #stack)
-            visited = visited + 1
-            if REMOTE_LOOKUP[inst.ClassName] then Add(inst) end
-            local ok, children = pcall(function() return inst:GetChildren() end)
-            if ok and type(children) == "table" then
-                for i = 1, #children do table.insert(stack, children[i]) end
-            end
-        end
-        descCount = visited
-    else
-        local okDesc, descs = pcall(function() return game:GetDescendants() end)
-        if okDesc and type(descs) == "table" then
-            descCount = #descs
-            for _, desc in ipairs(descs) do
-                if REMOTE_LOOKUP[desc.ClassName] then Add(desc) end
-            end
-        end
-    end
-
-    -- 2) heap (remotes não expostos na árvore pública)
-    --    Modo pesado: PULA — getgc() de um jogo ofuscado gigante também crasha.
-    local gc = Fn("GetGC")
-    if gc and not HeavyModeActive then
-        pcall(function()
-            for _, v in ipairs(gc()) do
-                if type(v) == "userdata" and typeof(v) == "Instance"
-                    and REMOTE_LOOKUP[v.ClassName] then
-                    Add(v)
-                end
-            end
-        end)
-    end
-
-    -- 3) instâncias ocultas
-    local nilInst = Fn("GetNilInstances")
-    if nilInst then
-        pcall(function()
-            for _, v in ipairs(nilInst()) do
-                if typeof(v) == "Instance" and REMOTE_LOOKUP[v.ClassName] then
-                    Add(v)
-                end
-            end
-        end)
-    end
-
-    return remotes, descCount
-end
-
---------------------------------------------------------------------------------
--- MODO PESADO AUTOMÁTICO (PS99 e jogos gigantes — antitrava reforçado)
---------------------------------------------------------------------------------
-local HeavyModeActive = false
-
--- Detecção ANTES de qualquer scan: PlaceId conhecidos (PS99 etc.) entram no
--- modo pesado imediatamente — não esperamos nem medir a árvore (medir é caro).
-local function CheckHeavyByPlaceId()
-    if not SlenderHub.Config.HeavyAuto then return false end
-    local pid = tostring(game.PlaceId)
-    for _, id in ipairs(SlenderHub.Config.HeavyPlaceIds) do
-        if pid == tostring(id) then return true end
-    end
-    return false
-end
-
-local function ApplyHeavyMode()
-    if not SlenderHub.Config.HeavyAuto then return false end
-    SlenderHub.Config.MaxDecompilePerDump = SlenderHub.Config.HeavyDecompile
-    SlenderHub.Config.MaxHeapScan         = SlenderHub.Config.HeavyHeapScan
-    SlenderHub.Config.HeapMissLimit       = SlenderHub.Config.HeavyHeapMiss
-    HeavyModeActive = true
-    return true
-end
-
--- Closures de loadstring têm source genérico ("@string" ou "@<hash>") e não
--- correspondem a nada na árvore do jogo. Decompilar isso é o que crasha o
--- Delta em jogos ofuscados como PS99 — aqui identificamos e pulamos.
-local function IsLoadstringSource(src)
-    if type(src) ~= "string" then return true end
-    local s = src:gsub("^@", "")
-    if s == "string" or s == "" then return true end
-    if not s:find("/") and not s:find(":") then return true end -- @abc123
-    return false
-end
-
---------------------------------------------------------------------------------
--- COLETA DE SCRIPTS
---------------------------------------------------------------------------------
-local ScriptStore = {}   -- { path = caminho no disco, content = string, kind = "code"|"bytecode"|"note" }
-local ExtraStore = {}    -- closures extras por source
-local SeenSources = {}
-local Stats = { scripts = 0, closures = 0, extras = 0, errors = 0 }
-
-local function SourceToPath(source)
-    -- source: "@ReplicatedStorage/ModuleScript:42" | "@ModuleScript:42"
-    local s = source:gsub("^@", ""):gsub(":%d+$", "")
-    local parts = {}
-    for part in s:gmatch("[^/]+") do
-        table.insert(parts, part)
-    end
-    local folder, name
-    if #parts == 0 then
-        folder, name = "unknown", "unknown"
-    elseif #parts == 1 then
-        folder, name = "unknown", parts[1]
-    else
-        folder, name = parts[1], parts[#parts]
-    end
-    return SanitizeName(folder), SanitizeName(name)
-end
-
-local function DecompileOne(closure)
-    if not UseBudget() then return nil, nil end -- antitrava: orçamento estourou
-    local dc = Fn("Decompile")
-    if dc then
-        local ok, code = pcall(dc, closure)
-        if ok and type(code) == "string" and #code > 0 then
-            return code, "code"
-        end
-    end
-    local sb = Fn("ScriptBytecode") or Fn("DumpString")
-    if sb then
-        local ok, bin = pcall(sb, closure)
-        if ok and type(bin) == "string" and #bin > 0 then
-            return bin, "bytecode"
-        end
-    end
-    return nil, nil
-end
-
-local function AddClosure(closure, info)
-    info = info or debug.getinfo(closure)
-    if not info or type(info.source) ~= "string" then return end
-    local src = info.source
-    if src == "=[C]" or not src:find("^@") then return end -- C closure / builtin
-
-    -- modo pesado: pula closures de loadstring — decompile delas crasha o Delta
-    if SlenderHub.Config.SkipLoadstring and IsLoadstringSource(src) then
-        Stats.closures = Stats.closures + 1
-        return
-    end
-
-    Stats.closures = Stats.closures + 1
-    if SeenSources[src] then
-        if SlenderHub.Config.WriteExtra then
-            table.insert(ExtraStore, { source = src, closure = closure, info = info })
-        end
-        return
-    end
-    SeenSources[src] = true
-
-    local folder, name = SourceToPath(src)
-    local content, kind = DecompileOne(closure)
-    local note
-    if not content then
-        kind = "note"
-        note = string.format("-- Closure sem decompilador disponível.\n-- Executor: %s\n-- source: %s\n", tostring(ExecutorName), tostring(src))
-    end
-    local filePath = string.format("scripts/%s/%s.lua", folder, name)
-    table.insert(ScriptStore, {
-        path = filePath,
-        folder = folder,
-        name = name,
-        content = content,
-        kind = kind,
-        note = note,
-        source = src,
-    })
-    Stats.scripts = Stats.scripts + 1
-end
-
-local function CollectScripts()
-    -- A) scripts rodando (instâncias) — melhor precisão de nome/pasta
-    local running = Fn("GetRunning")
-    if running then
-        pcall(function()
-            for _, inst in ipairs(running()) do
-                if typeof(inst) == "Instance" then
-                    local okClass = pcall(function() return inst:IsA("LuaSourceContainer") end)
-                    if okClass then
-                        local content, kind
-                        local okSrc, src = pcall(function() return inst.Source end)
-                        if okSrc and type(src) == "string" and #src > 0 then
-                            content, kind = src, "code"
-                        else
-                            local dc = Fn("Decompile")
-                            if dc then
-                                local ok2, code = pcall(dc, inst)
-                                if ok2 and type(code) == "string" and #code > 0 then
-                                    content, kind = code, "code"
-                                end
-                            end
-                        end
-                        local folder, name = "scripts_rodando", SanitizeName(inst.Name)
-                        local filePath = string.format("scripts/%s/%s.lua", folder, name)
-                        table.insert(ScriptStore, {
-                            path = filePath, folder = folder, name = name,
-                            content = content, kind = kind or "note",
-                            note = kind and nil or ("-- Script sem código recuperável: " .. tostring(inst:GetFullName())),
-                            source = inst:GetFullName(),
-                        })
-                        Stats.scripts = Stats.scripts + 1
-                    end
-                end
-            end
-        end)
-    end
-
-    -- B) heap scan (closures vivas) — síncrono e LIMITADO (antitrava)
-    --    Modo pesado: MaxHeapScan=0 → desliga por completo (getgc() gigante
-    --    de jogo ofuscado crasha o Delta — a seção A/C já pegaram o essencial)
-    local gc = Fn("GetGC")
-    if gc and SlenderHub.Config.MaxHeapScan > 0 then
-        pcall(function()
-            local scanned = 0
-            local misses = 0
-            for _, v in ipairs(gc()) do
-                scanned = scanned + 1
-                if scanned > SlenderHub.Config.MaxHeapScan then break end
-                if type(v) == "function" then
-                    local before = Stats.scripts
-                    local ok, info = pcall(debug.getinfo, v, "S")
-                    if ok and info then AddClosure(v, info) end
-                    if Stats.scripts > before then
-                        misses = 0
-                    else
-                        misses = misses + 1
-                    end
-                    -- já achou o essencial? para cedo em vez de varrer o heap inteiro
-                    if misses >= SlenderHub.Config.HeapMissLimit
-                        and Stats.scripts >= SlenderHub.Config.MinUniqueSources then
-                        break
-                    end
-                end
-            end
-        end)
-    end
-
-    -- C) instâncias ocultas
-    local nilInst = Fn("GetNilInstances")
-    if nilInst then
-        pcall(function()
-            for _, v in ipairs(nilInst()) do
-                if typeof(v) == "Instance" and pcall(function() return v:IsA("LuaSourceContainer") end) then
-                    local content
-                    local okSrc, src = pcall(function() return v.Source end)
-                    if okSrc and type(src) == "string" and #src > 0 then
-                        content = src
-                    else
-                        local dc = Fn("Decompile")
-                        if dc then
-                            local ok2, code = pcall(dc, v)
-                            if ok2 and type(code) == "string" and #code > 0 then content = code end
-                        end
-                    end
-                    local folder, name = "ocultos", SanitizeName(v.Name)
-                    local filePath = string.format("scripts/%s/%s.lua", folder, name)
-                    table.insert(ScriptStore, {
-                        path = filePath, folder = folder, name = name,
-                        content = content or ("-- Instância oculta (sem código): " .. tostring(v:GetFullName())),
-                        kind = content and "code" or "note",
-                        source = v:GetFullName(),
-                    })
-                    Stats.scripts = Stats.scripts + 1
-                end
-            end
-        end)
-    end
-end
-
---------------------------------------------------------------------------------
--- LOG RUNTIME DE REMOTES (feature premium — off por padrão, hook detectável)
---------------------------------------------------------------------------------
-SlenderHub.RemoteLog = { Enabled = false, Buffer = {}, Hooked = false, OldNamecall = nil }
-
-local function FlushRemoteLog()
-    local base = string.format("%s/%s/remotes/runtime_log.txt", SlenderHub.Config.OutputRoot, GetGameName())
-    EnsureFolder(SlenderHub.Config.OutputRoot .. "/" .. GetGameName() .. "/remotes")
-    local content = table.concat(SlenderHub.RemoteLog.Buffer, "\n")
-    WriteUniqueFile(base, content)
-end
-
-local function EnableRemoteLog()
-    local hook = Fn("HookMetaMethod")
-    local nm   = Fn("GetNamecall")
-    local cc   = Fn("CheckCaller")
-    local ncc  = Fn("NewCClosure")
-    if not hook or not nm then
-        Notify("SlenderHub", "Executor sem hookmetamethod — log runtime indisponível", 3, "Error")
-        return false
-    end
-    local old = hook(game, "__namecall")
-    SlenderHub.RemoteLog.OldNamecall = old
-    local function callback(self, ...)
-        local method = nm()
-        if (method == "FireServer" or method == "InvokeServer") and typeof(self) == "Instance" then
-            if not (cc and cc()) then
-                local args = { ... }
-                local argStr = {}
-                for i = 1, math.min(6, #args) do
-                    local v = args[i]
-                    local str
-                    if typeof(v) == "Instance" then
-                        str = "Inst:" .. v.ClassName .. ":" .. v.Name
-                    elseif typeof(v) == "Vector3" or typeof(v) == "CFrame" or typeof(v) == "Color3" then
-                        str = tostring(v)
-                    else
-                        str = string.format("%q", tostring(v))
-                    end
-                    table.insert(argStr, str)
-                end
-                local line = string.format("[%s] %s %s(%s)",
-                    os.clock() > 0 and tostring(os.clock()) or tostring(0),
-                    self.ClassName, self.Name, table.concat(argStr, ", "))
-                table.insert(SlenderHub.RemoteLog.Buffer, line)
-            end
-        end
-        return old(self, ...)
-    end
-    local hookedFn = ncc and ncc(callback) or callback
-    hook(game, "__namecall", hookedFn)
-    SlenderHub.RemoteLog.Hooked = true
-    return true
-end
-
-local function DisableRemoteLog()
-    if SlenderHub.RemoteLog.Hooked then
-        if SlenderHub.RemoteLog.OldNamecall then
-            pcall(hookmetamethod, game, "__namecall", SlenderHub.RemoteLog.OldNamecall)
-        else
-            pcall(hookmetamethod, game, "__namecall", nil)
-        end
-        SlenderHub.RemoteLog.Hooked = false
-    end
-    FlushRemoteLog()
-end
-
---------------------------------------------------------------------------------
--- DUMP COMPLETO
---------------------------------------------------------------------------------
-local function BuildMetadata(remotes, honeypots)
-    local meta = {
-        tool = "SlenderHub Game Dumper",
-        version = "1.0.8",
-        game = GetGameName(),
-        placeId = tostring(game.PlaceId),
-        executor = tostring(ExecutorName),
-        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
-        stats = {
-            scripts = Stats.scripts,
-            closures_scanned = Stats.closures,
-            extra_closures = Stats.extras,
-            remotes = #remotes,
-            honeypots = #honeypots,
-            errors = Stats.errors,
-        },
-        remotes_summary = {},
-    }
-    for _, r in ipairs(remotes) do
-        table.insert(meta.remotes_summary, {
-            name = r.Name,
-            className = r.ClassName,
-            path = GetRemotePath(r),
-            bindable = r:IsA("BindableEvent") or r:IsA("BindableFunction"),
-        })
-    end
-    return HttpService:JSONEncode(meta)
-end
-
-local function RunDump()
-    Stats = { scripts = 0, closures = 0, extras = 0, errors = 0 }
-    ScriptStore = {}
-    ExtraStore = {}
-    SeenSources = {}
-
-    local gameName = GetGameName()
-    local root = string.format("%s/%s", SlenderHub.Config.OutputRoot, gameName)
-
-    if not HasWrite then
-        Notify("SlenderHub", "Executor sem writefile — só exibindo na tela", 4, "Warning")
-    end
-
-    -- detecção ANTES de qualquer scan (PS99 e similares) — evita o crash
-    -- instantâneo causado por GetDescendants/getgc em jogos gigantes
-    if CheckHeavyByPlaceId() then
-        ApplyHeavyMode()
-        Notify("SlenderHub", "Modo pesado ativo (jogo gigante) — limites reduzidos", 5, "Warning")
-    end
-
-    Notify("SlenderHub", "Coletando remotes...", 2, nil)
-    local remotes, descCount = CollectRemotes()
-
-    -- fallback: detecta por tamanho da árvore (para jogos grandes não listados)
-    if not HeavyModeActive and descCount >= SlenderHub.Config.HeavyDescendants then
-        ApplyHeavyMode()
-        Notify("SlenderHub", "Modo pesado ativo (árvore gigante) — limites reduzidos", 5, "Warning")
-    end
-
-    Notify("SlenderHub", "Coletando scripts (heap scan)...", 3, nil)
-    CollectScripts()
-
-    -- honeypots + conexões (coleta UMA vez e reusa — getconnections é caro)
-    local honeypots = {}
-    local connectionInfo = {}    -- remote -> count (para o resumo)
-    local connectionTables = {}  -- remote -> tabela de conexões (para connections.txt)
-    local gcCons = Fn("GetConnections")
-    for _, r in ipairs(remotes) do
-        local cons
-        if gcCons then
-            local ok, t = pcall(gcCons, r)
-            if ok and type(t) == "table" then
-                connectionTables[r] = t
-                cons = #t
-            end
-        end
-        connectionInfo[r] = cons
-        local susp = IsSuspiciousName(r.Name) or IsInsideSecurityFolder(r)
-        if susp then
-            table.insert(honeypots, r)
-        end
-    end
-
-    -- export
-    local okWrite = HasWrite
-    if okWrite then
-        EnsureFolder(root .. "/scripts")
-        EnsureFolder(root .. "/remotes")
-    end
-
-    local written = 0
-    local failed = 0
-    if okWrite then
-        -- cache de pastas: evita chamada nativa (isfolder/makefolder) por script
-        local madeFolders = {}
-        local function EnsureCached(path)
-            if madeFolders[path] then return end
-            madeFolders[path] = true
-            EnsureFolder(path)
-        end
-        for _, s in ipairs(ScriptStore) do
-            local full = string.format("%s/%s", root, s.path)
-            EnsureCached(root .. "/scripts/" .. s.folder)
-            local content = s.content
-            if s.kind == "bytecode" then
-                content = "-- BYTECODE (use descompilador externo)\n" .. content
-            elseif s.kind == "note" then
-                content = s.note
-            else
-                content = "--// SlenderHub Dump | " .. gameName .. " | source: " .. (s.source or "") .. "\n\n" .. content
-            end
-            local ok = WriteUniqueFile(full, content)
-            if ok then written = written + 1 else failed = failed + 1 end
-        end
-        -- extras
-        if SlenderHub.Config.WriteExtra then
-            local done = {}
-            for _, ex in ipairs(ExtraStore) do
-                local folder, name = SourceToPath(ex.source)
-                local content, kind = DecompileOne(ex.closure)
-                if content then
-                    local n = (done[ex.source] or 0) + 1
-                    done[ex.source] = n
-                    local full = string.format("%s/scripts/_closures/%s_%d.lua", root, name, n)
-                    EnsureFolder(root .. "/scripts/_closures")
-                    WriteUniqueFile(full, "--// SlenderHub Dump (closure extra)\n" .. content)
-                end
-            end
-            Stats.extras = done and #ExtraStore or 0
-        end
-
-        -- remotes.txt
-        local lines = { string.format("REMOTES — %s (%s)", gameName, tostring(game.PlaceId)) }
-        for _, r in ipairs(remotes) do
-            local bind = r:IsA("BindableEvent") or r:IsA("BindableFunction")
-            local cons = connectionInfo[r]
-            local consStr = cons and tostring(cons) or "?"
-            table.insert(lines, string.format("[%s] %s | caminho: %s | handlers: %s%s",
-                r.ClassName, r.Name, GetRemotePath(r), consStr,
-                bind and " | BINDABLE (local, não fireável)" or ""))
-        end
-        WriteUniqueFile(root .. "/remotes/remotes.txt", table.concat(lines, "\n"))
-
-        -- honeypots.txt
-        local hl = { "HONEYPOTS / SUSPEITOS — NÃO FIRE sem investigar", "" }
-        for _, r in ipairs(honeypots) do
-            local reason = {}
-            if IsSuspiciousName(r.Name) then table.insert(reason, "nome suspeito") end
-            if IsInsideSecurityFolder(r) then table.insert(reason, "dentro de pasta de segurança") end
-            table.insert(hl, string.format("[%s] %s (%s) | %s",
-                r.ClassName, r.Name, GetRemotePath(r), table.concat(reason, ", ")))
-        end
-        table.insert(hl, "")
-        table.insert(hl, "OBS: remote SEM handlers no cliente não é necessariamente honeypot —")
-        table.insert(hl, "o handler pode estar no servidor. Sempre teste com conta descartável.")
-        WriteUniqueFile(root .. "/remotes/honeypots.txt", table.concat(hl, "\n"))
-
-        -- connections.txt (reusa a tabela coletada — zero chamadas extras)
-        local cl = { "CONEXÕES (quem escuta no cliente)", "" }
-        for _, r in ipairs(remotes) do
-            local cons = connectionTables[r]
-            if cons and #cons > 0 then
-                table.insert(cl, string.format("[%s] %s — %d conexão(ões)", r.ClassName, r.Name, #cons))
-                for i, c in ipairs(cons) do
-                    local fn = type(c) == "table" and c.Function
-                    local loc
-                    if type(fn) == "function" then
-                        local ok2, info = pcall(debug.getinfo, fn, "S")
-                        loc = ok2 and info and tostring(info.source) or "?"
-                    end
-                    table.insert(cl, string.format("    %d. handler em %s", i, loc or "?"))
-                end
-            end
-        end
-        WriteUniqueFile(root .. "/remotes/connections.txt", table.concat(cl, "\n"))
-
-        -- metadata.json
-        WriteUniqueFile(root .. "/metadata.json", BuildMetadata(remotes, honeypots))
-    end
-
-    -- resumo (reusa connectionInfo — zero chamadas extras)
-    local handlersCount = 0
-    for _, r in ipairs(remotes) do
-        local c = connectionInfo[r]
-        if c then handlersCount = handlersCount + c end
-    end
-
-    local summary = string.format(
-        "DUMP CONCLUÍDO\nJogo: %s (%s)\nExecutor: %s\n\nPasta: %s\n  • Scripts: %d (falhas: %d)\n  • Closures no heap: %d\n  • Closures extras: %d\n  • Remotes: %d (honeypots: %d)\n  • Handlers no cliente: %d%s",
-        gameName, tostring(game.PlaceId), tostring(ExecutorName),
-        root, written, failed,
-        Stats.closures, Stats.extras,
-        #remotes, #honeypots, handlersCount,
-        HeavyModeActive and "\n\n⚠ MODO PESADO: limites reduzidos (jogo gigante)" or "")
-
-    if SlenderHub.UI and SlenderHub.UI.SetResult then
-        SlenderHub.UI.SetResult(summary)
-    end
-    Notify("SlenderHub", "Dump salvo em " .. root, 6, "Success")
-end
-
---------------------------------------------------------------------------------
--- UI SLENDERWIND (enxuta — mesma identidade do hub)
---------------------------------------------------------------------------------
-SlenderHub.UI = {}
-
-local function CreateUI()
-    local theme = {
-        MainBg  = Color3.fromRGB(18, 18, 22),
-        Sidebar = Color3.fromRGB(23, 23, 27),
-        Element = Color3.fromRGB(30, 30, 36),
-        Text    = Color3.fromRGB(240, 240, 240),
-        SubText = Color3.fromRGB(160, 160, 160),
-        Accent  = Color3.fromRGB(60, 130, 250),
-        Stroke  = Color3.fromRGB(45, 45, 50),
-        Success = Color3.fromRGB(60, 250, 100),
-        Warning = Color3.fromRGB(250, 180, 60),
-        Error   = Color3.fromRGB(255, 85, 85),
-    }
-
-    local parent = CoreGui
-    if parent:FindFirstChild("SlenderHubDumper") then parent.SlenderHubDumper:Destroy() end
-
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "SlenderHubDumper"
-    sg.ResetOnSpawn = false
-    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    sg.Parent = parent
-
-    local main = Instance.new("Frame")
-    main.BackgroundColor3 = theme.MainBg
-    main.Size = UDim2.new(0, 460, 0, 460)
-    main.Position = UDim2.new(0.5, -230, 0.5, -230)
-    main.Parent = sg
-    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 10); corner.Parent = main
-    local stroke = Instance.new("UIStroke"); stroke.Color = theme.Stroke; stroke.Parent = main
-
-    -- topbar (drag)
-    local topbar = Instance.new("Frame")
-    topbar.BackgroundTransparency = 1
-    topbar.Size = UDim2.new(1, 0, 0, 36)
-    topbar.Parent = main
-
-    local title = Instance.new("TextLabel")
-    title.Text = "SlenderHub | Game Dumper"
-    title.TextColor3 = theme.Text
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 15
-    title.BackgroundTransparency = 1
-    title.Position = UDim2.new(0, 14, 0, 0)
-    title.Size = UDim2.new(1, -60, 1, 0)
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = topbar
-
-    local dragging, dragInput, startPos
-    topbar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; startPos = input.Position; dragInput = input
-        end
-    end)
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - startPos
-            main.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset + delta.X, main.Position.Y.Scale, main.Position.Y.Offset + delta.Y)
-        end
-    end)
-    game:GetService("UserInputService").InputEnded:Connect(function(input)
-        if input == dragInput then dragging = false end
-    end)
-
-    local close = Instance.new("TextButton")
-    close.Text = "X"
-    close.TextColor3 = theme.SubText
-    close.BackgroundTransparency = 1
-    close.Size = UDim2.new(0, 32, 0, 32)
-    close.Position = UDim2.new(1, -36, 0, 2)
-    close.Font = Enum.Font.GothamBold
-    close.TextSize = 14
-    close.Parent = topbar
-    close.MouseButton1Click:Connect(function() sg:Destroy() end)
-
-    -- corpo
-    local body = Instance.new("Frame")
-    body.BackgroundTransparency = 1
-    body.Position = UDim2.new(0, 12, 0, 44)
-    body.Size = UDim2.new(1, -24, 1, -56)
-    body.Parent = main
-
-    local info = Instance.new("TextLabel")
-    info.Text = string.format("Jogo: %s | Executor: %s", GetGameName(), tostring(ExecutorName))
-    info.TextColor3 = theme.SubText
-    info.Font = Enum.Font.Gotham
-    info.TextSize = 12
-    info.BackgroundTransparency = 1
-    info.Size = UDim2.new(1, 0, 0, 24)
-    info.TextXAlignment = Enum.TextXAlignment.Left
-    info.Parent = body
-
-    local btnDump = Instance.new("TextButton")
-    btnDump.Text = "▶  DUMPAR JOGO"
-    btnDump.TextColor3 = theme.Text
-    btnDump.Font = Enum.Font.GothamBold
-    btnDump.TextSize = 14
-    btnDump.BackgroundColor3 = theme.Accent
-    btnDump.Size = UDim2.new(1, 0, 0, 40)
-    btnDump.Position = UDim2.new(0, 0, 0, 30)
-    btnDump.Parent = body
-    local bcorner = Instance.new("UICorner"); bcorner.CornerRadius = UDim.new(0, 6); bcorner.Parent = btnDump
-
-    local btnLog = Instance.new("TextButton")
-    btnLog.Text = "●  LOG DE REMOTES (runtime)"
-    btnLog.TextColor3 = theme.Text
-    btnLog.Font = Enum.Font.GothamBold
-    btnLog.TextSize = 13
-    btnLog.BackgroundColor3 = theme.Element
-    btnLog.Size = UDim2.new(1, 0, 0, 36)
-    btnLog.Position = UDim2.new(0, 0, 0, 78)
-    btnLog.Parent = body
-    local bcorner2 = Instance.new("UICorner"); bcorner2.CornerRadius = UDim.new(0, 6); bcorner2.Parent = btnLog
-
-    local logActive = false
-    btnLog.MouseButton1Click:Connect(function()
-        logActive = not logActive
-        if logActive then
-            local ok = EnableRemoteLog()
-            if ok then
-                btnLog.Text = "●  LOG DE REMOTES (runtime) — ATIVO"
-                btnLog.BackgroundColor3 = theme.Success
-            else
-                logActive = false
-            end
-        else
-            DisableRemoteLog()
-            btnLog.Text = "●  LOG DE REMOTES (runtime)"
-            btnLog.BackgroundColor3 = theme.Element
-        end
-    end)
-
-    local dumping = false
-    btnDump.MouseButton1Click:Connect(function()
-        if dumping then return end -- ignora duplo clique
-        dumping = true
-        task.spawn(function()
-            btnDump.Text = "⏳  Dumpando... (não feche)"
-            btnDump.BackgroundColor3 = theme.Warning
-            local ok, err = pcall(RunDump)
-            if not ok then
-                -- nunca deixa o botão preso em "Dumpando..." por erro silencioso
-                Notify("SlenderHub", "Erro no dump: " .. tostring(err), 6, "Error")
-                if SlenderHub.UI and SlenderHub.UI.SetResult then
-                    SlenderHub.UI.SetResult("ERRO no dump:\n" .. tostring(err) ..
-                        "\n\nSe persistir, reduza MaxDecompilePerDump / MaxHeapScan no topo do script.")
-                end
-            end
-            btnDump.Text = "▶  DUMPAR JOGO"
-            btnDump.BackgroundColor3 = theme.Accent
-            dumping = false
-        end)
-    end)
-
-    local result = Instance.new("TextLabel")
-    result.Text = "Clique em DUMPAR JOGO.\nO dump será salvo em: " .. SlenderHub.Config.OutputRoot .. "/<nome_do_jogo>/"
-    result.TextColor3 = theme.Text
-    result.Font = Enum.Font.Gotham
-    result.TextSize = 12
-    result.TextWrapped = true
-    result.TextXAlignment = Enum.TextXAlignment.Left
-    result.TextYAlignment = Enum.TextYAlignment.Top
-    result.BackgroundColor3 = theme.Element
-    result.Size = UDim2.new(1, 0, 1, -124)
-    result.Position = UDim2.new(0, 0, 0, 122)
-    result.Parent = body
-    local rcorner = Instance.new("UICorner"); rcorner.CornerRadius = UDim.new(0, 6); rcorner.Parent = result
-    local padding = Instance.new("UIPadding"); padding.PaddingLeft = UDim.new(0, 10); padding.PaddingTop = UDim.new(0, 8); padding.Parent = result
-
-    -- notificações
-    local notifyContainer = Instance.new("Frame")
-    notifyContainer.BackgroundTransparency = 1
-    notifyContainer.AnchorPoint = Vector2.new(0, 1)
-    notifyContainer.Position = UDim2.new(1, -300, 1, -16)
-    notifyContainer.Size = UDim2.new(0, 280, 1, 0)
-    notifyContainer.Parent = sg
-    local nlist = Instance.new("UIListLayout"); nlist.Padding = UDim.new(0, 6); nlist.VerticalAlignment = Enum.VerticalAlignment.Bottom; nlist.Parent = notifyContainer
-
-    SlenderHub.UI.Notify = function(titleText, text, dur, type)
-        local typeColor = theme.Accent
-        if type == "Success" then typeColor = theme.Success
-        elseif type == "Warning" then typeColor = theme.Warning
-        elseif type == "Error" then typeColor = theme.Error end
-        local frame = Instance.new("Frame")
-        frame.BackgroundColor3 = theme.Sidebar
-        frame.Size = UDim2.new(1, 0, 0, 48)
-        frame.Parent = notifyContainer
-        local fcorner = Instance.new("UICorner"); fcorner.CornerRadius = UDim.new(0, 8); fcorner.Parent = frame
-        local fstroke = Instance.new("UIStroke"); fstroke.Color = typeColor; fstroke.Parent = frame
-        local t1 = Instance.new("TextLabel")
-        t1.Text = titleText; t1.TextColor3 = typeColor; t1.Font = Enum.Font.GothamBold; t1.TextSize = 13
-        t1.BackgroundTransparency = 1; t1.Position = UDim2.new(0, 10, 0, 5); t1.Size = UDim2.new(1, -20, 0, 18)
-        t1.TextXAlignment = Enum.TextXAlignment.Left; t1.Parent = frame
-        local t2 = Instance.new("TextLabel")
-        t2.Text = text or ""; t2.TextColor3 = theme.Text; t2.Font = Enum.Font.Gotham; t2.TextSize = 11
-        t2.BackgroundTransparency = 1; t2.Position = UDim2.new(0, 10, 0, 23); t2.Size = UDim2.new(1, -20, 0, 18)
-        t2.TextXAlignment = Enum.TextXAlignment.Left; t2.TextWrapped = true; t2.Parent = frame
-        task.delay(dur or 3, function() frame:Destroy() end)
-    end
-
-    SlenderHub.UI.SetResult = function(text)
-        result.Text = text
-    end
-end
-
---------------------------------------------------------------------------------
--- BOOT
---------------------------------------------------------------------------------
-local ok, err = pcall(function()
-    CreateUI()
-    Notify("SlenderHub", "Game Dumper pronto. Executor: " .. tostring(ExecutorName), 4, nil)
+listenServer("ClientLoaded", function()
+	State.loaded = true
 end)
-if not ok then
-    warn("[SlenderHubDumper] Erro no boot: " .. tostring(err))
+
+listenServer("UpdateBlock", function(data)
+	if type(data) ~= "table" then return end
+	State.blocksMined = State.blocksMined + 1
+	if type(data.BlockData) == "table" then
+		local bd = data.BlockData
+		State.blockStates[bd.GUID] = {
+			Mine = data.Mine,
+			BlockType = bd.BlockType,
+			Amount = bd.Amount,
+			MaxAmount = bd.MaxAmount,
+			Destroyed = bd.Destroyed == true,
+		}
+	end
+end)
+
+listenServer("MineReset", function(mineName)
+	if type(mineName) ~= "string" then return end
+	for guid, st in pairs(State.blockStates) do
+		if st.Mine == mineName then State.blockStates[guid] = nil end
+	end
+end)
+
+listenServer("UpdateCurrency", function(data)
+	if type(data) == "table" and data.currency then
+		State.currencies[data.currency] = data.NewAmount
+	end
+end)
+
+listenServer("CurrencyGranted", function(data)
+	if type(data) == "table" and data.currency then
+		State.currencies[data.currency] = data.NewAmount
+	end
+end)
+
+listenServer("UpdateRebirths", function(n)
+	State.rebirths = tonumber(n) or 0
+end)
+
+listenServer("UpdateRankXP", function(data)
+	if type(data) == "table" then State.rankXp = data.XP or 0 end
+end)
+
+local function mapSum(map)
+	if type(map) ~= "table" then return 0 end
+	local s = 0
+	for _, v in pairs(map) do s = s + (tonumber(v) or 0) end
+	return s
 end
 
-return SlenderHub
+listenServer("UpdateBoosts", function(m)
+	State.boosts = m or {}
+end)
+listenServer("UpdateFlags", function(m)
+	State.flags = m or {}
+end)
+listenServer("UpdateUpgrades", function(m)
+	State.upgrades = m or {}
+end)
+listenServer("UpdateOres", function(m)
+	State.ores = m or {}
+end)
+listenServer("UpdateTNT", function(m)
+	State.tnt = m or {}
+	emitHooks("UpdateTNT", State.tnt)
+end)
+listenServer("InventoryUpdate", function(data)
+	if type(data) ~= "table" then return end
+	State.pets = data.Quantities or {}
+	State.petsSingulars = data.Singulars or {}
+	emitHooks("InventoryUpdate", data)
+end)
+listenServer("UpdateSpinnyTokens", function(data)
+	if type(data) == "table" then
+		State.spinny = data
+	end
+end)
+listenServer("CounterStarted", function(n)
+	State.playtimeCounter = tonumber(n) or 0
+end)
+listenServer("ErrorMessage", function(msg)
+	if type(msg) == "string" then
+		Notify("Erro do servidor", msg, 5)
+	end
+end)
+listenServer("CodeRedeemed", function()
+	Notify("Código resgatado", "O servidor aceitou o código!", 4)
+end)
+listenServer("GlobalAnnounce", function(msg)
+	if type(msg) == "string" and msg ~= "" then
+		Notify("Anúncio global", msg, 6)
+	end
+end)
+
+listenServer("UpdateExclusiveEggs", function(m)
+	State.exclusiveEggs = m or {}
+end)
+listenServer("UpdateMysteryBoxes", function(n)
+	State.mysteryBoxes = tonumber(n) or 0
+	emitHooks("UpdateMysteryBoxes", State.mysteryBoxes)
+end)
+listenServer("UpdateEnchantCrystals", function(n)
+	State.enchantCrystals = tonumber(n) or 0
+end)
+listenServer("UpdateCraftSlots", function(m)
+	State.craftSlots = m or {}
+	emitHooks("UpdateCraftSlots", State.craftSlots)
+end)
+listenServer("UpdatePetEnchants", function(m)
+	State.petEnchants = m or {}
+	emitHooks("UpdatePetEnchants", State.petEnchants)
+end)
+listenServer("AutoEnchantUpdate", function(data)
+	if type(data) == "table" then
+		State.enchantStatus = data
+		emitHooks("AutoEnchantUpdate", data)
+	end
+end)
+listenServer("MysteryBoxOpened", function(items)
+	if type(items) ~= "table" then return end
+	local total = 0
+	for _, it in ipairs(items) do
+		if type(it) == "table" then total = total + (tonumber(it.Amount) or 1) end
+	end
+	Notify("Mystery Box", ("Recompensas: %d item(s)"):format(total), 4)
+end)
+
+-- ============================================================
+-- 6) HELPERS DE BLOCOS (Mine + GUID)
+-- ============================================================
+-- Container ancestral com nome de mina (estrito)
+local function hasMineAncestor(part)
+	local p = part.Parent
+	while p do
+		if p:IsA("Model") or p:IsA("Folder") then
+			local nm = string.lower(tostring(p.Name))
+			if string.find(nm, "mine") or string.find(nm, "mundo") or string.find(nm, "world") then
+				return true
+			end
+		end
+		p = p.Parent
+	end
+	return false
+end
+
+-- Nome da mina para o packet DamageBlock (best-effort)
+local function findMineName(part)
+	local p = part.Parent
+	local lastContainer = nil
+	while p do
+		if p:IsA("Model") or p:IsA("Folder") then
+			lastContainer = p
+			local nm = string.lower(tostring(p.Name))
+			if string.find(nm, "mine") or string.find(nm, "mundo") or string.find(nm, "world") then
+				return p.Name
+			end
+		end
+		p = p.Parent
+	end
+	-- fallback: primeiro container encontrado (evita enviar nil)
+	if lastContainer then return lastContainer.Name end
+	return nil
+end
+
+local function blockGUID(part)
+	local guid = part:GetAttribute("GUID")
+		or part:GetAttribute("BlockGUID")
+		or part:GetAttribute("BlockId")
+	if guid == nil or guid == "" then guid = part.Name end
+	return tostring(guid)
+end
+
+local function blockTypeOf(part)
+	local bt = part:GetAttribute("BlockType") or part:GetAttribute("BlockName")
+	if bt ~= nil then return tostring(bt) end
+	-- fallback: nome do bloco deve bater com BlockModule
+	if Network.Data.BlockModule and Network.Data.BlockModule[part.Name] then
+		return part.Name
+	end
+	return nil
+end
+
+local function isMineBlock(part)
+	if not part:IsA("BasePart") then return false end
+	local name = part.Name
+	if name == "ZonePart" or name == "Atlantis" or name == "Fall" then return false end
+	if part:GetAttribute("GUID") or part:GetAttribute("BlockGUID") or part:GetAttribute("BlockId") then
+		return true
+	end
+	return hasMineAncestor(part)
+end
+
+local function getCharacter()
+	local c = LocalPlayer.Character
+	if not c then return nil end
+	local hrp = c:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
+	return c, hrp
+end
+
+local function raycastBlock(origin, dir, maxDist, filterExclude)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true
+	params.FilterDescendantsInstances = filterExclude or (LocalPlayer.Character and { LocalPlayer.Character } or {})
+	local res = Workspace:Raycast(origin, dir * (maxDist or 250), params)
+	if res and res.Instance and isMineBlock(res.Instance) then
+		return res.Instance
+	end
+	return nil
+end
+
+-- Mira: bloco sob o crosshair
+local function targetByCrosshair()
+	local cam = Workspace.CurrentCamera
+	if not cam then return nil end
+	local viewport = cam.ViewportSize
+	local origin, dir = cam:ViewportPointToRay(viewport.X / 2, viewport.Y / 2)
+	return raycastBlock(origin, dir, 250)
+end
+
+-- Mira: bloco à frente do personagem (AFK-friendly)
+local function targetByLookForward()
+	local _, hrp = getCharacter()
+	if not hrp then return nil end
+	local cam = Workspace.CurrentCamera
+	local look = cam and cam.CFrame.LookVector or hrp.CFrame.LookVector
+	local origin = hrp.Position + Vector3.new(0, 2, 0)
+	local block = raycastBlock(origin, look, 200)
+	if block then return block end
+	-- tenta levemente abaixo (minerar chão/frente)
+	local down = (Vector3.new(look.X, look.Y - 0.35, look.Z)).Unit
+	return raycastBlock(origin, down, 200)
+end
+
+local function getTargetBlock()
+	if Settings.targetMode == "Crosshair" then
+		return targetByCrosshair() or targetByLookForward()
+	end
+	return targetByLookForward() or targetByCrosshair()
+end
+
+local function rarityOf(blockType)
+	if not blockType then return nil end
+	local bm = Network.Data.BlockModule
+	if bm and bm[blockType] then
+		return bm[blockType].Rarity or "Common"
+	end
+	return nil
+end
+
+-- ============================================================
+-- 7) CONTROLES DE FEATURE
+-- ============================================================
+local Packets = Network.Client
+
+local function send(name, payload)
+	if not Packets or not Packets[name] then return false end
+	local ok, err = pcall(Packets[name].send, Packets[name], payload)
+	if not ok then
+		warn(("[SlenderHub] falha ao enviar %s: %s"):format(name, tostring(err)))
+		return false
+	end
+	return true
+end
+
+-- ---- loops genéricos ----
+local function cleanupThread(name)
+	if Hub.__threads[name] then
+		pcall(task.cancel, Hub.__threads[name])
+		Hub.__threads[name] = nil
+	end
+end
+
+local function runNamedLoop(name, loopFn, flag)
+	cleanupThread(name)
+	Hub.__threads[name] = task.spawn(function()
+		while flag() do
+			loopFn()
+		end
+	end)
+end
+
+-- ---- Autofarm ----
+local function farmLoop()
+	while Settings.farmEnabled do
+		if not Network.ok then
+			task.wait(1)
+		else
+			local part = getTargetBlock()
+			if part then
+				local mine = findMineName(part)
+				local guid = blockGUID(part)
+				local st = State.blockStates[guid]
+				if not (st and st.Destroyed) then
+					local canMine = true
+					if Settings.oresOnly then
+						local bt = blockTypeOf(part)
+						local rar = rarityOf(bt)
+						canMine = rar ~= nil and rar ~= "Common"
+					end
+					if canMine then
+						send("DamageBlock", { Mine = mine, GUID = guid })
+					end
+				end
+			end
+			local interval = Settings.farmCps > 0 and (1 / Settings.farmCps) or 0.1
+			task.wait(math.clamp(interval, 0.016, 1))
+		end
+	end
+end
+
+local function startFarm()
+	cleanupThread("farm")
+	Settings.farmEnabled = true
+	Hub.__threads.farm = task.spawn(farmLoop)
+end
+
+local function stopFarm()
+	Settings.farmEnabled = false
+	if Hub.__threads.farm then
+		pcall(task.cancel, Hub.__threads.farm)
+		Hub.__threads.farm = nil
+	end
+end
+
+-- ---- Auto Rebirth ----
+local function rebirthLoop()
+	while Settings.autoRebirth do
+		if Network.ok then
+			send("Rebirth", 1)
+		end
+		task.wait(Settings.rebirthInterval)
+	end
+end
+
+-- ---- Auto Hatch ----
+local function hatchLoop()
+	while Settings.autoHatch do
+		if Network.ok and Settings.hatchEgg then
+			send("AutoHatchEgg", Settings.hatchEgg)
+		end
+		task.wait(6)
+	end
+end
+
+-- ---- Auto Equip Best ----
+local function equipBestLoop()
+	while Settings.autoEquipBest do
+		if Network.ok then
+			send("EquipBest", {})
+		end
+		task.wait(10)
+	end
+end
+
+-- ---- Auto Spin ----
+local function spinLoop()
+	while Settings.autoSpin do
+		if Network.ok then
+			send("SpinWheel", {})
+			send("ClaimSpinnyToken", {})
+		end
+		task.wait(8)
+	end
+end
+
+-- ---- Auto Boost ----
+local function boostLoop()
+	while Settings.autoBoost do
+		if Network.ok and Settings.boostName then
+			local amount = State.boosts[Settings.boostName] or 0
+			if amount > 0 then
+				send("UseBoost", Settings.boostName)
+			end
+		end
+		task.wait(30)
+	end
+end
+
+-- ---- Auto Claim Playtime ----
+local function claimPlaytimeLoop()
+	while Settings.autoClaimPlaytime do
+		if Network.ok then
+			send("ClaimPlaytimeGift", 1)
+		end
+		task.wait(60)
+	end
+end
+
+-- ---- TNT ----
+local function tntLoop()
+	while Settings.autoTNT do
+		if Network.ok and Settings.tntName then
+			local part = getTargetBlock()
+			if part then
+				local pos = part.Position
+				send("ThrowTNT", { TNT = Settings.tntName, X = pos.X, Y = pos.Y, Z = pos.Z })
+			end
+		end
+		task.wait(math.clamp(Settings.tntInterval, 0.5, 10))
+	end
+end
+
+-- ---- Mystery Box ----
+local function mysteryLoop()
+	while Settings.autoMystery do
+		if Network.ok and State.mysteryBoxes > 0 then
+			send("OpenMysteryBox", 1)
+		end
+		task.wait(1)
+	end
+end
+
+-- ---- Auto Enchant ----
+local function enchantLoop()
+	while Settings.autoEnchant do
+		if Network.ok and Settings.enchantPet and Settings.enchantTarget then
+			send("StartAutoEnchant", { Pet = Settings.enchantPet, Target = Settings.enchantTarget })
+		end
+		task.wait(math.clamp(Settings.enchantInterval, 2, 30))
+	end
+end
+
+-- ---- Noclip / WalkSpeed / JumpPower ----
+local function charLoop()
+	while true do
+		local _, hrp = getCharacter()
+		local humanoid = hrp and hrp.Parent and hrp.Parent:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			if humanoid.WalkSpeed ~= Settings.walkspeed then
+				humanoid.WalkSpeed = Settings.walkspeed
+			end
+			if humanoid.UseJumpPower then
+				if humanoid.JumpPower ~= Settings.jumppower then
+					humanoid.JumpPower = Settings.jumppower
+				end
+			elseif humanoid.JumpHeight ~= (Settings.jumppower / 5) then
+				humanoid.JumpHeight = Settings.jumppower / 5
+			end
+			if Settings.noclip then
+				for _, part in ipairs(hrp.Parent:GetDescendants()) do
+					if part:IsA("BasePart") and part.CanCollide then
+						part.CanCollide = false
+					end
+				end
+			end
+		end
+		task.wait(0.15)
+	end
+end
+Hub.__threads.char = task.spawn(charLoop)
+
+-- ---- Teleport ----
+local function refreshZones()
+	State.zones = {}
+	local worlds = Workspace:FindFirstChild("Worlds")
+	if worlds then
+		for _, desc in ipairs(worlds:GetDescendants()) do
+			if desc:IsA("BasePart") and (desc.Name == "ZonePart" or desc.Name == "Atlantis" or desc.Name == "Fall") then
+				table.insert(State.zones, { Name = "Zona: " .. desc.Name, Part = desc })
+			end
+		end
+	end
+	for _, folder in ipairs(Workspace:GetChildren()) do
+		if (folder:IsA("Folder") or folder:IsA("Model"))
+			and string.find(string.lower(folder.Name), "mine") then
+			local part = folder:FindFirstChildWhichIsA("BasePart", true)
+			if part then
+				table.insert(State.zones, { Name = "Mina: " .. folder.Name, Part = part })
+			end
+		end
+	end
+	return State.zones
+end
+
+local function teleportToZone(name)
+	for _, zone in ipairs(State.zones) do
+		if zone.Name == name then
+			local _, hrp = getCharacter()
+			if hrp then
+				hrp.CFrame = zone.Part.CFrame + Vector3.new(0, 4, 0)
+				Notify("Teleporte", zone.Name, 3)
+			end
+			return
+		end
+	end
+	Notify("Teleporte", "Zona não encontrada", 3)
+end
+
+-- ---- ESP de minérios ----
+local espHighlights = {}
+local function clearESP()
+	for _, h in ipairs(espHighlights) do
+		pcall(h.Destroy, h)
+	end
+	espHighlights = {}
+end
+
+local function espLoop()
+	while Settings.espOres do
+		clearESP()
+		local count = 0
+		for _, part in ipairs(Workspace:GetDescendants()) do
+			if count > 250 then break end
+			if part:IsA("BasePart") and part.Transparency < 1 and isMineBlock(part) then
+				local bt = blockTypeOf(part)
+				if bt then
+					local rar = rarityOf(bt)
+					local show = (Settings.espAllOres and rar ~= nil)
+						or (rar ~= nil and rar ~= "Common")
+					if show then
+						local hl = Instance.new("Highlight")
+						hl.Adornee = part
+						hl.FillColor = RARITY_COLORS[rar] or RARITY_COLORS.Common
+						hl.FillTransparency = 0.45
+						hl.OutlineColor = hl.FillColor
+						hl.OutlineTransparency = 0
+						hl.Parent = part
+						table.insert(espHighlights, hl)
+						count = count + 1
+					end
+				end
+			end
+		end
+		task.wait(5) -- re-scan: blocos renascem
+	end
+	clearESP()
+end
+
+-- ---- Anti-AFK extra ----
+onConnection(LocalPlayer.Idled:Connect(function()
+	pcall(function()
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton2(Vector2.new(0, 0))
+	end)
+end))
+
+-- ---- Admin (Conch) ----
+local function getConchRemote()
+	local folder = ReplicatedStorage:FindFirstChild("conch_networking")
+	if folder then
+		return folder:FindFirstChild("invoke_server_command")
+	end
+	return nil
+end
+
+local function isAdmin()
+	return LocalPlayer:GetAttribute("ConchAdmin") == true
+end
+
+local function runAdminCommand(cmd)
+	if not isAdmin() then
+		Notify("Admin", "Seu personagem não tem ConchAdmin.", 4)
+		return
+	end
+	local remote = getConchRemote()
+	if not remote then
+		Notify("Admin", "conch_networking não encontrado.", 4)
+		return
+	end
+	local full = cmd
+	if not string.find(string.lower(cmd), string.lower(Settings.adminPrefix)) then
+		full = Settings.adminPrefix .. cmd
+	end
+	local ok, err = pcall(function()
+		remote:FireServer(full)
+	end)
+	if ok then
+		Notify("Admin", "Comando enviado: " .. full, 3)
+	else
+		Notify("Admin", "Falha ao executar: " .. tostring(err), 5)
+	end
+end
+
+-- ============================================================
+-- 8) UI — ABAS
+-- ============================================================
+local function refreshDropdown(dd, values, keep)
+	if not dd then return end
+	pcall(function()
+		if type(dd.Clear) == "function" then dd:Clear() end
+		if type(dd.AddItem) == "function" then
+			for _, v in ipairs(values) do
+				dd:AddItem(v)
+			end
+		end
+	end)
+end
+
+-- ============ FARM ============
+do
+	local sec = Tabs.Farm:AddSection("Autofarm")
+
+	local farmToggle = sec:AddToggle("FarmToggle", {
+		Title = "Auto Farm (minerar)",
+		Default = false,
+		Callback = function(v)
+			if v then startFarm() else stopFarm() end
+		end,
+	})
+
+	sec:AddSlider("FarmCps", {
+		Title = "Velocidade (packets/seg)",
+		Min = 1,
+		Max = 30,
+		Default = Settings.farmCps,
+		Rounding = 0,
+		Callback = function(v)
+			Settings.farmCps = v
+		end,
+	})
+
+	sec:AddDropdown("TargetMode", {
+		Title = "Modo de mira",
+		Values = { "LookForward", "Crosshair" },
+		MultiSelect = false,
+		Default = Settings.targetMode,
+		Callback = function(v)
+			Settings.targetMode = v
+		end,
+	})
+
+	local oresOnly = sec:AddToggle("OresOnly", {
+		Title = "Só minérios (raros)",
+		Default = false,
+		Callback = function(v)
+			Settings.oresOnly = v
+		end,
+	})
+
+	sec:AddParagraph({
+		Title = "Info",
+		Content = "RateLimit do jogo: 60 DamageBlock/s. Não passe de 30 para evitar ban. "
+			.. "LookForward = minera a parede à frente (AFK). Crosshair = bloco sob o mouse.",
+	})
+
+	local sec2 = Tabs.Farm:AddSection("Automações")
+
+	sec2:AddToggle("AutoRebirth", {
+		Title = "Auto Rebirth",
+		Default = false,
+		Callback = function(v)
+			Settings.autoRebirth = v
+			if v then
+				runNamedLoop("rebirth", function()
+					send("Rebirth", 1)
+				end, function()
+					return Settings.autoRebirth
+				end)
+			else
+				cleanupThread("rebirth")
+			end
+		end,
+	})
+
+	sec2:AddSlider("RebirthInterval", {
+		Title = "Intervalo rebirth (s)",
+		Min = 5,
+		Max = 120,
+		Default = Settings.rebirthInterval,
+		Rounding = 0,
+		Callback = function(v)
+			Settings.rebirthInterval = v
+		end,
+	})
+
+	local eggValues = {}
+	for name in pairs(Network.Data.EggModule or {}) do
+		table.insert(eggValues, name)
+	end
+	table.sort(eggValues)
+	if #eggValues == 0 then
+		table.insert(eggValues, "Nenhum ovo detectado")
+	end
+	local hatchDD = sec2:AddDropdown("HatchEgg", {
+		Title = "Ovo (auto hatch)",
+		Values = eggValues,
+		MultiSelect = false,
+		Default = eggValues[1],
+		Callback = function(v)
+			Settings.hatchEgg = v
+		end,
+	})
+	if eggValues[1] then Settings.hatchEgg = eggValues[1] end
+
+	sec2:AddToggle("AutoHatch", {
+		Title = "Auto Hatch (repetido)",
+		Default = false,
+		Callback = function(v)
+			Settings.autoHatch = v
+			if v then
+				runNamedLoop("hatch", function()
+					send("AutoHatchEgg", Settings.hatchEgg or "")
+				end, function()
+					return Settings.autoHatch
+				end)
+			else
+				cleanupThread("hatch")
+				send("StopAutoHatchEgg", {})
+			end
+		end,
+	})
+
+	sec2:AddButton({
+		Title = "Eclodir ovo x10 agora",
+		Callback = function()
+			if Settings.hatchEgg then
+				send("HatchEgg", { EggName = Settings.hatchEgg, Multi = true })
+			end
+		end,
+	})
+
+	sec2:AddButton({
+		Title = "Parar auto hatch",
+		Callback = function()
+			Settings.autoHatch = false
+			cleanupThread("hatch")
+			send("StopAutoHatchEgg", {})
+		end,
+	})
+
+	sec2:AddToggle("AutoEquipBest", {
+		Title = "Auto Equip Best Pets",
+		Default = false,
+		Callback = function(v)
+			Settings.autoEquipBest = v
+			if v then
+				runNamedLoop("equip", function()
+					send("EquipBest", {})
+				end, function()
+					return Settings.autoEquipBest
+				end)
+			else
+				cleanupThread("equip")
+			end
+		end,
+	})
+
+	sec2:AddButton({
+		Title = "Equip Best agora",
+		Callback = function()
+			send("EquipBest", {})
+		end,
+	})
+
+	local boostValues = {}
+	for name in pairs(Network.Data.BoostModule or {}) do
+		table.insert(boostValues, name)
+	end
+	table.sort(boostValues)
+	if #boostValues == 0 then
+		table.insert(boostValues, "Nenhum boost detectado")
+	end
+	local boostDD = sec2:AddDropdown("AutoBoostName", {
+		Title = "Boost (auto usar)",
+		Values = boostValues,
+		MultiSelect = false,
+		Default = boostValues[1],
+		Callback = function(v)
+			Settings.boostName = v
+		end,
+	})
+	if boostValues[1] then Settings.boostName = boostValues[1] end
+
+	sec2:AddToggle("AutoBoost", {
+		Title = "Auto usar boost selecionado",
+		Default = false,
+		Callback = function(v)
+			Settings.autoBoost = v
+			if v then
+				runNamedLoop("boost", function()
+					local amount = State.boosts[Settings.boostName] or 0
+					if amount > 0 then send("UseBoost", Settings.boostName) end
+				end, function()
+					return Settings.autoBoost
+				end)
+			else
+				cleanupThread("boost")
+			end
+		end,
+	})
+
+	sec2:AddToggle("AutoSpin", {
+		Title = "Auto Spin Wheel + Tokens",
+		Default = false,
+		Callback = function(v)
+			Settings.autoSpin = v
+			if v then
+				runNamedLoop("spin", function()
+					send("SpinWheel", {})
+					send("ClaimSpinnyToken", {})
+				end, function()
+					return Settings.autoSpin
+				end)
+			else
+				cleanupThread("spin")
+			end
+		end,
+	})
+
+	sec2:AddButton({
+		Title = "Girar roleta agora",
+		Callback = function()
+			send("SpinWheel", {})
+		end,
+	})
+
+	sec2:AddToggle("AutoClaimPlaytime", {
+		Title = "Auto Claim Playtime Gift",
+		Default = false,
+		Callback = function(v)
+			Settings.autoClaimPlaytime = v
+			if v then
+				runNamedLoop("playtime", function()
+					send("ClaimPlaytimeGift", 1)
+				end, function()
+					return Settings.autoClaimPlaytime
+				end)
+			else
+				cleanupThread("playtime")
+			end
+		end,
+	})
+end
+
+-- ============ PLAYER ============
+do
+	local sec = Tabs.Player:AddSection("Personagem")
+
+	sec:AddSlider("WalkSpeed", {
+		Title = "WalkSpeed",
+		Min = 0,
+		Max = 120,
+		Default = Settings.walkspeed,
+		Rounding = 0,
+		Callback = function(v)
+			Settings.walkspeed = v
+		end,
+	})
+
+	sec:AddSlider("JumpPower", {
+		Title = "JumpPower",
+		Min = 0,
+		Max = 250,
+		Default = Settings.jumppower,
+		Rounding = 0,
+		Callback = function(v)
+			Settings.jumppower = v
+		end,
+	})
+
+	sec:AddToggle("Noclip", {
+		Title = "Noclip",
+		Default = false,
+		Callback = function(v)
+			Settings.noclip = v
+		end,
+	})
+
+	sec:AddParagraph({
+		Title = "Info",
+		Content = "WalkSpeed/JumpPower são client-side (resetam ao renascer). O loop "
+			.. "replica o valor automaticamente a cada respawn.",
+	})
+
+	local sec2 = Tabs.Player:AddSection("Teleporte")
+
+	local zoneDD = nil
+
+	sec2:AddButton({
+		Title = "Atualizar zonas",
+		Callback = function()
+			local zones = refreshZones()
+			local names = {}
+			for _, z in ipairs(zones) do table.insert(names, z.Name) end
+			refreshDropdown(zoneDD, names)
+			Notify("Zonas", #names .. " zona(s) encontrada(s)", 3)
+		end,
+	})
+
+	zoneDD = sec2:AddDropdown("TeleportZone", {
+		Title = "Zona / Mina",
+		Values = {},
+		MultiSelect = false,
+		Callback = function(v)
+			Settings.teleportZone = v
+		end,
+	})
+
+	sec2:AddButton({
+		Title = "Teleportar",
+		Callback = function()
+			teleportToZone(Settings.teleportZone)
+		end,
+	})
+
+	local sec3 = Tabs.Player:AddSection("Códigos e Recompensas")
+
+	local codeInput = sec3:AddInput("RedeemCode", {
+		Title = "Código de resgate",
+		Default = "",
+		Placeholder = "ex: 1M_FAVORS",
+		Callback = function(v)
+			Settings.redeemCode = v
+		end,
+	})
+
+	sec3:AddButton({
+		Title = "Resgatar código",
+		Callback = function()
+			if Settings.redeemCode and Settings.redeemCode ~= "" then
+				send("RedeemCode", Settings.redeemCode)
+			else
+				Notify("Código", "Digite um código primeiro.", 3)
+			end
+		end,
+	})
+
+	sec3:AddButton({
+		Title = "Claim Playtime Gift agora",
+		Callback = function()
+			send("ClaimPlaytimeGift", 1)
+		end,
+	})
+
+	sec3:AddButton({
+		Title = "Claim Rank Reward agora",
+		Callback = function()
+			send("ClaimRankReward", 1)
+		end,
+	})
+end
+
+-- ============ VISUAL ============
+do
+	local sec = Tabs.Visual:AddSection("ESP de Minérios")
+
+	sec:AddToggle("EspOres", {
+		Title = "ESP Minérios raros",
+		Default = false,
+		Callback = function(v)
+			Settings.espOres = v
+			if v then
+				cleanupThread("esp")
+				Hub.__threads.esp = task.spawn(espLoop)
+			else
+				cleanupThread("esp")
+				clearESP()
+			end
+		end,
+	})
+
+	sec:AddToggle("EspAllOres", {
+		Title = "ESP todos os blocos mineráveis",
+		Default = false,
+		Callback = function(v)
+			Settings.espAllOres = v
+		end,
+	})
+
+	sec:AddButton({
+		Title = "Limpar highlights",
+		Callback = function()
+			clearESP()
+		end,
+	})
+
+	sec:AddParagraph({
+		Title = "Info",
+		Content = "O highlight usa a Rarity do BlockModule do próprio jogo "
+			.. "(Common=cinza, Uncommon=verde, Rare=azul, Epic=roxo, Legendary=ouro, Secret=rosa).",
+	})
+end
+
+-- ============ ITENS (TNT, Mystery Box, Craft, Enchant) ============
+do
+	-- ---- TNT ----
+	local sec = Tabs.Itens:AddSection("TNT")
+
+	local tntValues = {}
+	for name in pairs(State.tnt) do table.insert(tntValues, name) end
+	table.sort(tntValues)
+	if #tntValues == 0 then table.insert(tntValues, "Nenhum TNT (use um 1x primeiro)") end
+
+	local tntDD = sec:AddDropdown("TNTName", {
+		Title = "TNT (do inventário)",
+		Values = tntValues,
+		MultiSelect = false,
+		Default = tntValues[1],
+		Callback = function(v)
+			if v and v ~= "Nenhum TNT (use um 1x primeiro)" then Settings.tntName = v end
+		end,
+	})
+	if tntValues[1] and tntValues[1] ~= "Nenhum TNT (use um 1x primeiro)" then
+		Settings.tntName = tntValues[1]
+	end
+
+	local tntInfo = sec:AddParagraph({
+		Title = "Inventário TNT",
+		Content = "Aguardando UpdateTNT do servidor...",
+	})
+
+	sec:AddToggle("AutoTNT", {
+		Title = "Auto TNT (no bloco da mira)",
+		Default = false,
+		Callback = function(v)
+			Settings.autoTNT = v
+			if v then
+				runNamedLoop("tnt", function()
+					if Network.ok and Settings.tntName then
+						local part = getTargetBlock()
+						if part then
+							local pos = part.Position
+							send("ThrowTNT", { TNT = Settings.tntName, X = pos.X, Y = pos.Y, Z = pos.Z })
+						end
+					end
+				end, function()
+					return Settings.autoTNT
+				end)
+			else
+				cleanupThread("tnt")
+			end
+		end,
+	})
+
+	sec:AddSlider("TNTInterval", {
+		Title = "Intervalo TNT (s)",
+		Min = 1,
+		Max = 10,
+		Default = Settings.tntInterval,
+		Rounding = 1,
+		Callback = function(v)
+			Settings.tntInterval = v
+		end,
+	})
+
+	sec:AddButton({
+		Title = "Arremessar TNT agora",
+		Callback = function()
+			if not Settings.tntName then
+				Notify("TNT", "Selecione um TNT no dropdown.", 3)
+				return
+			end
+			local part = getTargetBlock()
+			if part then
+				local pos = part.Position
+				send("ThrowTNT", { TNT = Settings.tntName, X = pos.X, Y = pos.Y, Z = pos.Z })
+			else
+				Notify("TNT", "Nenhum bloco na mira (mova o personagem).", 3)
+			end
+		end,
+	})
+
+	sec:AddParagraph({
+		Title = "Info",
+		Content = "ThrowTNT usa a mesma mira do autofarm (crosshair / look-forward). "
+			.. "RateLimit nativo: 4/s. Intervalo mínimo sugerido: 1s.",
+	})
+
+	-- ---- Mystery Box ----
+	local sec2 = Tabs.Itens:AddSection("Mystery Box")
+
+	local mysteryInfo = sec2:AddParagraph({
+		Title = "Caixas",
+		Content = "Mystery Boxes: aguardando...",
+	})
+
+	sec2:AddButton({
+		Title = "Abrir 1 caixa",
+		Callback = function()
+			send("OpenMysteryBox", 1)
+		end,
+	})
+
+	sec2:AddButton({
+		Title = "Abrir tudo (máx. 10)",
+		Callback = function()
+			local MAX = Network.Data.MysteryBoxModule and Network.Data.MysteryBoxModule.MAX_BULK or 10
+			send("OpenMysteryBox", MAX)
+		end,
+	})
+
+	sec2:AddToggle("AutoMystery", {
+		Title = "Auto abrir caixas",
+		Default = false,
+		Callback = function(v)
+			Settings.autoMystery = v
+			if v then
+				runNamedLoop("mystery", function()
+					if Network.ok and State.mysteryBoxes > 0 then
+						send("OpenMysteryBox", 1)
+					end
+				end, function()
+					return Settings.autoMystery
+				end)
+			else
+				cleanupThread("mystery")
+			end
+		end,
+	})
+
+	-- ---- Craft ----
+	local sec3 = Tabs.Itens:AddSection("Craft")
+
+	local craftInfo = sec3:AddParagraph({
+		Title = "Slots de craft",
+		Content = "Aguardando UpdateCraftSlots...",
+	})
+
+	sec3:AddSlider("CraftSlot", {
+		Title = "Slot (1-4)",
+		Min = 1,
+		Max = 4,
+		Default = Settings.craftSlot,
+		Rounding = 0,
+		Callback = function(v)
+			Settings.craftSlot = v
+		end,
+	})
+
+	sec3:AddInput("CraftRecipe", {
+		Title = "Receita",
+		Default = "",
+		Placeholder = "nome exato da receita",
+		Callback = function(v)
+			Settings.craftRecipe = v
+		end,
+	})
+
+	sec3:AddSlider("CraftAmount", {
+		Title = "Quantidade",
+		Min = 1,
+		Max = 99,
+		Default = Settings.craftAmount,
+		Rounding = 0,
+		Callback = function(v)
+			Settings.craftAmount = v
+		end,
+	})
+
+	sec3:AddButton({
+		Title = "Iniciar craft",
+		Callback = function()
+			if Settings.craftRecipe == "" then
+				Notify("Craft", "Digite o nome da receita.", 3)
+				return
+			end
+			send("StartCraft", {
+				Slot = Settings.craftSlot,
+				Recipe = Settings.craftRecipe,
+				Amount = Settings.craftAmount,
+			})
+		end,
+	})
+
+	sec3:AddSlider("ClaimCraftSlot", {
+		Title = "Slot para claim",
+		Min = 1,
+		Max = 4,
+		Default = Settings.claimCraftSlot,
+		Rounding = 0,
+		Callback = function(v)
+			Settings.claimCraftSlot = v
+		end,
+	})
+
+	sec3:AddButton({
+		Title = "Claim slot",
+		Callback = function()
+			send("ClaimCraft", Settings.claimCraftSlot)
+		end,
+	})
+
+	sec3:AddParagraph({
+		Title = "Info",
+		Content = "Nomes das receitas não vieram no dump (Shared.Modules não foi dumpado). "
+			.. "Abra a UI de craft do jogo para ver os nomes exatos. "
+			.. "StartCraft{Slot, Recipe, Amount} / ClaimCraft{Slot}.",
+	})
+
+	-- ---- Enchant ----
+	local sec4 = Tabs.Itens:AddSection("Enchant")
+
+	local enchantInfo = sec4:AddParagraph({
+		Title = "Status",
+		Content = "AutoEnchant: inativo",
+	})
+
+	local enchantPetDD = sec4:AddDropdown("EnchantPet", {
+		Title = "Pet (do inventário)",
+		Values = { "Nenhum pet detectado" },
+		MultiSelect = false,
+		Default = "Nenhum pet detectado",
+		Callback = function(v)
+			if v ~= "Nenhum pet detectado" then Settings.enchantPet = v end
+		end,
+	})
+
+	local enchantTargetDD = sec4:AddDropdown("EnchantTarget", {
+		Title = "Alvo (enchant)",
+		Values = { "Greed", "Mining", "Luck" },
+		MultiSelect = false,
+		Default = "Greed",
+		Callback = function(v)
+			Settings.enchantTarget = v
+		end,
+	})
+	Settings.enchantTarget = "Greed"
+
+	sec4:AddToggle("AutoEnchant", {
+		Title = "Auto Enchant",
+		Default = false,
+		Callback = function(v)
+			Settings.autoEnchant = v
+			if v then
+				runNamedLoop("enchant", function()
+					if Network.ok and Settings.enchantPet and Settings.enchantTarget then
+						send("StartAutoEnchant", { Pet = Settings.enchantPet, Target = Settings.enchantTarget })
+					end
+				end, function()
+					return Settings.autoEnchant
+				end)
+			else
+				cleanupThread("enchant")
+				send("StopAutoEnchant", false)
+			end
+		end,
+	})
+
+	sec4:AddSlider("EnchantInterval", {
+		Title = "Intervalo (s)",
+		Min = 2,
+		Max = 30,
+		Default = Settings.enchantInterval,
+		Rounding = 1,
+		Callback = function(v)
+			Settings.enchantInterval = v
+		end,
+	})
+
+	sec4:AddButton({
+		Title = "Roll enchant manual",
+		Callback = function()
+			if Settings.enchantPet then
+				send("RollEnchant", Settings.enchantPet)
+			else
+				Notify("Enchant", "Selecione um pet primeiro.", 3)
+			end
+		end,
+	})
+
+	sec4:AddButton({
+		Title = "Parar auto enchant",
+		Callback = function()
+			Settings.autoEnchant = false
+			cleanupThread("enchant")
+			send("StopAutoEnchant", false)
+		end,
+	})
+
+	sec4:AddParagraph({
+		Title = "Info",
+		Content = "StartAutoEnchant{Pet, Target} (rateLimit 4/s). Pet = nome do pet do inventário "
+			.. "(dropdown atualiza via InventoryUpdate). Alvo = enchant desejado (Greed, Mining, Luck...). "
+			.. "Dropdown de alvo também atualiza via UpdatePetEnchants.",
+	})
+
+	-- ---- Hooks de UI (rodam após o State ser atualizado) ----
+	hookState("UpdateTNT", function(m)
+		local lines, vals = {}, {}
+		for name, amt in pairs(m) do
+			table.insert(lines, ("%s: x%s"):format(name, tostring(amt)))
+			table.insert(vals, name)
+		end
+		table.sort(vals)
+		if #lines == 0 then table.insert(lines, "Nenhum TNT no inventário") end
+		pcall(function() tntInfo:SetContent(table.concat(lines, "\n")) end)
+		if #vals > 0 then
+			refreshDropdown(tntDD, vals)
+			if not Settings.tntName or not m[Settings.tntName] then
+				Settings.tntName = vals[1]
+			end
+		end
+	end)
+
+	hookState("UpdateMysteryBoxes", function(n)
+		pcall(function()
+			mysteryInfo:SetContent("Mystery Boxes: " .. tostring(n))
+		end)
+	end)
+
+	hookState("UpdateCraftSlots", function(m)
+		local lines = {}
+		for k, v in pairs(m) do
+			if type(v) == "table" then
+				table.insert(lines, ("Slot %s: %s x%s"):format(
+					tostring(k), tostring(v.Recipe or "?"), tostring(v.Amount or 0)
+				))
+			end
+		end
+		if #lines == 0 then table.insert(lines, "Nenhum craft em andamento") end
+		pcall(function() craftInfo:SetContent(table.concat(lines, "\n")) end)
+	end)
+
+	hookState("UpdatePetEnchants", function(m)
+		local seen = {}
+		for _, info in pairs(m) do
+			if type(info) == "table" and info.Name and info.Name ~= "" then
+				seen[info.Name] = true
+			end
+		end
+		local vals = {}
+		for name in pairs(seen) do table.insert(vals, name) end
+		table.sort(vals)
+		if #vals > 0 then
+			refreshDropdown(enchantTargetDD, vals)
+			if not Settings.enchantTarget or not seen[Settings.enchantTarget] then
+				Settings.enchantTarget = vals[1]
+			end
+		end
+	end)
+
+	hookState("AutoEnchantUpdate", function(data)
+		local active = (data.Active == true) and "ATIVO" or "inativo"
+		pcall(function()
+			enchantInfo:SetContent(
+				("AutoEnchant: %s\nPet: %s\nAlvo: %s\nRolls: %s"):format(
+					active,
+					tostring(data.Pet or "-"),
+					tostring(data.Target or "-"),
+					tostring(data.Rolls or 0)
+				)
+			)
+		end)
+	end)
+
+	hookState("InventoryUpdate", function(data)
+		local pets = data.Quantities or {}
+		local vals = {}
+		for name in pairs(pets) do table.insert(vals, name) end
+		table.sort(vals)
+		if #vals > 0 then
+			refreshDropdown(enchantPetDD, vals)
+			if not Settings.enchantPet or not pets[Settings.enchantPet] then
+				Settings.enchantPet = vals[1]
+			end
+		end
+	end)
+end
+
+-- ============ ADMIN ============
+do
+	local sec = Tabs.Admin:AddSection("Conch Admin System")
+
+	local adminStatus = sec:AddParagraph({
+		Title = "Status",
+		Content = "ConchAdmin: " .. tostring(isAdmin()),
+	})
+
+	sec:AddParagraph({
+		Title = "Aviso",
+		Content = "Este painel só funciona se o atributo ConchAdmin do seu personagem estiver "
+			.. "ativo (F2 abre o console oficial do jogo). Comandos são enviados via "
+			.. "conch_networking.invoke_server_command. Teste com um comando simples "
+			.. "(ex: help) em conta descartável antes de usar em conta principal.",
+	})
+
+	local prefixInput = sec:AddInput("AdminPrefix", {
+		Title = "Prefixo",
+		Default = ";",
+		Placeholder = ";",
+		Callback = function(v)
+			Settings.adminPrefix = v
+		end,
+	})
+
+	local cmdInput = sec:AddInput("AdminCommand", {
+		Title = "Comando",
+		Default = "",
+		Placeholder = "ex: kill me / give coins 1000",
+		Finished = true,
+		Callback = function(v)
+			Settings.adminCommand = v
+			if v and v ~= "" then runAdminCommand(v) end
+		end,
+	})
+
+	sec:AddButton({
+		Title = "Executar comando",
+		Callback = function()
+			runAdminCommand(Settings.adminCommand)
+		end,
+	})
+
+	onConnection(LocalPlayer:GetAttributeChangedSignal("ConchAdmin"):Connect(function()
+		pcall(function()
+			adminStatus:SetContent("ConchAdmin: " .. tostring(isAdmin()))
+		end)
+		Notify("Admin", "ConchAdmin mudou para: " .. tostring(isAdmin()), 4)
+	end))
+end
+
+-- ============ INFO ============
+do
+	local sec = Tabs.Info:AddSection("Estatísticas")
+
+	local statsParagraph = sec:AddParagraph({
+		Title = "Live Stats",
+		Content = "Aguardando dados do servidor...",
+	})
+
+	local function formatNumber(n)
+		local s = tostring(math.floor(n))
+		local r = ""
+		while #s > 3 do
+			r = "," .. string.sub(s, -3) .. r
+			s = string.sub(s, 1, -4)
+		end
+		return s .. r
+	end
+
+	Hub.__threads.stats = task.spawn(function()
+		while true do
+			local lines = {
+				("Coins:  %s"):format(formatNumber(State.currencies.Coins or 0)),
+				("Gems:   %s"):format(formatNumber(State.currencies.Gems or 0)),
+				("Rebirths: %s"):format(formatNumber(State.rebirths)),
+				("Blocos minerados (sessão): %s"):format(formatNumber(State.blocksMined)),
+				("Rank XP: %s"):format(formatNumber(State.rankXp)),
+				("Pets:   %s | Boosts: %s | Flags: %s"):format(
+					formatNumber(mapSum(State.pets)),
+					formatNumber(mapSum(State.boosts)),
+					formatNumber(mapSum(State.flags))
+				),
+				("Minérios: %s | TNT: %s"):format(
+					formatNumber(mapSum(State.ores)),
+					formatNumber(mapSum(State.tnt))
+				),
+				("Rede nativa: %s"):format(Network.ok and "OK" or "FALHOU (features desabilitadas)"),
+			}
+			pcall(function()
+				statsParagraph:SetContent(table.concat(lines, "\n"))
+			end)
+			task.wait(1)
+		end
+	end)
+
+	local sec2 = Tabs.Info:AddSection("Sobre")
+
+	sec2:AddParagraph({
+		Title = "SlenderHub",
+		Content = "Dump: Mining Legends! (138805779586842)\n"
+			.. "Rede: ReplicatedStorage.Packages.Network (packets nativos)\n"
+			.. "Honeypots ignorados: IntegrityCheck*, SetDialogInUse, conch log*.",
+	})
+
+	sec2:AddButton({
+		Title = "Limpar e fechar hub",
+		Callback = function()
+			Fluent:Dialog({
+				Title = "Fechar hub",
+				Content = "Tem certeza? Todas as features serão desativadas.",
+				Buttons = {
+					{ Title = "Sim", Callback = function()
+						Settings.farmEnabled = false
+						Settings.autoRebirth = false
+						Settings.autoHatch = false
+						Settings.autoEquipBest = false
+						Settings.autoSpin = false
+						Settings.autoBoost = false
+						Settings.autoClaimPlaytime = false
+						Settings.autoTNT = false
+						Settings.autoMystery = false
+						Settings.autoEnchant = false
+						Settings.noclip = false
+						Settings.espOres = false
+						cleanupAll()
+						clearESP()
+						pcall(Window.Destroy, Window)
+						Env[HUB_NAME] = nil
+					end },
+					{ Title = "Não", Callback = function() end },
+				},
+			})
+		end,
+	})
+end
+
+-- ============ CONFIG (SaveManager / InterfaceManager) ============
+local SaveManager = nil
+local InterfaceManager = nil
+do
+	local sok, sres = pcall(function()
+		return loadstring(game:HttpGet(
+			"https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"
+		))()
+	end)
+	if sok and sres then SaveManager = sres end
+
+	local iok, ires = pcall(function()
+		return loadstring(game:HttpGet(
+			"https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"
+		))()
+	end)
+	if iok and ires then InterfaceManager = ires end
+
+	if SaveManager then
+		pcall(function()
+			SaveManager:SetLibrary(Fluent)
+			SaveManager:IgnoreThemeSettings()
+			SaveManager:SetIgnoreIndexes({})
+			SaveManager:BuildConfigSection(Tabs.Config)
+		end)
+	end
+
+	if InterfaceManager then
+		pcall(function()
+			InterfaceManager:SetLibrary(Fluent)
+			InterfaceManager:SetFolder("SlenderHub_MiningLegends")
+			InterfaceManager:BuildInterfaceSection(Tabs.Config)
+			InterfaceManager:SetTheme("Dark")
+		end)
+	end
+
+	if not (SaveManager and InterfaceManager) then
+		Notify("Config", "Addons de config não carregados (verifique a internet).", 5)
+	end
+end
+
+-- ============================================================
+-- 9) INICIALIZAÇÃO FINAL
+-- ============================================================
+refreshZones()
+
+Window:SelectTab(1)
+
+if SaveManager then pcall(SaveManager.LoadAutoloadConfig, SaveManager) end
+if InterfaceManager then pcall(InterfaceManager.LoadInterfaceConfig, InterfaceManager) end
+
+if not Network.ok then
+	Notify(
+		"SlenderHub ML",
+		"Falha ao integrar a rede do jogo (require). "
+			.. "Verifique se ReplicatedStorage.Packages.Network existe. Features de farm desabilitadas.",
+		8
+	)
+else
+	Notify("SlenderHub ML", "Hub carregado! Rede nativa OK.", 5)
+end
+
+if isAdmin() then
+	Notify("Admin", "ConchAdmin detectado — painel admin disponível.", 5)
+end
+
+-- Garantia de parada ao sair do jogo
+onConnection(Players.PlayerRemoving:Connect(function(plr)
+	if plr == LocalPlayer then
+		cleanupAll()
+		clearESP()
+	end
+end))
