@@ -1,5 +1,5 @@
 --[[
-    SlenderHub | Game Dumper Universal — v1.0.7 (antitrava + modo pesado PS99)
+    SlenderHub | Game Dumper Universal — v1.0.8 (crash PS99 corrigido)
     Dev: SlenderHub Team
 
     Dump automático estilo Dex, universal (Delta/Wave/Codex/Synapse/Fluxus...):
@@ -45,10 +45,12 @@ SlenderHub.Config = {
     -- Modo pesado automático (PS99 e jogos gigantes): detecta pela árvore e
     -- reduz os limites na hora. Evita o crash de decompile/scan no Delta.
     HeavyAuto           = true,          -- liga a detecção automática
+    HeavyPlaceIds       = { "8737899170" }, -- PlaceIds conhecidos gigantes (PS99) — detecta ANTES de qualquer scan
     HeavyDescendants    = 100000,        -- acima de N instâncias = jogo gigante
     HeavyDecompile      = 120,           -- orçamento de decompile no modo pesado
-    HeavyHeapScan       = 2500,          -- heap scan máximo no modo pesado
+    HeavyHeapScan       = 0,             -- heap scan no modo pesado (0 = desliga: getgc() gigante crasha)
     HeavyHeapMiss       = 400,           -- early-exit mais agressivo no modo pesado
+    HeavyTreeScan       = 40000,         -- varredura manual da árvore (nós) no modo pesado
     SkipLoadstring      = true,          -- pula closures de loadstring (source @string):
                                         --   PS99 ofusca tudo assim e o decompile crasha
 }
@@ -190,6 +192,17 @@ end
 --------------------------------------------------------------------------------
 -- COLETA DE REMOTES
 --------------------------------------------------------------------------------
+-- Lookup por ClassName: MUITO mais rápido que 5 chamadas IsA() por instância.
+-- Em jogos gigantes (PS99) o IsA em loop sobre centenas de milhares de
+-- instâncias é o que derruba o cliente.
+local REMOTE_LOOKUP = {
+    RemoteEvent = true,
+    RemoteFunction = true,
+    UnreliableRemoteEvent = true,
+    BindableEvent = true,
+    BindableFunction = true,
+}
+
 local REMOTE_CLASSES = {
     "RemoteEvent", "RemoteFunction", "UnreliableRemoteEvent",
 }
@@ -244,28 +257,41 @@ local function CollectRemotes()
     end
 
     -- 1) árvore visível
-    local okDesc, descs = pcall(function() return game:GetDescendants() end)
-    if okDesc and type(descs) == "table" then
-        descCount = #descs
-        for _, desc in ipairs(descs) do
-            for _, cls in ipairs(REMOTE_CLASSES) do
-                if desc:IsA(cls) then Add(desc) end
+    if HeavyModeActive then
+        -- Modo pesado: varredura MANUAL com GetChildren (não aloca a árvore
+        -- inteira como GetDescendants) e limite de nós — PS99: nunca explode.
+        local maxNodes = SlenderHub.Config.HeavyTreeScan
+        local stack = { game }
+        local visited = 0
+        while #stack > 0 and visited < maxNodes do
+            local inst = table.remove(stack, #stack)
+            visited = visited + 1
+            if REMOTE_LOOKUP[inst.ClassName] then Add(inst) end
+            local ok, children = pcall(function() return inst:GetChildren() end)
+            if ok and type(children) == "table" then
+                for i = 1, #children do table.insert(stack, children[i]) end
             end
-            if desc:IsA("BindableEvent") or desc:IsA("BindableFunction") then
-                Add(desc) -- informativo (não fireável pelo cliente)
+        end
+        descCount = visited
+    else
+        local okDesc, descs = pcall(function() return game:GetDescendants() end)
+        if okDesc and type(descs) == "table" then
+            descCount = #descs
+            for _, desc in ipairs(descs) do
+                if REMOTE_LOOKUP[desc.ClassName] then Add(desc) end
             end
         end
     end
 
     -- 2) heap (remotes não expostos na árvore pública)
+    --    Modo pesado: PULA — getgc() de um jogo ofuscado gigante também crasha.
     local gc = Fn("GetGC")
-    if gc then
+    if gc and not HeavyModeActive then
         pcall(function()
             for _, v in ipairs(gc()) do
-                if type(v) == "userdata" and typeof(v) == "Instance" then
-                    for _, cls in ipairs(REMOTE_CLASSES) do
-                        if v:IsA(cls) then Add(v) end
-                    end
+                if type(v) == "userdata" and typeof(v) == "Instance"
+                    and REMOTE_LOOKUP[v.ClassName] then
+                    Add(v)
                 end
             end
         end)
@@ -276,10 +302,8 @@ local function CollectRemotes()
     if nilInst then
         pcall(function()
             for _, v in ipairs(nilInst()) do
-                if typeof(v) == "Instance" then
-                    for _, cls in ipairs(REMOTE_CLASSES) do
-                        if v:IsA(cls) then Add(v) end
-                    end
+                if typeof(v) == "Instance" and REMOTE_LOOKUP[v.ClassName] then
+                    Add(v)
                 end
             end
         end)
@@ -293,11 +317,19 @@ end
 --------------------------------------------------------------------------------
 local HeavyModeActive = false
 
-local function ApplyHeavyMode(descCount)
+-- Detecção ANTES de qualquer scan: PlaceId conhecidos (PS99 etc.) entram no
+-- modo pesado imediatamente — não esperamos nem medir a árvore (medir é caro).
+local function CheckHeavyByPlaceId()
     if not SlenderHub.Config.HeavyAuto then return false end
-    if type(descCount) ~= "number" or descCount < SlenderHub.Config.HeavyDescendants then
-        return false
+    local pid = tostring(game.PlaceId)
+    for _, id in ipairs(SlenderHub.Config.HeavyPlaceIds) do
+        if pid == tostring(id) then return true end
     end
+    return false
+end
+
+local function ApplyHeavyMode()
+    if not SlenderHub.Config.HeavyAuto then return false end
     SlenderHub.Config.MaxDecompilePerDump = SlenderHub.Config.HeavyDecompile
     SlenderHub.Config.MaxHeapScan         = SlenderHub.Config.HeavyHeapScan
     SlenderHub.Config.HeapMissLimit       = SlenderHub.Config.HeavyHeapMiss
@@ -440,8 +472,10 @@ local function CollectScripts()
     end
 
     -- B) heap scan (closures vivas) — síncrono e LIMITADO (antitrava)
+    --    Modo pesado: MaxHeapScan=0 → desliga por completo (getgc() gigante
+    --    de jogo ofuscado crasha o Delta — a seção A/C já pegaram o essencial)
     local gc = Fn("GetGC")
-    if gc then
+    if gc and SlenderHub.Config.MaxHeapScan > 0 then
         pcall(function()
             local scanned = 0
             local misses = 0
@@ -572,7 +606,7 @@ end
 local function BuildMetadata(remotes, honeypots)
     local meta = {
         tool = "SlenderHub Game Dumper",
-        version = "1.0.7",
+        version = "1.0.8",
         game = GetGameName(),
         placeId = tostring(game.PlaceId),
         executor = tostring(ExecutorName),
@@ -611,12 +645,20 @@ local function RunDump()
         Notify("SlenderHub", "Executor sem writefile — só exibindo na tela", 4, "Warning")
     end
 
+    -- detecção ANTES de qualquer scan (PS99 e similares) — evita o crash
+    -- instantâneo causado por GetDescendants/getgc em jogos gigantes
+    if CheckHeavyByPlaceId() then
+        ApplyHeavyMode()
+        Notify("SlenderHub", "Modo pesado ativo (jogo gigante) — limites reduzidos", 5, "Warning")
+    end
+
     Notify("SlenderHub", "Coletando remotes...", 2, nil)
     local remotes, descCount = CollectRemotes()
 
-    -- jogo gigante (PS99 etc.): reforça antitrava ANTES do heap scan/decompile
-    if ApplyHeavyMode(descCount) then
-        Notify("SlenderHub", "Modo pesado ativo (jogo gigante) — limites reduzidos", 5, "Warning")
+    -- fallback: detecta por tamanho da árvore (para jogos grandes não listados)
+    if not HeavyModeActive and descCount >= SlenderHub.Config.HeavyDescendants then
+        ApplyHeavyMode()
+        Notify("SlenderHub", "Modo pesado ativo (árvore gigante) — limites reduzidos", 5, "Warning")
     end
 
     Notify("SlenderHub", "Coletando scripts (heap scan)...", 3, nil)
