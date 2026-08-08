@@ -241,6 +241,7 @@ local State = {
 	enchantCrystals = 0,
 	enchantStatus = nil,
 	spinny = nil,
+	debugFarm = {},
 }
 
 local function listenServer(packetName, handler)
@@ -401,19 +402,44 @@ end)
 -- ============================================================
 -- 6) HELPERS DE BLOCOS (Mine + GUID)
 -- ============================================================
+-- Nomes de container que indicam mina/zona (case-insensitive)
+local MINE_NAME_PATTERNS = { "mine", "mundo", "world", "zone", "zona", "area" }
+local function isMineContainerName(name)
+	local nm = string.lower(tostring(name))
+	for _, pat in ipairs(MINE_NAME_PATTERNS) do
+		if string.find(nm, pat) then return true end
+	end
+	return false
+end
+
 -- Container ancestral com nome de mina (estrito)
 local function hasMineAncestor(part)
 	local p = part.Parent
 	while p do
 		if p:IsA("Model") or p:IsA("Folder") then
-			local nm = string.lower(tostring(p.Name))
-			if string.find(nm, "mine") or string.find(nm, "mundo") or string.find(nm, "world") then
+			if isMineContainerName(p.Name) then
 				return true
 			end
 		end
 		p = p.Parent
 	end
 	return false
+end
+
+-- GUID do bloco para o packet DamageBlock (atributos -> child Value -> nome)
+local function blockGUID(part)
+	local guid = part:GetAttribute("GUID")
+		or part:GetAttribute("BlockGUID")
+		or part:GetAttribute("BlockId")
+		or part:GetAttribute("ID")
+	if (guid == nil or guid == "") then
+		local child = part:FindFirstChild("GUID") or part:FindFirstChild("Id") or part:FindFirstChild("BlockId")
+		if child and child:IsA("ValueBase") then
+			guid = child.Value
+		end
+	end
+	if guid == nil or guid == "" then guid = part.Name end
+	return tostring(guid)
 end
 
 -- Nome da mina para o packet DamageBlock (best-effort)
@@ -423,24 +449,18 @@ local function findMineName(part)
 	while p do
 		if p:IsA("Model") or p:IsA("Folder") then
 			lastContainer = p
-			local nm = string.lower(tostring(p.Name))
-			if string.find(nm, "mine") or string.find(nm, "mundo") or string.find(nm, "world") then
+			if isMineContainerName(p.Name) then
 				return p.Name
 			end
 		end
 		p = p.Parent
 	end
-	-- fallback: primeiro container encontrado (evita enviar nil)
 	if lastContainer then return lastContainer.Name end
-	return nil
-end
-
-local function blockGUID(part)
-	local guid = part:GetAttribute("GUID")
-		or part:GetAttribute("BlockGUID")
-		or part:GetAttribute("BlockId")
-	if guid == nil or guid == "" then guid = part.Name end
-	return tostring(guid)
+	-- fallback: Mine conhecido do State (UpdateBlock do servidor)
+	local guid = blockGUID(part)
+	local st = State.blockStates[guid]
+	if st and st.Mine then return st.Mine end
+	return "Mine"
 end
 
 local function blockTypeOf(part)
@@ -460,6 +480,10 @@ local function isMineBlock(part)
 	if part:GetAttribute("GUID") or part:GetAttribute("BlockGUID") or part:GetAttribute("BlockId") then
 		return true
 	end
+	-- bloco conhecido no BlockModule do jogo (nome bate com um tipo de bloco)
+	if Network.Data.BlockModule and Network.Data.BlockModule[name] then
+		return true
+	end
 	return hasMineAncestor(part)
 end
 
@@ -474,7 +498,9 @@ end
 local function raycastBlock(origin, dir, maxDist, filterExclude)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.RespectCanCollide = true
+	-- IMPORTANTE: RespectCanCollide=false — blocos com CanCollide=false
+	-- (muito comuns em jogos de mineração) não bloqueiam o raycast.
+	params.RespectCanCollide = false
 	params.FilterDescendantsInstances = filterExclude or (LocalPlayer.Character and { LocalPlayer.Character } or {})
 	local res = Workspace:Raycast(origin, dir * (maxDist or 250), params)
 	if res and res.Instance and isMineBlock(res.Instance) then
@@ -506,7 +532,36 @@ local function targetByLookForward()
 	return raycastBlock(origin, down, 200)
 end
 
+-- Mira: bloco mais próximo (não depende de câmera/parede)
+local function nearestBlock(maxDist)
+	local char = LocalPlayer.Character
+	local _, hrp = getCharacter()
+	if not hrp then return nil end
+	local origin = hrp.Position
+	local maxD = maxDist or 60
+	local best, bestDist = nil, maxD * maxD
+	local iter = 0
+	for _, part in ipairs(Workspace:GetDescendants()) do
+		iter = iter + 1
+		if iter > 4000 then break end -- limite de segurança
+		if part:IsA("BasePart") and part.Transparency < 1
+			and not (char and part:IsDescendantOf(char)) then
+			if isMineBlock(part) then
+				local d = (part.Position - origin).Magnitude
+				if d < bestDist then
+					bestDist = d
+					best = part
+				end
+			end
+		end
+	end
+	return best
+end
+
 local function getTargetBlock()
+	if Settings.targetMode == "Nearest" then
+		return nearestBlock() or targetByLookForward() or targetByCrosshair()
+	end
 	if Settings.targetMode == "Crosshair" then
 		return targetByCrosshair() or targetByLookForward()
 	end
@@ -561,10 +616,14 @@ local function farmLoop()
 			task.wait(1)
 		else
 			local part = getTargetBlock()
+			local dbg = { mode = Settings.targetMode, part = nil, mine = nil, guid = nil, sendOk = false, reason = "sem alvo" }
 			if part then
 				local mine = findMineName(part)
 				local guid = blockGUID(part)
 				local st = State.blockStates[guid]
+				dbg.part = part.Name
+				dbg.mine = mine
+				dbg.guid = guid
 				if not (st and st.Destroyed) then
 					local canMine = true
 					if Settings.oresOnly then
@@ -573,10 +632,16 @@ local function farmLoop()
 						canMine = rar ~= nil and rar ~= "Common"
 					end
 					if canMine then
-						send("DamageBlock", { Mine = mine, GUID = guid })
+						dbg.reason = "enviado"
+						dbg.sendOk = send("DamageBlock", { Mine = mine, GUID = guid })
+					else
+						dbg.reason = "bloco comum (oresOnly)"
 					end
+				else
+					dbg.reason = "destruido"
 				end
 			end
+			State.debugFarm = dbg
 			local interval = Settings.farmCps > 0 and (1 / Settings.farmCps) or 0.1
 			task.wait(math.clamp(interval, 0.016, 1))
 		end
@@ -886,7 +951,7 @@ do
 
 	sec:AddDropdown("TargetMode", {
 		Title = "Modo de mira",
-		Values = { "LookForward", "Crosshair" },
+		Values = { "LookForward", "Crosshair", "Nearest" },
 		MultiSelect = false,
 		Default = Settings.targetMode,
 		Callback = function(v)
@@ -902,10 +967,37 @@ do
 		end,
 	})
 
+	sec:AddButton({
+		Title = "Testar alvo (enviar 1x)",
+		Callback = function()
+			if not Network.ok then
+				Notify("Farm", "Rede nativa não disponível (require falhou).", 5)
+				return
+			end
+			local part = getTargetBlock()
+			if not part then
+				Notify("Farm", "Nenhum bloco detectado. Mire num bloco ou ative o modo Nearest.", 5)
+				return
+			end
+			local mine = findMineName(part)
+			local guid = blockGUID(part)
+			local ok = send("DamageBlock", { Mine = mine, GUID = guid })
+			Notify(
+				"Farm (teste)",
+				("Bloco: %s\nMine: %s\nGUID: %s\nEnviado: %s"):format(
+					part.Name, tostring(mine), tostring(guid), tostring(ok)
+				),
+				6
+			)
+		end,
+	})
+
 	sec:AddParagraph({
 		Title = "Info",
 		Content = "RateLimit do jogo: 60 DamageBlock/s. Não passe de 30 para evitar ban. "
-			.. "LookForward = minera a parede à frente (AFK). Crosshair = bloco sob o mouse.",
+			.. "LookForward = minera a parede à frente (AFK). Crosshair = bloco sob o mouse. "
+			.. "Nearest = bloco minerável mais próximo (não depende de mirar). "
+			.. "Use o botão 'Testar alvo' para ver o que o hub detecta.",
 	})
 
 	local sec2 = Tabs.Farm:AddSection("Automações")
@@ -1712,6 +1804,14 @@ do
 				),
 				("Rede nativa: %s"):format(Network.ok and "OK" or "FALHOU (features desabilitadas)"),
 			}
+			local dbg = State.debugFarm
+			if dbg and dbg.reason then
+				table.insert(lines, "")
+				table.insert(lines, "-- Debug Farm --")
+				table.insert(lines, ("Alvo: %s | modo: %s"):format(tostring(dbg.part or "NENHUM"), tostring(dbg.mode)))
+				table.insert(lines, ("Mine: %s | GUID: %s"):format(tostring(dbg.mine or "-"), tostring(dbg.guid or "-")))
+				table.insert(lines, ("Send: %s | motivo: %s"):format(tostring(dbg.sendOk), tostring(dbg.reason)))
+			end
 			pcall(function()
 				statsParagraph:SetContent(table.concat(lines, "\n"))
 			end)
