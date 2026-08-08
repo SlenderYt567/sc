@@ -2,10 +2,14 @@
 	Debug — Mining Legends! (diagnóstico do autofarm)
 	=================================================
 	Rode este script NO JOGO, com o personagem DENTRO de uma mina (perto de blocos).
-	Ele imprime no console do executor (F9 / Console) o diagnóstico da estrutura de
-	blocos e do que o hub enxergaria. Cole a saída aqui para eu calibrar o autofarm.
+	Ele coleta o diagnóstico e tenta COPIAR TUDO para o clipboard do Roblox.
+	No celular: depois de rodar, é só colar (toque longo > colar) no chat/notas.
 
-	Uso: apenas cole no executor e execute. Nada destrutivo.
+	Comandos globais (digite no console do executor quando precisar):
+	  MLD.copy()      -> recopia o relatório para o clipboard
+	  MLD.report      -> o texto do relatório (caso queira printar de novo)
+
+	Uso: apenas cole no executor e execute. Nada destrutivo (envia 1x DamageBlock).
 --]]
 
 local Players = game:GetService("Players")
@@ -13,8 +17,43 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
+-- Acumula a saída para copiar depois
+local report = {}
 local function line(fmt, ...)
-	print("[DBG] " .. (fmt:format(...)))
+	local s = "[DBG] " .. (fmt:format(...))
+	print(s)
+	table.insert(report, s)
+end
+
+local function copyToClipboard(text)
+	local ok = false
+	local okClip, res = pcall(function()
+		game:GetService("Clipboard"):SetText(text)
+	end)
+	if okClip then ok = true end
+	if not ok then
+		ok = pcall(function() clipboard:SetText(text) end)
+	end
+	return ok
+end
+
+-- Finaliza: monta o texto completo e tenta copiar
+local function finish()
+	local text = table.concat(report, "\n")
+	local copiado = copyToClipboard(text)
+	print("")
+	if copiado then
+		print("[DBG] >>> RELATORIO COPIADO PARA O CLIPBOARD. Cole aqui no chat (toque longo > Colar). <<<")
+	else
+		print("[DBG] Clipboard indisponivel neste executor. Use o comando: MLD.copy()")
+	end
+	getgenv().MLD = {
+		report = text,
+		copy = function()
+			local ok2 = copyToClipboard(getgenv().MLD.report)
+			print(ok2 and "[DBG] Copiado de novo! Cole no chat." or "[DBG] Clipboard indisponivel.")
+		end,
+	}
 end
 
 -- 1) Estrutura do Workspace (top-level)
@@ -27,7 +66,7 @@ for _, obj in ipairs(Workspace:GetChildren()) do
 	line("%s  class=%s  partes=%d", obj.Name, obj.ClassName, parts)
 end
 
--- 2) Rede / ClientPackets
+-- 2) Rede / ClientPackets / RemoteEvent direto (formato Cobalt)
 line("=== 2) Rede ===")
 local NetLib, ClientPackets, BlockModule = nil, nil, nil
 local okNet = pcall(function() NetLib = require(ReplicatedStorage.Packages.Network) end)
@@ -37,6 +76,18 @@ line("Network lib: %s", tostring(okNet and NetLib ~= nil))
 line("ClientPackets: %s  (DamageBlock existe: %s)",
 	tostring(okCP and ClientPackets ~= nil),
 	tostring(okCP and ClientPackets and ClientPackets.DamageBlock ~= nil))
+
+local nr = ReplicatedStorage:FindFirstChild("NetworkRemotes")
+local ClientEvent = nr and nr:FindFirstChild("ClientPackets")
+local ServerEvent = nr and nr:FindFirstChild("ServerPackets")
+line("NetworkRemotes: %s | ClientPackets: %s | ServerPackets: %s",
+	tostring(nr ~= nil),
+	ClientEvent and (ClientEvent.ClassName .. " " .. ClientEvent.Name) or "NAO ACHOU",
+	ServerEvent and (ServerEvent.ClassName .. " " .. ServerEvent.Name) or "NAO ACHOU")
+if ClientEvent and ClientEvent:IsA("RemoteEvent") then
+	line(">>> RemoteEvent direto ENCONTRADO — o hub pode usar: ClientEvent:FireServer(name, payload) <<<")
+end
+
 local bmCount = 0
 if okBM and BlockModule then
 	for _ in pairs(BlockModule) do bmCount = bmCount + 1 end
@@ -56,6 +107,7 @@ local hrp = char and char:FindFirstChild("HumanoidRootPart")
 line("Character: %s  HRP: %s", tostring(char), tostring(hrp))
 if not hrp then
 	line("PARE: personagem nao carregado. Espere e rode de novo.")
+	finish()
 	return
 end
 
@@ -151,23 +203,36 @@ end
 
 -- 6) Envio de TESTE (1x DamageBlock — inofensivo, rateLimit é 60/s)
 line("=== 6) Envio de teste (1x DamageBlock) ===")
-if okCP and ClientPackets and ClientPackets.DamageBlock then
-	local target = samples[1] and samples[1].part
-	if target then
-		local mine = mineNameOf(target)
-		local guid = guidOf(target)
+local target = samples[1] and samples[1].part
+if target then
+	local mine = mineNameOf(target)
+	local guid = guidOf(target)
+	line("Alvo: %s", target.Name)
+	line("Mine=%q GUID=%q", mine, guid)
+
+	-- Tenta PRIMEIRO o RemoteEvent direto (formato Cobalt)
+	if ClientEvent and ClientEvent:IsA("RemoteEvent") then
+		local okCE, errCE = pcall(function()
+			ClientEvent:FireServer("DamageBlock", { Mine = mine, GUID = guid })
+		end)
+		line("RemoteEvent direto FireServer: ok=%s err=%s", tostring(okCE), tostring(errCE))
+		if okCE then
+			line("SE em 2s voce receber BlockDrop/Currency no jogo -> o farm FUNCIONA com esse alvo.")
+		end
+	elseif okCP and ClientPackets and ClientPackets.DamageBlock then
 		local ok, err = pcall(function()
 			ClientPackets.DamageBlock.send({ Mine = mine, GUID = guid })
 		end)
-		line("Alvo: %s", target.Name)
-		line("Mine=%q GUID=%q", mine, guid)
-		line("send pcall: ok=%s err=%s", tostring(ok), tostring(err))
-		line("SE ok=true e em 2s voce receber BlockDrop/Currency no jogo -> o farm FUNCIONA com esse alvo.")
+		line("lib .send: ok=%s err=%s", tostring(ok), tostring(err))
+		if ok then
+			line("SE em 2s voce receber BlockDrop/Currency no jogo -> o farm FUNCIONA com esse alvo.")
+		end
 	else
-		line("Nenhum alvo proximo para testar.")
+		line("Nenhum caminho de envio disponivel (sem RemoteEvent e sem lib).")
 	end
 else
-	line("ClientPackets indisponivel — nao da para testar o envio.")
+	line("Nenhum alvo proximo para testar.")
 end
 
 line("=== FIM ===")
+finish()
