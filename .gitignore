@@ -37,8 +37,8 @@ _G.ZapHubSettings = {
     ["WhiteScreen"] = {Enable = true},
     ["StatGUI"] = {Enable = true,
         Items = {
-            {Class = "Pets", Item = "Gargantuan Sombrero Cat"},
-            {Class = "Pets", Item = "Titanic Piñata Cat"},
+            {Class = "Pet", Item = "Gargantuan Sombrero Cat"},
+            {Class = "Pet", Item = "Titanic Piñata Cat"},
             {Class = "Currency", Item = "FiestaCoins"},
             {Class = "Currency", Item = "FiestaOrbs"},
             {Class = "Misc", Item = "Fiesta Candy"},
