@@ -37,7 +37,7 @@ _G.ZapHubSettings = {
     ["WhiteScreen"] = {Enable = true},
     ["StatGUI"] = {Enable = true,
         Items = {
-            {Class = "Currency", Pets = "Diamonds"},
+            {Class = "Currency", Item= "Diamonds"},
             {Class = "Currency", Item = "FiestaCoins"},
             {Class = "Currency", Item = "FiestaOrbs"},
             {Class = "Misc", Item = "Fiesta Candy"},
