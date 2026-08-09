@@ -1,248 +1,50 @@
---[[
-	Debug — Mining Legends! (diagnóstico do autofarm)
-	=================================================
-	Rode este script NO JOGO, com o personagem DENTRO de uma mina (perto de blocos).
-	Ele coleta o diagnóstico e tenta COPIAR TUDO para o clipboard do Roblox.
-	No celular: depois de rodar, é só colar (toque longo > colar) no chat/notas.
+_G.ZapHubSettings = {
+    ["NewPetsTracker"] = {Enable = true, WebhookURL = "https://discord.com/api/webhooks/1317117794176729088/rCvIdXGcdAHoKwGCmIzd_6NowsXzn4qJXDVs8koPYRhXiaZ7kEPLicFCjLCeJIs9kRvk", PetTypes = {"Gargantuan", "Titanic", "Huge", "Exclusive"}},
 
-	Comandos globais (digite no console do executor quando precisar):
-	  MLD.copy()      -> recopia o relatório para o clipboard
-	  MLD.report      -> o texto do relatório (caso queira printar de novo)
+    ["Optimization"] = {Enable = false},
 
-	Uso: apenas cole no executor e execute. Nada destrutivo (envia 1x DamageBlock).
---]]
+    ["TeleportToFiestaLobbyArea"] = {Enable = true},
+    ["FarmFiestaLobbyPinata"] = {Enable = false, CooldownSeconds = 5},
+    ["FiestaPinataChallenge"] = {Enable = false},
+    ["StartFiestaMaze"] = {Enable = true, Difficulty = 0, PartyMode = "Solo", CooldownMinutes = 1},
+    ["CompleteFiestaMaze"] = {Enable = true},
+    ["CollectFiestaPrizeRoom"] = {Enable = true, Eggs = {"LootChest", "HugeChest", "TitanicChest", "LeprechaunChest"}},
+    ["CrafFiestaGifts"] = {Enable = false},
+    ["CombineFiestaKeys"] = {Enable = true, CombineBossKeys = true},
+    ["BuyFiestaUpgrades"] = {Enable = true, Upgrades = {"Damage", "Pets", "Smash Speed"}},
+    ["UseFiestaBoosters"] = {Enable = false, Boosters = {"Fiesta Maze Damage Booster", "Fiesta Maze XP Booster", "Instant Fiesta Maze XP Booster"}, TierPriority = "Lowest"},
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
-local LocalPlayer = Players.LocalPlayer
+    ["InfinitePetSpeed"] = {Enable = true},
+    ["Tap"] = {Enable = true, Mode = "Random"},
+    ["EfficientFarm"] = {Enable = true},
+    ["CollectOrbs"] = {Enable = true},
+    ["UseUltimate"] = {Enable = true},
 
--- Acumula a saída para copiar depois
-local report = {}
-local function line(fmt, ...)
-	local s = "[DBG] " .. (fmt:format(...))
-	print(s)
-	table.insert(report, s)
-end
+    ["MakePetsGold"] = {Enable = false},
+    ["MakePetsRainbow"] = {Enable = false},
 
-local function copyToClipboard(text)
-	-- 1) Função nativa de executor (a mais confiável no mobile): setclipboard
-	local ok = pcall(function() setclipboard(text) end)
-	if ok then return "setclipboard" end
-	-- 2) Clipboard service do Roblox (só funciona DENTRO do Roblox)
-	ok = pcall(function() game:GetService("Clipboard"):SetText(text) end)
-	if ok then return "clipboardService" end
-	-- 3) clipboard global
-	ok = pcall(function() clipboard:SetText(text) end)
-	if ok then return "clipboardGlobal" end
-	return nil
-end
+    ["ClaimMailbox"] = {Enable = true},
+    ["ClaimFreeGifts"] = {Enable = true},
+    ["ClaimRankRewards"] = {Enable = true},
+    ["ClaimDefaultForeverPackFreeGift"] = {Enable = true},
 
--- Finaliza: monta o texto completo, tenta copiar e salvar em arquivo
-local function finish()
-	local text = table.concat(report, "\n")
-	local metodo = copyToClipboard(text)
-	-- Backup: salva em arquivo (executores com writefile; desktop costuma acessar a pasta)
-	local savedFile = nil
-	local okFile = pcall(function() writefile("SlenderHub_MLD.txt", text) end)
-	if okFile then savedFile = "SlenderHub_MLD.txt" end
-	print("")
-	if metodo then
-		print(("[DBG] >>> RELATORIO COPIADO (%s). Cole aqui no chat (toque longo > Colar). <<<"):format(metodo))
-	else
-		print("[DBG] Clipboard indisponivel. Veja opcoes abaixo.")
-	end
-	if savedFile then
-		print(("[DBG] Backup salvo em: %s (writefile)"):format(savedFile))
-	end
-	print("[DBG] Se NAO copiar: tire um PRINT/SCREENSHOT do console do executor")
-	print("[DBG] e envie a imagem aqui no chat — eu leio a imagem e calibro o farm.")
-	getgenv().MLD = {
-		report = text,
-		copy = function()
-			local m2 = copyToClipboard(getgenv().MLD.report)
-			print(m2 and ("[DBG] Copiado de novo (%s)! Cole no chat."):format(m2) or "[DBG] Clipboard indisponivel.")
-		end,
-	}
-end
+    ["UseFruits"] = {Enable = false, Fruits = {}},
+    ["UseBuffs"] = {Enable = false, Buffs = {}},
+    ["UsePotions"] = {Enable = false, Potions = {}},
+    ["EquipEnchants"] = {Enable = false, Enchants = {}},
 
--- 1) Estrutura do Workspace (top-level)
-line("=== 1) Workspace (top-level) ===")
-for _, obj in ipairs(Workspace:GetChildren()) do
-	local parts = 0
-	for _, d in ipairs(obj:GetDescendants()) do
-		if d:IsA("BasePart") then parts = parts + 1 end
-	end
-	line("%s  class=%s  partes=%d", obj.Name, obj.ClassName, parts)
-end
+    ["Rejoin"] = {Enable = false, Time = 60}, -- Time is in minutes
+    ["WhiteScreen"] = {Enable = true},
+    ["StatGUI"] = {Enable = true,
+        Items = {
+            {Class = "Currency", Item = "Diamonds"},
+            {Class = "Currency", Item = "FiestaCoins"},
+            {Class = "Currency", Item = "FiestaOrbs"},
+            {Class = "Misc", Item = "Fiesta Candy"},
+            {Class = "Lootbox", Item = "Fiesta Gift"},
+        }
+    },
+}
 
--- 2) Rede / ClientPackets / RemoteEvent direto (formato Cobalt)
-line("=== 2) Rede ===")
-local NetLib, ClientPackets, BlockModule = nil, nil, nil
-local okNet = pcall(function() NetLib = require(ReplicatedStorage.Packages.Network) end)
-local okCP = pcall(function() ClientPackets = require(ReplicatedStorage.Shared.Modules.ClientPackets) end)
-local okBM = pcall(function() BlockModule = require(ReplicatedStorage.Shared.Modules.BlockModule) end)
-line("Network lib: %s", tostring(okNet and NetLib ~= nil))
-line("ClientPackets: %s  (DamageBlock existe: %s)",
-	tostring(okCP and ClientPackets ~= nil),
-	tostring(okCP and ClientPackets and ClientPackets.DamageBlock ~= nil))
-
-local nr = ReplicatedStorage:FindFirstChild("NetworkRemotes")
-local ClientEvent = nr and nr:FindFirstChild("ClientPackets")
-local ServerEvent = nr and nr:FindFirstChild("ServerPackets")
-line("NetworkRemotes: %s | ClientPackets: %s | ServerPackets: %s",
-	tostring(nr ~= nil),
-	ClientEvent and (ClientEvent.ClassName .. " " .. ClientEvent.Name) or "NAO ACHOU",
-	ServerEvent and (ServerEvent.ClassName .. " " .. ServerEvent.Name) or "NAO ACHOU")
-if ClientEvent and ClientEvent:IsA("RemoteEvent") then
-	line(">>> RemoteEvent direto ENCONTRADO — o hub pode usar: ClientEvent:FireServer(name, payload) <<<")
-end
-
-local bmCount = 0
-if okBM and BlockModule then
-	for _ in pairs(BlockModule) do bmCount = bmCount + 1 end
-end
-line("BlockModule: %s  (entradas: %d)", tostring(okBM and BlockModule ~= nil), bmCount)
-if okBM and BlockModule then
-	local names = {}
-	for k in pairs(BlockModule) do table.insert(names, tostring(k)) end
-	table.sort(names)
-	line("BlockModule amostra: %s", table.concat(names, ", ", 1, math.min(20, #names)))
-end
-
--- 3) Caracter / câmera
-line("=== 3) Character ===")
-local char = LocalPlayer.Character
-local hrp = char and char:FindFirstChild("HumanoidRootPart")
-line("Character: %s  HRP: %s", tostring(char), tostring(hrp))
-if not hrp then
-	line("PARE: personagem nao carregado. Espere e rode de novo.")
-	finish()
-	return
-end
-
--- 4) Amostra dos blocos mais proximos
-line("=== 4) Amostra de BaseParts proximos (raio 40) ===")
-local origin = hrp.Position
-local samples = {}
-for _, part in ipairs(Workspace:GetDescendants()) do
-	if part:IsA("BasePart") and part.Transparency < 1 and not part:IsDescendantOf(char) then
-		local d = (part.Position - origin).Magnitude
-		if d < 40 then
-			table.insert(samples, { part = part, d = d })
-		end
-	end
-end
-table.sort(samples, function(a, b) return a.d < b.d end)
-line("Total de BaseParts visíveis no raio: %d", #samples)
-for i = 1, math.min(12, #samples) do
-	local s = samples[i]
-	local p = s.part
-	local attrs = {}
-	for _, a in ipairs(p:GetAttributes()) do
-		attrs[#attrs + 1] = a .. "=" .. tostring(p:GetAttribute(a))
-	end
-	line("  #%d [%.0f studs] %s | class=%s | CanCollide=%s | Transp=%.2f | Size=%.1f",
-		i, s.d, p.Name, p.ClassName, tostring(p.CanCollide), p.Transparency, p.Size.Magnitude)
-	if #attrs > 0 then
-		line("      atributos: %s", table.concat(attrs, ", "))
-	end
-	local parentChain = {}
-	local par = p.Parent
-	while par do
-		table.insert(parentChain, 1, par.Name .. "(" .. par.ClassName .. ")")
-		par = par.Parent
-	end
-	line("      cadeia: %s", table.concat(parentChain, " > "))
-end
-
--- 5) Teste de raycast (crosshair e look-forward)
-line("=== 5) Raycast (o que o autofarm ve) ===")
-local function mineNameOf(p)
-	local par = p.Parent
-	local last = nil
-	while par do
-		if par:IsA("Model") or par:IsA("Folder") then
-			last = par
-			local nm = string.lower(tostring(par.Name))
-			if string.find(nm, "mine") or string.find(nm, "world") or string.find(nm, "zone") then
-				return par.Name
-			end
-		end
-		par = par.Parent
-	end
-	return last and last.Name or "Mine"
-end
-
-local function guidOf(p)
-	local g = p:GetAttribute("GUID") or p:GetAttribute("BlockGUID") or p:GetAttribute("BlockId") or p:GetAttribute("ID")
-	if (g == nil or g == "") then
-		local child = p:FindFirstChild("GUID") or p:FindFirstChild("Id") or p:FindFirstChild("BlockId")
-		if child and child:IsA("ValueBase") then g = child.Value end
-	end
-	if g == nil or g == "" then g = p.Name end
-	return tostring(g)
-end
-
-local params = RaycastParams.new()
-params.FilterType = Enum.RaycastFilterType.Exclude
-params.RespectCanCollide = false
-params.FilterDescendantsInstances = { char }
-
-local cam = Workspace.CurrentCamera
-if cam then
-	local vp = cam.ViewportSize
-	local ro, rd = cam:ViewportPointToRay(vp.X / 2, vp.Y / 2)
-	local res = Workspace:Raycast(ro, rd * 250, params)
-	if res then
-		line("Crosshair -> %s | class=%s | CanCollide=%s", res.Instance.Name, res.Instance.ClassName, tostring(res.Instance.CanCollide))
-		line("   mine=%s guid=%s", mineNameOf(res.Instance), guidOf(res.Instance))
-	else
-		line("Crosshair -> nada (nenhum hit em 250 studs)")
-	end
-end
-
-local look = cam and cam.CFrame.LookVector or hrp.CFrame.LookVector
-local res2 = Workspace:Raycast(hrp.Position + Vector3.new(0, 2, 0), look * 200, params)
-if res2 then
-	line("LookForward -> %s | class=%s | CanCollide=%s", res2.Instance.Name, res2.Instance.ClassName, tostring(res2.Instance.CanCollide))
-	line("   mine=%s guid=%s", mineNameOf(res2.Instance), guidOf(res2.Instance))
-else
-	line("LookForward -> nada (nenhum hit em 200 studs)")
-end
-
--- 6) Envio de TESTE (1x DamageBlock — inofensivo, rateLimit é 60/s)
-line("=== 6) Envio de teste (1x DamageBlock) ===")
-local target = samples[1] and samples[1].part
-if target then
-	local mine = mineNameOf(target)
-	local guid = guidOf(target)
-	line("Alvo: %s", target.Name)
-	line("Mine=%q GUID=%q", mine, guid)
-
-	-- Tenta PRIMEIRO o RemoteEvent direto (formato Cobalt)
-	if ClientEvent and ClientEvent:IsA("RemoteEvent") then
-		local okCE, errCE = pcall(function()
-			ClientEvent:FireServer("DamageBlock", { Mine = mine, GUID = guid })
-		end)
-		line("RemoteEvent direto FireServer: ok=%s err=%s", tostring(okCE), tostring(errCE))
-		if okCE then
-			line("SE em 2s voce receber BlockDrop/Currency no jogo -> o farm FUNCIONA com esse alvo.")
-		end
-	elseif okCP and ClientPackets and ClientPackets.DamageBlock then
-		local ok, err = pcall(function()
-			ClientPackets.DamageBlock.send({ Mine = mine, GUID = guid })
-		end)
-		line("lib .send: ok=%s err=%s", tostring(ok), tostring(err))
-		if ok then
-			line("SE em 2s voce receber BlockDrop/Currency no jogo -> o farm FUNCIONA com esse alvo.")
-		end
-	else
-		line("Nenhum caminho de envio disponivel (sem RemoteEvent e sem lib).")
-	end
-else
-	line("Nenhum alvo proximo para testar.")
-end
-
-line("=== FIM ===")
-finish()
+script_key="nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw"; -- Your premium key here
+loadstring(game:HttpGet('https://zaphub.xyz/ExecPinataMazeEvent'))()
