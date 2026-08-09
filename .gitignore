@@ -3,7 +3,7 @@ _G.ZapHubSettings = {
 
     ["Optimization"] = {Enable = false},
 
-    ["TeleportToFiestaLobbyArea"] = {Enable = true},
+    ["TeleportToFiestaLobbyArea"] = {Enable = false},
     ["FarmFiestaLobbyPinata"] = {Enable = false, CooldownSeconds = 5},
     ["FiestaPinataChallenge"] = {Enable = false},
     ["StartFiestaMaze"] = {Enable = true, Difficulty = 0, PartyMode = "Solo", CooldownMinutes = 1},
@@ -37,7 +37,8 @@ _G.ZapHubSettings = {
     ["WhiteScreen"] = {Enable = true},
     ["StatGUI"] = {Enable = true,
         Items = {
-            {Class = "Currency", Item = "Diamonds"},
+            {Class = "Pets", Item = "Gargantuan Sombrero Cat"},
+            {Class = "Pets", Item = "Titanic Piñata Cat"},
             {Class = "Currency", Item = "FiestaCoins"},
             {Class = "Currency", Item = "FiestaOrbs"},
             {Class = "Misc", Item = "Fiesta Candy"},
