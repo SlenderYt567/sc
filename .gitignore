@@ -1,50 +1,541 @@
-_G.ZapHubSettings = {
-    ["NewPetsTracker"] = {Enable = true, WebhookURL = "https://discord.com/api/webhooks/1317117794176729088/rCvIdXGcdAHoKwGCmIzd_6NowsXzn4qJXDVs8koPYRhXiaZ7kEPLicFCjLCeJIs9kRvk", PetTypes = {"Gargantuan", "Titanic", "Huge", "Exclusive"}},
+FiestaMazeCmds
+-- Script Path: game:GetService("ReplicatedStorage").Library.Client.FiestaMazeCmds
+-- Took 0.07s to decompile.
+-- Executor: Delta (1.1.733.988)
 
-    ["Optimization"] = {Enable = false},
-
-    ["TeleportToFiestaLobbyArea"] = {Enable = false},
-    ["FarmFiestaLobbyPinata"] = {Enable = false, CooldownSeconds = 5},
-    ["FiestaPinataChallenge"] = {Enable = false},
-    ["StartFiestaMaze"] = {Enable = true, Difficulty = 0, PartyMode = "Solo", CooldownMinutes = 1},
-    ["CompleteFiestaMaze"] = {Enable = true},
-    ["CollectFiestaPrizeRoom"] = {Enable = true, Eggs = {"LootChest", "HugeChest", "TitanicChest", "LeprechaunChest"}},
-    ["CrafFiestaGifts"] = {Enable = false},
-    ["CombineFiestaKeys"] = {Enable = true, CombineBossKeys = true},
-    ["BuyFiestaUpgrades"] = {Enable = true, Upgrades = {"Damage", "Pets", "Smash Speed"}},
-    ["UseFiestaBoosters"] = {Enable = false, Boosters = {"Fiesta Maze Damage Booster", "Fiesta Maze XP Booster", "Instant Fiesta Maze XP Booster"}, TierPriority = "Lowest"},
-
-    ["InfinitePetSpeed"] = {Enable = true},
-    ["Tap"] = {Enable = true, Mode = "Random"},
-    ["EfficientFarm"] = {Enable = true},
-    ["CollectOrbs"] = {Enable = true},
-    ["UseUltimate"] = {Enable = true},
-
-    ["MakePetsGold"] = {Enable = false},
-    ["MakePetsRainbow"] = {Enable = false},
-
-    ["ClaimMailbox"] = {Enable = true},
-    ["ClaimFreeGifts"] = {Enable = true},
-    ["ClaimRankRewards"] = {Enable = true},
-    ["ClaimDefaultForeverPackFreeGift"] = {Enable = true},
-
-    ["UseFruits"] = {Enable = false, Fruits = {}},
-    ["UseBuffs"] = {Enable = false, Buffs = {}},
-    ["UsePotions"] = {Enable = false, Potions = {}},
-    ["EquipEnchants"] = {Enable = false, Enchants = {}},
-
-    ["Rejoin"] = {Enable = false, Time = 60}, -- Time is in minutes
-    ["WhiteScreen"] = {Enable = true},
-    ["StatGUI"] = {Enable = true,
-        Items = {
-            {Class = "Currency", Item= "Diamonds"},
-            {Class = "Currency", Item = "FiestaCoins"},
-            {Class = "Currency", Item = "FiestaOrbs"},
-            {Class = "Misc", Item = "Fiesta Candy"},
-            {Class = "Lootbox", Item = "Fiesta Gift"},
-        }
-    },
+local v_u_1 = require(game.ReplicatedStorage.Library.Util.FiestaMaze)
+local v_u_2 = require(game.ReplicatedStorage.Library.Util.FiestaMazeGeometry)
+local v_u_3 = require(game.ReplicatedStorage.Library.Client.FiestaMazePortals)
+require(game.ReplicatedStorage.Library.Util.FiestaCredits)
+local v_u_4 = require(game.ReplicatedStorage.Library.Client.InstancingCmds)
+local v_u_5 = require(game.ReplicatedStorage.Library.Client.FFlags)
+local v_u_6 = require(game.ReplicatedStorage.Library.Client.Network)
+local v7 = require(game.ReplicatedStorage.Library.Client.BreakableFrontend)
+local v_u_8 = require(game.ReplicatedStorage.Library.Client.MapCmds)
+local v_u_9 = require(game.ReplicatedStorage.Library.Client.Interact)
+local v_u_10 = require(game.ReplicatedStorage.Library.Directory)
+local v_u_11 = require(game.ReplicatedStorage.Library.Items)
+local v_u_12 = require(game.ReplicatedStorage.Library.Client.Message)
+local v_u_13 = {
+    ["ProgressChanged"] = nil
 }
-
-script_key="nNOnKsJaYhZJPHjsxiLHAyUxUVXqFGsw"; -- Your premium key here
-loadstring(game:HttpGet('https://zaphub.xyz/ExecPinataMazeEvent'))()
+local v_u_14 = nil
+local function v_u_15(...) -- name: debugLog
+    -- upvalues: (copy) v_u_5
+    if v_u_5.Get(v_u_5.Keys.PinataFiesta_MazeDebug) then
+        print("[FiestaMazeCmds]", ...)
+    end
+end
+local function v_u_19(p16) -- name: sweepBuilt
+    if not (p16 and p16.Parent) then
+        return 0
+    end
+    local v17 = 0
+    for _, v18 in ipairs(p16:GetChildren()) do
+        if v18:GetAttribute("__FiestaMazeBuilt") then
+            v18:Destroy()
+            v17 = v17 + 1
+        end
+    end
+    return v17
+end
+local v_u_20 = {}
+local function v_u_42(p21) -- name: auditBreakablePlacement
+    -- upvalues: (ref) v_u_14, (copy) v_u_2, (copy) v_u_1, (copy) v_u_13, (copy) v_u_20
+    local v22 = v_u_14
+    if v22 and (p21 and p21.parentID == "FiestaMaze") then
+        local v23 = p21.position
+        if typeof(v23) == "Vector3" then
+            local v24 = v_u_2.Pitch()
+            local v25 = v22.origin:PointToObjectSpace(v23)
+            local v26 = v25.X / v24
+            local v27 = math.round(v26)
+            local v28 = v25.Z / v24
+            local v29 = math.round(v28)
+            local v30 = v_u_1.CellKey(v22.layout, v27, v29)
+            if v_u_13.IsPositionInBuiltCell(v23) then
+                return
+            elseif not v_u_20[v30] then
+                v_u_20[v30] = true
+                local v31 = v_u_1.IsOccupied(v22.layout, v27, v29)
+                local v32
+                if v31 then
+                    v32 = v_u_1.InfoAt(v22.layout, v27, v29) or nil
+                else
+                    v32 = nil
+                end
+                local v33 = warn
+                local v34 = ("[FiestaMazeCmds] STRAY BREAKABLE \'%*\' at %* -> cell (%*,%*) "):format(p21.id, v23, v27, v29)
+                local v35 = ("key=%*: %*. "):format(v30, v31 and "occupied but NOT BUILT -- the player cannot reach it" or "NOT OCCUPIED -- this is outside the maze")
+                local v36 = ("%* "):format(v32 and ("onPath=%* pathIndex=%*"):format(v32.onPath, v32.pathIndex) or "")
+                local v37 = 0
+                local v38 = "builtCells=%* "
+                for _ in pairs(v22.built) do
+                    v37 = v37 + 1
+                end
+                local v39 = v38:format(v37)
+                local v40 = 0
+                local v41 = "clearedCells=%*"
+                for _ in pairs(v22.cleared) do
+                    v40 = v40 + 1
+                end
+                v33(v34 .. v35 .. v36 .. v39 .. v41:format(v40))
+            end
+        else
+            return
+        end
+    else
+        return
+    end
+end
+local v_u_43 = 0
+local v_u_44 = nil
+local function v_u_50() -- name: holdCharacter
+    -- upvalues: (ref) v_u_44, (ref) v_u_43, (copy) v_u_15
+    local v45 = game:GetService("Players")
+    local v46 = v45.LocalPlayer
+    if v46 then
+        v46 = v45.LocalPlayer.Character
+    end
+    local v47
+    if v46 then
+        v47 = v46:FindFirstChild("HumanoidRootPart")
+        if not (v47 and v47:IsA("BasePart")) then
+            v47 = nil
+        end
+    else
+        v47 = nil
+    end
+    if v47 and not v47.Anchored then
+        v47.Anchored = true
+        v_u_44 = v47
+        v_u_43 = v_u_43 + 1
+        local v_u_48 = v_u_43
+        v_u_15("character held while the maze builds")
+        task.delay(6, function()
+            -- upvalues: (ref) v_u_43, (copy) v_u_48, (ref) v_u_44, (ref) v_u_15
+            if v_u_43 == v_u_48 then
+                warn(("[FiestaMazeCmds] maze did not build within %*s -- releasing the "):format(6) .. "player rather than leaving them anchored")
+                v_u_43 = v_u_43 + 1
+                local v49 = v_u_44
+                v_u_44 = nil
+                if v49 and (v49.Parent and v49.Anchored) then
+                    v49.Anchored = false
+                    v_u_15("character released")
+                end
+            end
+        end)
+    end
+end
+function v_u_13.IsEnabled() -- name: IsEnabled
+    -- upvalues: (copy) v_u_5
+    return v_u_5.Get(v_u_5.Keys.PinataFiesta_Maze) == true
+end
+function v_u_13.Get() -- name: Get
+    -- upvalues: (ref) v_u_14
+    return v_u_14
+end
+function v_u_13.IsEternal() -- name: IsEternal
+    -- upvalues: (ref) v_u_14
+    local v51
+    if v_u_14 == nil then
+        v51 = false
+    else
+        local v52 = v_u_14.eternalAreas
+        v51 = type(v52) == "number"
+    end
+    return v51
+end
+function v_u_13.IsCursed() -- name: IsCursed
+    -- upvalues: (ref) v_u_14
+    local v53
+    if v_u_14 == nil then
+        v53 = false
+    else
+        v53 = v_u_14.cursed == true
+    end
+    return v53
+end
+function v_u_13.PathCellModel(p54) -- name: PathCellModel
+    -- upvalues: (ref) v_u_14, (copy) v_u_1
+    local v55 = v_u_14
+    if v55 and type(p54) == "number" then
+        local v56 = v55.layout.path[p54]
+        if v56 then
+            return v55.built[v_u_1.CellKey(v55.layout, v56[1], v56[2])]
+        else
+            return nil
+        end
+    else
+        return nil
+    end
+end
+function v_u_13.IsPositionInBuiltCell(p57) -- name: IsPositionInBuiltCell
+    -- upvalues: (ref) v_u_14, (copy) v_u_2, (copy) v_u_1
+    local v58 = v_u_14
+    if not v58 or typeof(p57) ~= "Vector3" then
+        return false
+    end
+    local v59 = v_u_2.Pitch()
+    if v59 <= 0 then
+        return false
+    end
+    local v60 = v58.origin:PointToObjectSpace(p57)
+    local v61 = v60.X / v59
+    local v62 = math.round(v61)
+    local v63 = v60.Z / v59
+    local v64 = math.round(v63)
+    if v58.built[v_u_1.CellKey(v58.layout, v62, v64)] then
+        return true
+    end
+    for v65 = -1, 1 do
+        for v66 = -1, 1 do
+            if v65 ~= 0 or v66 ~= 0 then
+                local v67 = v62 + v65
+                local v68 = v64 + v66
+                if v58.built[v_u_1.CellKey(v58.layout, v67, v68)] then
+                    for _, v69 in ipairs(v_u_1.RoomBlock(v58.layout, v67, v68)) do
+                        if v69[1] == v62 and v69[2] == v64 then
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+function v_u_13.Progress() -- name: Progress
+    -- upvalues: (ref) v_u_14
+    local v70 = v_u_14
+    if not (v70 and v70.graph) then
+        return 0, 0
+    end
+    local v71 = 0
+    local v72 = 0
+    for _, v73 in ipairs(v70.graph.order) do
+        v71 = v71 + 1
+        if v70.cleared[v73] then
+            v72 = v72 + 1
+        end
+    end
+    return v72, v71
+end
+local function v_u_81(p74, p75, p76) -- name: buildPreview
+    -- upvalues: (copy) v_u_2, (copy) v_u_1
+    if p74.built[p75] or p74.preview[p75] then
+        return
+    else
+        local v77 = p74.graph.coords[p75]
+        if v77 then
+            local v78 = v77[1]
+            local v79 = v77[2]
+            local v80 = v_u_2.BuildPreviewRoom(p74.layout, p74.origin, v78, v79, p74.cursed)
+            if v80 then
+                if v80 then
+                    v80:SetAttribute("__FiestaMazeBuilt", true)
+                end
+                v80.Parent = p74.rooms
+                p74.preview[p75] = v80
+                v_u_2.BuildPreviewWalls(p74.layout, p74.origin, v78, v79, v_u_1.Opposite(p76), v80, p74.cursed)
+            end
+        else
+            return
+        end
+    end
+end
+local function v_u_95(p82, p83) -- name: buildCell
+    -- upvalues: (copy) v_u_2, (copy) v_u_3, (copy) v_u_1
+    if p82.built[p83] then
+        return
+    end
+    local v84 = p82.graph.coords[p83]
+    if not v84 then
+        return
+    end
+    local v85 = p82.preview[p83]
+    if v85 then
+        p82.preview[p83] = nil
+        if v85.Parent then
+            v85:Destroy()
+        end
+    end
+    local v86 = v84[1]
+    local v87 = v84[2]
+    local v88 = v_u_2.BuildRoom(p82.layout, p82.origin, v86, v87, p82.cursed)
+    if not v88 then
+        return
+    end
+    if v88 then
+        v88:SetAttribute("__FiestaMazeBuilt", true)
+    end
+    v88.Parent = p82.rooms
+    p82.built[p83] = v88
+    v_u_3.BindRoom(v88)
+    local v89 = v_u_2.BuildRoomAnnex(p82.layout, p82.origin, v86, v87, v88, p82.cursed)
+    local v90 = false
+    for _, v91 in ipairs(p82.layout.bosses) do
+        if v91.cx == v86 and (v91.cy == v87 and table.find(p82.lockedTiers, v91.tier)) then
+            v90 = true
+            break
+        end
+    end
+    if not v90 and v_u_1.ChestAt(p82.layout, v86, v87) == "boss" then
+        v_u_2.HideBreakZoneBeams(v88)
+        for _, v92 in ipairs(v89) do
+            v_u_2.HideBreakZoneBeams(v92)
+        end
+    end
+    v_u_2.BuildWalls(p82.layout, p82.origin, v86, v87, v88, p82.cursed)
+    if not p82.silentBuild then
+        local v93 = 0
+        for _, v94 in ipairs(v88:GetChildren()) do
+            if v94:IsA("Model") and v94.Name:match("^Wall_") then
+                v93 = v93 + 1
+                v_u_2.PopIn(v94, v93 * 0.04)
+            end
+        end
+    end
+end
+local v_u_96 = {}
+local v_u_97 = {}
+local v_u_98 = false
+local v_u_99 = 1
+function v_u_13.IsBuilding() -- name: IsBuilding
+    -- upvalues: (ref) v_u_96, (ref) v_u_99
+    return #v_u_96 - v_u_99 + 1 > 0
+end
+local function v_u_109(p100) -- name: playerCell
+    -- upvalues: (copy) v_u_2
+    local v101 = game.Players.LocalPlayer.Character
+    if not v101 then
+        return nil, nil
+    end
+    local v102, v103 = pcall(v101.GetPivot, v101)
+    if not v102 then
+        return nil, nil
+    end
+    local v104 = v_u_2.Pitch()
+    if v104 <= 0 then
+        return nil, nil
+    end
+    local v105 = p100.origin:PointToObjectSpace(v103.Position)
+    local v106 = v105.X / v104
+    local v107 = math.round(v106)
+    local v108 = v105.Z / v104
+    return v107, math.round(v108)
+end
+local function v_u_123(p110) -- name: sortQueueByDistance
+    -- upvalues: (copy) v_u_109, (ref) v_u_99, (ref) v_u_96
+    local v111, v112 = v_u_109(p110)
+    if v111 and v112 then
+        if v_u_99 > 1 then
+            local v113 = table.create(#v_u_96 - v_u_99 + 1)
+            for v114 = v_u_99, #v_u_96 do
+                local v115 = v_u_96[v114]
+                table.insert(v113, v115)
+            end
+            v_u_96 = v113
+            v_u_99 = 1
+        end
+        local v_u_116 = {}
+        for _, v117 in ipairs(v_u_96) do
+            local v118 = p110.graph.coords[v117]
+            if v118 then
+                local v119 = v118[1] - v111
+                local v120 = v118[2] - v112
+                v_u_116[v117] = v119 * v119 + v120 * v120
+            else
+                v_u_116[v117] = (1 / 0)
+            end
+        end
+        table.sort(v_u_96, function(p121, p122)
+            -- upvalues: (copy) v_u_116
+            return (v_u_116[p121] or (1 / 0)) < (v_u_116[p122] or (1 / 0))
+        end)
+    end
+end
+local function v_u_128() -- name: bossNodeKeysHeld
+    -- upvalues: (copy) v_u_10, (copy) v_u_11
+    local v_u_124 = v_u_10.MiscItems["Fiesta Boss Key"]
+    if not v_u_124 then
+        return 0
+    end
+    local v125, v126 = pcall(function()
+        -- upvalues: (ref) v_u_11, (copy) v_u_124
+        return v_u_11.Misc(v_u_124):CountAny()
+    end)
+    if not v125 or (type(v126) ~= "number" or v126 ~= v126) then
+        return 0
+    end
+    local v127 = math.floor(v126)
+    return math.max(0, v127)
+end
+local function v_u_146(p129, p130) -- name: raiseGate
+    -- upvalues: (copy) v_u_2, (copy) v_u_1, (copy) v_u_9, (copy) v_u_5, (copy) v_u_128, (copy) v_u_10, (copy) v_u_12, (copy) v_u_11, (copy) v_u_6
+    if p129.gates[p130.child] then
+        return
+    else
+        local v131 = v_u_2.BuildGate(p129.layout, p129.origin, p130.cx, p130.cy, p130.dir, p129.cursed)
+        if v131 then
+            if v131 then
+                v131:SetAttribute("__FiestaMazeBuilt", true)
+            end
+            v131.Parent = p129.rooms
+            p129.gates[p130.child] = v131
+            local v132 = v_u_1.BossNodeKey(p129.layout)
+            if v132 and p130.child == v132 then
+                if p129 and p129.bossPromptCancel then
+                    p129.bossPromptCancel()
+                    p129.bossPromptCancel = nil
+                end
+                local v133 = v_u_2.GatePromptPosition(v131, p129.origin, p130.cx, p130.cy, p130.dir)
+                local v134, v135 = v_u_9.Add(CFrame.new(v133), {
+                    ["dist"] = 18,
+                    ["label"] = "Use Fiesta Boss Key"
+                })
+                p129.bossPromptCancel = v135
+                local v_u_136 = false
+                v134:Connect(function()
+                    -- upvalues: (ref) v_u_136, (ref) v_u_5, (ref) v_u_128, (ref) v_u_10, (ref) v_u_12, (ref) v_u_11, (ref) v_u_6
+                    if v_u_136 then
+                        return
+                    else
+                        local v137, v138 = pcall(v_u_5.Get, v_u_5.Keys.PinataFiesta_MazeBossNodeKeyCost)
+                        local v139
+                        if v137 and (type(v138) == "number" and v138 == v138) then
+                            local v140 = math.floor(v138)
+                            v139 = math.clamp(v140, 1, 100)
+                        else
+                            v139 = 1
+                        end
+                        local v141 = v_u_128()
+                        if v141 < v139 then
+                            local v142 = v139 == 1 and "You need a Fiesta Boss Key to open this boss room!" or ("You need %* Fiesta Boss Keys to open this boss room! "):format(v139) .. ("You have %*."):format(v141)
+                            local v143 = v_u_10.MiscItems["Fiesta Boss Key"]
+                            v_u_12.New(v142, {
+                                ["title"] = "Fiesta Boss Key Required",
+                                ["item"] = nil,
+                                ["item"] = v143 and v_u_11.Misc(v143):SetAmount(v139) or nil
+                            })
+                        else
+                            v_u_136 = true
+                            local v144, v145 = v_u_6.Invoke("GX_Redeem")
+                            v_u_136 = false
+                            if not v144 and v145 then
+                                v_u_12.Error(v145)
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end
+end
+function v_u_13.Refresh() -- name: Refresh
+    -- upvalues: (ref) v_u_14, (copy) v_u_1, (copy) v_u_5, (copy) v_u_95, (copy) v_u_97, (ref) v_u_96, (copy) v_u_123, (ref) v_u_98, (ref) v_u_99, (copy) v_u_2, (copy) v_u_146, (copy) v_u_81, (copy) v_u_15, (copy) v_u_13
+    local v_u_147 = v_u_14
+    if v_u_147 then
+        local v148 = v_u_1.RevealedCells(v_u_147.layout, v_u_147.graph, v_u_147.cleared)
+        local v149, v150 = pcall(v_u_5.Get, v_u_5.Keys.PinataFiesta_MazeBuildBudgetMs)
+        if ((not v149 or (type(v150) ~= "number" or (v150 ~= v150 or v150 < 0))) and 4 or v150) <= 0 then
+            for v151 in pairs(v148) do
+                v_u_95(v_u_147, v151)
+            end
+        else
+            local v152 = false
+            for v153 in pairs(v148) do
+                if not (v_u_147.built[v153] or v_u_97[v153]) then
+                    v_u_97[v153] = true
+                    local v154 = v_u_96
+                    table.insert(v154, v153)
+                    v152 = true
+                end
+            end
+            if v152 then
+                v_u_123(v_u_147)
+                if not v_u_98 then
+                    v_u_98 = true
+                    task.spawn(function()
+                        -- upvalues: (ref) v_u_96, (ref) v_u_99, (ref) v_u_14, (copy) v_u_147, (ref) v_u_5, (ref) v_u_97, (ref) v_u_95, (ref) v_u_98
+                        while #v_u_96 - v_u_99 + 1 > 0 and v_u_14 == v_u_147 do
+                            local v155, v156 = pcall(v_u_5.Get, v_u_5.Keys.PinataFiesta_MazeBuildBudgetMs)
+                            local v157 = ((not v155 or (type(v156) ~= "number" or (v156 ~= v156 or v156 < 0))) and 4 or v156) / 1000
+                            local v158 = os.clock()
+                            while true do
+                                local v159 = v_u_96[v_u_99]
+                                if v159 == nil then
+                                    break
+                                end
+                                v_u_99 = v_u_99 + 1
+                                v_u_97[v159] = nil
+                                local v160, v161 = pcall(v_u_95, v_u_147, v159)
+                                if not v160 then
+                                    warn((("[FiestaMazeCmds] failed to build cell %*: %*"):format(v159, (tostring(v161)))))
+                                end
+                                if v157 <= os.clock() - v158 or #v_u_96 - v_u_99 + 1 <= 0 then
+                                    break
+                                end
+                            end
+                            if #v_u_96 - v_u_99 + 1 > 0 then
+                                task.wait()
+                            end
+                        end
+                        table.clear(v_u_96)
+                        table.clear(v_u_97)
+                        v_u_99 = 1
+                        v_u_98 = false
+                    end)
+                end
+            end
+        end
+        local v162 = {}
+        for _, v163 in ipairs(v_u_147.graph.gates) do
+            if v148[v163.parent] then
+                if v148[v163.child] then
+                    local v164 = v163.child
+                    local v165 = v_u_147.gates[v164]
+                    if v165 then
+                        local v166 = v_u_1.BossNodeKey(v_u_147.layout)
+                        if v166 and (v164 == v166 and (v_u_147 and v_u_147.bossPromptCancel)) then
+                            v_u_147.bossPromptCancel()
+                            v_u_147.bossPromptCancel = nil
+                        end
+                        v_u_147.gates[v164] = nil
+                        v_u_2.OpenGate(v165)
+                    end
+                else
+                    v_u_146(v_u_147, v163)
+                    v162[v163.child] = true
+                    v_u_81(v_u_147, v163.child, v163.dir)
+                end
+            end
+        end
+        for v167 in pairs(v_u_147.preview) do
+            if not v162[v167] then
+                local v168 = v_u_147.preview[v167]
+                if v168 then
+                    v_u_147.preview[v167] = nil
+                    if v168.Parent then
+                        v168:Destroy()
+                    end
+                end
+            end
+        end
+        local v169 = 0
+        for _ in pairs(v_u_147.built) do
+            v169 = v169 + 1
+        end
+        local v170 = 0
+        for _ in pairs(v_u_147.gates) do
+            v170 = v170 + 1
+        end
+        local v171 = v_u_15
+        local v172 = 0
+        local v173 = "refresh: built=%* shutGates=%* cleared=%*"
+        for _ in pairs(v_u_147.cleared) do
+            v172 = v172 + 1
+        end
+        v171((v173:format(v169, v170, v172)))
+        if v_u_13.ProgressChanged then
+            local v174, v175 = pcall(v_u_13.ProgressC
