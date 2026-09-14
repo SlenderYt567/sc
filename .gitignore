@@ -1,21 +1,12 @@
 --[[
     ============================================================
-    PET UNIVERSE HUB — by SlenderHub  (v2 — compatível)
+    PET UNIVERSE HUB — by SlenderHub  (v2 — compatível e corrigido)
     ------------------------------------------------------------
     Jogo   : Pet Universe (framework Knit)
     UI     : Fluent (dawid-scripts/Fluent)
-    ------------------------------------------------------------
-    REMOTES:
-      BreakableOrbService.RE.ClaimOrb        (zona, tier, dano, coinId)
-      BreakableOrbService.RE.ClaimClickBonus (coinId)
-      BreakableAreaService.RE.SetAutoBreaking(bool)
-      BreakableSpawnService.RE.ReportDestroyed(zona, coinId)
-      EggHatchService.RE.Hatch               (ovo, "Max" | quantidade)
-      EggHatchService.Config                 ("Delete", petName)
     ============================================================
 ]]
 
--- Envolve tudo em pcall para mostrar a linha exata do erro (se houver)
 local mainOK, mainErr = pcall(function()
 
 -- ============================================================
@@ -28,7 +19,6 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local LP = Players.LocalPlayer
-local HRP = "HumanoidRootPart"
 
 -- Ambiente persistente (evita duplicar o hub ao re-executar)
 local env = _G
@@ -40,6 +30,7 @@ if type(getgenv) == "function" then
         end
     end)
 end
+
 if env.PetUniverseHubWindow and type(env.PetUniverseHubWindow.Destroy) == "function" then
     pcall(function()
         env.PetUniverseHubWindow:Destroy()
@@ -75,22 +66,36 @@ local HATCH_AMOUNTS = { "Max", "1", "5", "10", "25", "50", "100" }
 -- 3. UTILITÁRIOS
 -- ============================================================
 
--- Obtém um RemoteEvent de um serviço Knit
+-- Obtém um RemoteEvent de um serviço Knit (com fallback flexível)
 local function getServiceRemote(serviceName, remoteName)
-    local knit = ReplicatedStorage:FindFirstChild("Packages")
-        and ReplicatedStorage.Packages:FindFirstChild("Knit")
-    local services = knit and knit:FindFirstChild("Services")
-    local svc = services and services:FindFirstChild(serviceName)
-    local re = svc and svc:FindFirstChild("RE")
-    return re and re:FindFirstChild(remoteName)
+    -- Caminho padrão Knit
+    local knit = (ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages:FindFirstChild("Knit"))
+        or ReplicatedStorage:FindFirstChild("Knit")
+    if knit then
+        local services = knit:FindFirstChild("Services")
+        local svc = services and services:FindFirstChild(serviceName)
+        if svc then
+            local re = svc:FindFirstChild("RE")
+            local target = (re and re:FindFirstChild(remoteName)) or svc:FindFirstChild(remoteName)
+            if target then return target end
+        end
+    end
+
+    -- Fallback: busca recursiva no ReplicatedStorage
+    for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+        if desc.Name == remoteName and (desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") or desc:IsA("BindableEvent")) then
+            return desc
+        end
+    end
+    return nil
 end
 
--- Dispara evento de forma segura (RemoteEvent/BindableEvent/RemoteFunction)
+-- Dispara evento de forma segura
 local function fireInstance(inst, ...)
     if not inst then
         return false
     end
-    local ok, err = pcall(function()
+    local ok, err = pcall(function(...)
         if inst:IsA("RemoteEvent") then
             inst:FireServer(...)
         elseif inst:IsA("BindableEvent") then
@@ -98,14 +103,14 @@ local function fireInstance(inst, ...)
         elseif inst:IsA("RemoteFunction") then
             inst:InvokeServer(...)
         end
-    end)
+    end, ...)
     if not ok then
         warn("[PetUniverseHub] fireInstance falhou:", err)
     end
     return ok
 end
 
--- Posição central de uma zona (Spawner ou média dos PetArea)
+-- Posição central de uma zona
 local function getZonePosition(zone)
     local spawners = Workspace:FindFirstChild("BreakablesSpawners")
     local zoneFolder = spawners and spawners:FindFirstChild(zone)
@@ -116,7 +121,7 @@ local function getZonePosition(zone)
     if spot and spot:IsA("BasePart") then
         return spot.Position
     end
-    local total = Vector3.new(0, 0, 0)
+    local total = Vector3.zero
     local count = 0
     for _, v in ipairs(zoneFolder:GetDescendants()) do
         if v.Name == "PetArea" and v:IsA("BasePart") then
@@ -134,7 +139,7 @@ end
 local function teleportToZone(zone)
     local pos = getZonePosition(zone)
     local char = LP.Character
-    local hrp = char and char:FindFirstChild(HRP)
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if pos and hrp then
         hrp.CFrame = CFrame.new(pos + Vector3.new(0, 6, 0))
         return true
@@ -143,7 +148,7 @@ local function teleportToZone(zone)
 end
 
 -- ============================================================
--- 4. CARREGAR FLUENT UI (corrigido: usa o 2º retorno do pcall)
+-- 4. CARREGAR FLUENT UI
 -- ============================================================
 local function loadSource(src)
     if type(loadstring) == "function" then
@@ -153,8 +158,6 @@ local function loadSource(src)
     end
     return nil
 end
-
-local Fluent = nil
 
 local function tryLoadFluent(url)
     local ok, res = pcall(function()
@@ -171,12 +174,12 @@ local function tryLoadFluent(url)
     return nil
 end
 
-Fluent = tryLoadFluent("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua")
+local Fluent = tryLoadFluent("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua")
 if not Fluent then
     Fluent = tryLoadFluent("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/main.lua")
 end
 if not Fluent then
-    error("Falha ao carregar Fluent UI. Verifique se o executor permite game:HttpGet do GitHub.")
+    error("Falha ao carregar Fluent UI. Verifique se a sua conexão e o executor suportam HttpGet do GitHub.")
 end
 
 -- ============================================================
@@ -186,8 +189,8 @@ local Window = Fluent:CreateWindow({
     Title = "Pet Universe Hub",
     SubTitle = "by SlenderHub",
     TabWidth = 140,
-    Size = UDim2.fromOffset(580, 520),
-    Acrylic = true,
+    Size = UDim2.fromOffset(580, 480),
+    Acrylic = false, -- Desativado por compatibilidade (evita telas pretas/crashes)
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.RightControl,
 })
@@ -239,14 +242,12 @@ local playerState = {
 }
 
 -- ============================================================
--- 7. FARM (EXPLOIT)
+-- 7. FARM
 -- ============================================================
 
--- Reporta destruição de todos os breakables de uma zona
 local function reportDestroyedInZone(zone)
     local remote = getServiceRemote("BreakableSpawnService", "ReportDestroyed")
-    local folder = Workspace:FindFirstChild("Breakables")
-        and Workspace.Breakables:FindFirstChild(zone)
+    local folder = Workspace:FindFirstChild("Breakables") and Workspace.Breakables:FindFirstChild(zone)
     if not (remote and folder) then
         return 0
     end
@@ -263,7 +264,6 @@ local function reportDestroyedInZone(zone)
     return count
 end
 
--- Reivindica todos os orbs de uma zona (mesmo fluxo do OrbsCollect do jogo)
 local function claimOrbsInZone(zone, multiplier)
     local remote = getServiceRemote("BreakableOrbService", "ClaimOrb")
     local orbs = Workspace:FindFirstChild("Orbs")
@@ -275,7 +275,8 @@ local function claimOrbsInZone(zone, multiplier)
     for _, orb in ipairs(zoneFolder:GetChildren()) do
         if orb:IsA("BasePart") and orb:FindFirstChild("Damage") then
             local coinId = orb:GetAttribute("CoinId") or ""
-            local dmg = orb.Damage.Value * multiplier
+            local baseDmg = tonumber(orb.Damage.Value) or 1
+            local dmg = baseDmg * multiplier
             fireInstance(remote, zoneFolder.Name, orb.Name, dmg, coinId)
             pcall(function()
                 orb:Destroy()
@@ -286,7 +287,6 @@ local function claimOrbsInZone(zone, multiplier)
     return count
 end
 
--- Localiza breakables de click bonus (nome contém "bonus"/"click")
 local function findClickBonus()
     local found = {}
     local breakables = Workspace:FindFirstChild("Breakables")
@@ -307,7 +307,6 @@ local function findClickBonus()
     return found
 end
 
--- Reivindica o click bonus
 local function claimClickBonus()
     local remote = getServiceRemote("BreakableOrbService", "ClaimClickBonus")
     if not remote then
@@ -320,7 +319,6 @@ local function claimClickBonus()
     return #list
 end
 
--- Loop principal do autofarm (exploit)
 local function farmLoop()
     while farmState.enabled do
         local zone = farmState.zone
@@ -336,6 +334,7 @@ local function farmLoop()
 
         task.wait(farmState.interval)
     end
+    farmThread = nil
 end
 
 local function setAutoFarm(on)
@@ -347,7 +346,7 @@ local function setAutoFarm(on)
     end
 end
 
--- Loop de coleta de orbs (standalone)
+-- Loops secundários
 task.spawn(function()
     while true do
         task.wait(0.4)
@@ -359,7 +358,6 @@ task.spawn(function()
     end
 end)
 
--- Loop de auto break (remoto nativo do jogo)
 task.spawn(function()
     while true do
         task.wait(1)
@@ -370,7 +368,6 @@ task.spawn(function()
     end
 end)
 
--- Loop de click bonus automático
 task.spawn(function()
     while true do
         task.wait(2)
@@ -381,16 +378,13 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- 8. HATCH (OVOS)
+-- 8. HATCH
 -- ============================================================
 local function hatchEgg(egg, amount)
     local remote = getServiceRemote("EggHatchService", "Hatch")
     local finalAmount = amount
     if type(amount) == "string" and amount ~= "Max" then
-        local n = tonumber(amount)
-        if n then
-            finalAmount = n
-        end
+        finalAmount = tonumber(amount) or amount
     end
     return fireInstance(remote, egg, finalAmount)
 end
@@ -404,17 +398,11 @@ task.spawn(function()
     end
 end)
 
--- Apaga um pet via remoto de configuração (Delete)
 local function deletePet(petName)
-    local knit = ReplicatedStorage:FindFirstChild("Packages")
-        and ReplicatedStorage.Packages:FindFirstChild("Knit")
-    local svc = knit and knit:FindFirstChild("Services")
-        and knit.Services:FindFirstChild("EggHatchService")
-    local config = svc and svc:FindFirstChild("Config")
+    local config = getServiceRemote("EggHatchService", "Config")
     return fireInstance(config, "Delete", petName)
 end
 
--- Lista pets do jogador a partir do mirror de dados
 local function getPlayerPets()
     local result = {}
     local mirror = ReplicatedFirst:FindFirstChild("PlayerDataMirror")
@@ -433,7 +421,6 @@ local function getPlayerPets()
     return result
 end
 
--- Apaga todos os pets comuns (Tier baixo)
 local function deleteCommonPets()
     local commons = {
         "Cat", "Dog", "Mouse", "Bird", "Rabbit", "Pig", "Cow", "Chicken",
@@ -454,27 +441,31 @@ local function deleteCommonPets()
 end
 
 -- ============================================================
--- 9. MOVIMENTO (PLAYER)
+-- 9. MOVIMENTO
 -- ============================================================
-RunService.Heartbeat:Connect(function(dt)
-    local char = LP.Character
-    if not char then
-        return
-    end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.WalkSpeed = playerState.speed
-        hum.JumpPower = playerState.jump
-    end
+RunService.Stepped:Connect(function()
     if playerState.noclip then
-        local hrp = char:FindFirstChild(HRP)
-        if hrp then
-            hrp.CFrame = hrp.CFrame + hrp.Velocity * dt
+        local char = LP.Character
+        if char then
             for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
+                if part:IsA("BasePart") and part.CanCollide then
                     part.CanCollide = false
                 end
             end
+        end
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    local char = LP.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        if hum.WalkSpeed ~= playerState.speed then
+            hum.WalkSpeed = playerState.speed
+        end
+        hum.UseJumpPower = true
+        if hum.JumpPower ~= playerState.jump then
+            hum.JumpPower = playerState.jump
         end
     end
 end)
@@ -511,7 +502,7 @@ local function makeHighlight(adornee, color)
     h.OutlineTransparency = 0
     h.FillColor = color
     h.OutlineColor = color
-    h.Parent = adornee.Parent or Workspace
+    h.Parent = Workspace
     return h
 end
 
@@ -556,11 +547,11 @@ local function refreshESP()
 end
 
 -- ============================================================
--- 11. CONSTRUÇÃO DA UI (ABA FARM)
+-- 11. CONSTRUÇÃO DA UI (FARM)
 -- ============================================================
-local farmSection = Tabs.Farm:AddSection("Autofarm Exploit")
+Tabs.Farm:AddSection("Autofarm Exploit")
 
-farmSection:AddToggle("AutoFarm", {
+Tabs.Farm:AddToggle("AutoFarm", {
     Title = "Auto Farm (Report + Claim Orbs)",
     Default = false,
     Callback = function(value)
@@ -575,7 +566,7 @@ farmSection:AddToggle("AutoFarm", {
     end,
 })
 
-farmSection:AddToggle("AutoTeleport", {
+Tabs.Farm:AddToggle("AutoTeleport", {
     Title = "Teleportar para a zona no ciclo",
     Default = false,
     Callback = function(value)
@@ -583,7 +574,7 @@ farmSection:AddToggle("AutoTeleport", {
     end,
 })
 
-farmSection:AddToggle("AutoOrbs", {
+Tabs.Farm:AddToggle("AutoOrbs", {
     Title = "Auto Coletar Orbs (todas as zonas)",
     Default = false,
     Callback = function(value)
@@ -591,7 +582,7 @@ farmSection:AddToggle("AutoOrbs", {
     end,
 })
 
-farmSection:AddToggle("AutoBreak", {
+Tabs.Farm:AddToggle("AutoBreak", {
     Title = "Auto Break (remoto nativo)",
     Default = false,
     Callback = function(value)
@@ -603,7 +594,7 @@ farmSection:AddToggle("AutoBreak", {
     end,
 })
 
-farmSection:AddToggle("AutoClickBonus", {
+Tabs.Farm:AddToggle("AutoClickBonus", {
     Title = "Auto Click Bonus",
     Default = false,
     Callback = function(value)
@@ -611,7 +602,7 @@ farmSection:AddToggle("AutoClickBonus", {
     end,
 })
 
-farmSection:AddDropdown("FarmZone", {
+Tabs.Farm:AddDropdown("FarmZone", {
     Title = "Zona do Farm",
     Values = ZONES,
     Default = "PetKingdom",
@@ -620,7 +611,7 @@ farmSection:AddDropdown("FarmZone", {
     end,
 })
 
-farmSection:AddSlider("DmgMultiplier", {
+Tabs.Farm:AddSlider("DmgMultiplier", {
     Title = "Multiplicador de Dano (ClaimOrb)",
     Min = 1,
     Max = 100,
@@ -631,7 +622,7 @@ farmSection:AddSlider("DmgMultiplier", {
     end,
 })
 
-farmSection:AddSlider("FarmInterval", {
+Tabs.Farm:AddSlider("FarmInterval", {
     Title = "Intervalo do ciclo (s)",
     Min = 0.1,
     Max = 5,
@@ -642,7 +633,7 @@ farmSection:AddSlider("FarmInterval", {
     end,
 })
 
-farmSection:AddButton({
+Tabs.Farm:AddButton({
     Title = "Teleportar para a Zona",
     Callback = function()
         if teleportToZone(farmState.zone) then
@@ -661,7 +652,7 @@ farmSection:AddButton({
     end,
 })
 
-farmSection:AddButton({
+Tabs.Farm:AddButton({
     Title = "Report Destroyed (1x)",
     Callback = function()
         local n = reportDestroyedInZone(farmState.zone)
@@ -673,7 +664,7 @@ farmSection:AddButton({
     end,
 })
 
-farmSection:AddButton({
+Tabs.Farm:AddButton({
     Title = "Coletar Orbs (1x)",
     Callback = function()
         local n = claimOrbsInZone(farmState.zone, farmState.multiplier)
@@ -685,7 +676,7 @@ farmSection:AddButton({
     end,
 })
 
-farmSection:AddButton({
+Tabs.Farm:AddButton({
     Title = "Claim Click Bonus (1x)",
     Callback = function()
         local n = claimClickBonus()
@@ -697,31 +688,40 @@ farmSection:AddButton({
     end,
 })
 
-local statusParagraph = farmSection:AddParagraph({
+local statusParagraph = Tabs.Farm:AddParagraph({
     Title = "Status",
     Content = "Auto Farm: off | Destruídos: 0 | Orbs: 0",
 })
 
--- Atualiza status
+-- Atualização segura do parágrafo de status (compatível com Fluent UI)
 task.spawn(function()
     while true do
-        task.wait(0.5)
-        statusParagraph:SetContent(string.format(
-            "Auto Farm: %s | Zona: %s | Destruídos: %d | Orbs: %d",
-            farmState.enabled and "ON" or "off",
-            farmState.zone,
-            farmState.destroyed,
-            farmState.orbs
-        ))
+        task.wait(0.6)
+        pcall(function()
+            local text = string.format(
+                "Auto Farm: %s | Zona: %s | Destruídos: %d | Orbs: %d",
+                farmState.enabled and "ON" or "off",
+                farmState.zone,
+                farmState.destroyed,
+                farmState.orbs
+            )
+            if statusParagraph then
+                if type(statusParagraph.SetDesc) == "function" then
+                    statusParagraph:SetDesc(text)
+                elseif type(statusParagraph.SetContent) == "function" then
+                    statusParagraph:SetContent(text)
+                end
+            end
+        end)
     end
 end)
 
 -- ============================================================
 -- 12. ABA HATCH
 -- ============================================================
-local hatchSection = Tabs.Hatch:AddSection("Chocar Ovos")
+Tabs.Hatch:AddSection("Chocar Ovos")
 
-hatchSection:AddDropdown("EggSelect", {
+Tabs.Hatch:AddDropdown("EggSelect", {
     Title = "Ovo",
     Values = EGGS,
     Default = "Castle Egg",
@@ -730,7 +730,7 @@ hatchSection:AddDropdown("EggSelect", {
     end,
 })
 
-hatchSection:AddDropdown("HatchAmount", {
+Tabs.Hatch:AddDropdown("HatchAmount", {
     Title = "Quantidade",
     Values = HATCH_AMOUNTS,
     Default = "Max",
@@ -739,7 +739,7 @@ hatchSection:AddDropdown("HatchAmount", {
     end,
 })
 
-hatchSection:AddButton({
+Tabs.Hatch:AddButton({
     Title = "Chocar agora",
     Callback = function()
         if hatchEgg(hatchState.egg, hatchState.amount) then
@@ -758,7 +758,7 @@ hatchSection:AddButton({
     end,
 })
 
-hatchSection:AddToggle("AutoHatch", {
+Tabs.Hatch:AddToggle("AutoHatch", {
     Title = "Auto Hatch",
     Default = false,
     Callback = function(value)
@@ -766,9 +766,9 @@ hatchSection:AddToggle("AutoHatch", {
     end,
 })
 
-local deleteSection = Tabs.Hatch:AddSection("Auto Delete de Pets")
+Tabs.Hatch:AddSection("Auto Delete de Pets")
 
-deleteSection:AddButton({
+Tabs.Hatch:AddButton({
     Title = "Apagar Pets Comuns (Tier baixo)",
     Callback = function()
         local n = deleteCommonPets()
@@ -780,7 +780,7 @@ deleteSection:AddButton({
     end,
 })
 
-deleteSection:AddInput("DeletePetInput", {
+Tabs.Hatch:AddInput("DeletePetInput", {
     Title = "Apagar pet específico",
     Default = "",
     Placeholder = "Nome exato do pet",
@@ -802,9 +802,9 @@ deleteSection:AddInput("DeletePetInput", {
 -- ============================================================
 -- 13. ABA PLAYER
 -- ============================================================
-local moveSection = Tabs.Player:AddSection("Movimento")
+Tabs.Player:AddSection("Movimento")
 
-moveSection:AddSlider("WalkSpeed", {
+Tabs.Player:AddSlider("WalkSpeed", {
     Title = "Velocidade",
     Min = 16,
     Max = 250,
@@ -815,7 +815,7 @@ moveSection:AddSlider("WalkSpeed", {
     end,
 })
 
-moveSection:AddSlider("JumpPower", {
+Tabs.Player:AddSlider("JumpPower", {
     Title = "Força do pulo",
     Min = 50,
     Max = 500,
@@ -826,7 +826,7 @@ moveSection:AddSlider("JumpPower", {
     end,
 })
 
-moveSection:AddToggle("Noclip", {
+Tabs.Player:AddToggle("Noclip", {
     Title = "Noclip",
     Default = false,
     Callback = function(value)
@@ -834,15 +834,13 @@ moveSection:AddToggle("Noclip", {
     end,
 })
 
-moveSection:AddButton({
-    Title = "Respawnar (trapaça de queda)",
+Tabs.Player:AddButton({
+    Title = "Resetar Personagem",
     Callback = function()
         local char = LP.Character
-        if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                hum:ChangeState(Enum.HumanoidStateType.Dead)
-            end
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum:ChangeState(Enum.HumanoidStateType.Dead)
         end
     end,
 })
@@ -850,9 +848,9 @@ moveSection:AddButton({
 -- ============================================================
 -- 14. ABA VISUAL (ESP)
 -- ============================================================
-local espSection = Tabs.Visual:AddSection("ESP de Breakables")
+Tabs.Visual:AddSection("ESP de Breakables")
 
-espSection:AddToggle("EspEnabled", {
+Tabs.Visual:AddToggle("EspEnabled", {
     Title = "ESP de Breakables",
     Default = false,
     Callback = function(value)
@@ -866,7 +864,7 @@ for _, zone in ipairs(ZONES) do
     table.insert(espZones, zone)
 end
 
-espSection:AddDropdown("EspZone", {
+Tabs.Visual:AddDropdown("EspZone", {
     Title = "Zona do ESP",
     Values = espZones,
     Default = "All",
@@ -876,7 +874,7 @@ espSection:AddDropdown("EspZone", {
     end,
 })
 
-espSection:AddToggle("EspOrbs", {
+Tabs.Visual:AddToggle("EspOrbs", {
     Title = "ESP de Orbs",
     Default = false,
     Callback = function(value)
@@ -885,7 +883,7 @@ espSection:AddToggle("EspOrbs", {
     end,
 })
 
-espSection:AddButton({
+Tabs.Visual:AddButton({
     Title = "Atualizar ESP agora",
     Callback = function()
         refreshESP()
@@ -893,7 +891,7 @@ espSection:AddButton({
 })
 
 -- ============================================================
--- 15. ABA SETTINGS (SAVE/LOAD)
+-- 15. ABA SETTINGS (CONFIGURAÇÕES)
 -- ============================================================
 Tabs.Settings:AddSection("Configurações")
 
@@ -902,34 +900,43 @@ local saveOK, SaveManager = pcall(function()
         "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"
     ))()
 end)
-if saveOK and type(SaveManager) == "table" then
-    SaveManager:SetLibrary(Fluent)
-    SaveManager:IgnoreThemeSettings()
-    SaveManager:SetIgnoreIndexes({})
-    SaveManager:BuildConfigSection(Tabs.Settings)
-end
 
 local ifaceOK, InterfaceManager = pcall(function()
     return loadstring(game:HttpGet(
         "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"
     ))()
 end)
+
+if saveOK and type(SaveManager) == "table" then
+    pcall(function()
+        SaveManager:SetLibrary(Fluent)
+        SaveManager:IgnoreThemeSettings()
+        SaveManager:SetIgnoreIndexes({})
+        SaveManager:SetFolder("SlenderHub/PetUniverse")
+        SaveManager:BuildConfigSection(Tabs.Settings)
+    end)
+end
+
 if ifaceOK and type(InterfaceManager) == "table" then
-    InterfaceManager:SetLibrary(Fluent)
-    InterfaceManager:SetFolder("SlenderHub/PetUniverse")
-    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-    InterfaceManager:SetTheme("Dark")
+    pcall(function()
+        InterfaceManager:SetLibrary(Fluent)
+        InterfaceManager:SetFolder("SlenderHub/PetUniverse")
+        InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+        InterfaceManager:SetTheme("Dark")
+    end)
 end
 
 -- ============================================================
 -- 16. FINALIZAÇÃO
 -- ============================================================
 Window:SelectTab(1)
+
 if saveOK and type(SaveManager) == "table" then
     pcall(function()
         SaveManager:LoadAutoloadConfig()
     end)
 end
+
 if ifaceOK and type(InterfaceManager) == "table" then
     pcall(function()
         InterfaceManager:LoadInterfaceConfig()
@@ -938,21 +945,21 @@ end
 
 Fluent:Notify({
     Title = "Pet Universe Hub",
-    Content = "Carregado! Aba Farm > Auto Farm para iniciar o exploit.",
+    Content = "Script carregado com sucesso!",
     Duration = 4,
 })
 
 end) -- fim do pcall principal
 
--- ============================================================
--- Relatório de erro amigável
--- ============================================================
+-- Notificação em caso de erro na inicialização
 if not mainOK then
     local msg = tostring(mainErr)
     warn("[PetUniverseHub] ERRO:", msg)
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "Pet Universe Hub — Erro",
-        Text = msg,
-        Duration = 8,
-    })
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Pet Universe Hub — Erro",
+            Text = msg,
+            Duration = 8,
+        })
+    end)
 end
