@@ -1,1831 +1,1716 @@
---[[
-    âš¡ SlenderHub Â· PS99 â€” Zap Style
-    â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    Hub para Pet Simulator 99! (game id 8737899170)
-    Estilo visual inspirado no ZapHub (dark + sidebar + acento Ã¢mbar "raio")
+AntiAutoClickerButtons
+-- Script Path: game:GetService("Players").slenderman_510.PlayerScripts.AntiAutoClickerButtons
+-- Took 0s to decompile.
+-- Executor: Delta (1.1.736.1408)
 
-    AVISOS DE SEGURANÃ‡A (pesquisa 15/08/2026):
-    â€¢ O loader oficial do ZapHub (zaphub.xyz/Exec) Ã© key-system â€” o cÃ³digo real NÃƒO Ã© pÃºblico.
-    â€¢ QUALQUER "ZapHub script" espalhado em pastebin/sites (ex: ZapHubOriginal no GitHub,
-      Str1ker12, PO2GERZ15/MAILSTEALER) Ã© MAILSTEALER â€” rouba pets via mailbox e envia
-      para webhook do Discord. NUNCA execute esses loaders.
-    â€¢ Este script Ã© 100% prÃ³prio, sem loadstring externo e sem key system.
-
-    CompatÃ­vel com: Delta, Wave, Codex, Arceus X, Swift, Solara, Fluxus, etc.
-    Requer funÃ§Ãµes de executor: fireclickdetector (universal), get_hidden_gui/gethui (fallback),
-    setfpscap (opcional).
-
-    NOTA: o PS99 atualiza remotes frequentemente. Este hub usa detecÃ§Ã£o dinÃ¢mica por nome
-    com fallbacks e logs de diagnÃ³stico (tab Config â†’ Console). Se alguma feature parar de
-    funcionar apÃ³s update, ajuste os nomes em CONFIG.RemotePaths usando um dump Dex.
---]]
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
--- 1. CONFIGURAÃ‡ÃƒO
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-local CONFIG = {
-    GameId = 8737899170,
-    Keybind = Enum.KeyCode.RightShift, -- toggle da UI
-    Accent = Color3.fromRGB(255, 176, 0),      -- Ã¢mbar (raio)
-    Accent2 = Color3.fromRGB(255, 122, 0),     -- laranja
-    BG = Color3.fromRGB(10, 10, 16),
-    Sidebar = Color3.fromRGB(16, 16, 26),
-    Card = Color3.fromRGB(24, 24, 36),
-    CardBorder = Color3.fromRGB(40, 40, 60),
-    Text = Color3.fromRGB(235, 235, 245),
-    SubText = Color3.fromRGB(140, 140, 165),
-    Success = Color3.fromRGB(80, 220, 120),
-    Danger = Color3.fromRGB(255, 80, 90),
-    FontTitle = Enum.Font.GothamBold,
-    FontBody = Enum.Font.Gotham,
-    FarmInterval = 0.08,   -- segundos entre quebradas
-    CollectInterval = 0.25,
-    QuestInterval = 1.0,
-    TeleportCooldown = 6,  -- segundos entre auto-teleports
-    -- Caminhos de remotes (prioridade de busca â€” ajuste apÃ³s updates do jogo)
-    RemotePaths = {
-        { "Remotes", "Events", "MainEvent" },
-        { "Remotes", "Events", "TeleportEvent" },
-        { "Remotes", "Functions", "UpdateInventory" },
-        { "Remotes", "Functions", "CollectionUpdater" },
-        { "Remotes", "Functions", "Breakables" },
-        { "Remotes", "Functions", "ClaimRewards" },
-        { "Network", "AutoRaid_Disable" },
-        { "Network", "GX_Redeem" },
-    },
-}
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
--- 2. AMBIENTE / FALLBACKS DE EXECUTOR
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local CoreGui = game:GetService("CoreGui")
-
-local LocalPlayer = Players.LocalPlayer
-
--- Fallback de task (executores Lua 5.1 puros não têm task)
-local taskWait = (task and task.wait) or function(t) wait(t or 0.1) end
-local taskSpawn = (task and task.spawn) or function(fn, ...) coroutine.resume(coroutine.create(fn), ...) end
-
--- Fallback de math.clamp (não existe em Lua 5.1 puro)
-local clamp = math.clamp or function(x, a, b)
-    if x < a then return a end
-    if x > b then return b end
-    return x
-end
-
--- Raio de farm padrão (ajustável no slider)
-local FarmRadius = 80
-
--- IdentificaÃ§Ã£o do executor (best effort)
-local function getExecutorName()
-    for _, fn in ipairs({ identifyexecutor, getexecutorname, getexecutor }) do
-        if type(fn) == "function" then
-            local ok, res = pcall(fn)
-            if ok and type(res) == "string" and #res > 0 then return res end
+local v1 = game:GetService("Players")
+local v2 = game:GetService("ReplicatedStorage")
+local v3 = v1.LocalPlayer:WaitForChild("PlayerGui")
+local v_u_4 = require(v2.Modules:WaitForChild("ClickCooldownModule")).COOLDOWN
+local v_u_5 = setmetatable({}, {
+    ["__mode"] = "k"
+});
+(function(p_u_6) -- name: scan
+    -- upvalues: (copy) v_u_5, (copy) v_u_4
+    if p_u_6:IsA("GuiButton") and not v_u_5[p_u_6] then
+        v_u_5[p_u_6] = true
+        p_u_6.MouseButton1Click:Connect(function()
+            -- upvalues: (copy) p_u_6, (ref) v_u_4
+            if p_u_6.Interactable then
+                p_u_6.Interactable = false
+                task.delay(v_u_4, function()
+                    -- upvalues: (ref) p_u_6
+                    if p_u_6 and p_u_6.Parent then
+                        p_u_6.Interactable = true
+                    end
+                end)
+            end
+        end)
+    end
+    for _, v_u_7 in ipairs(p_u_6:GetDescendants()) do
+        if v_u_7:IsA("GuiButton") then
+            if not v_u_5[v_u_7] then
+                v_u_5[v_u_7] = true
+                v_u_7.MouseButton1Click:Connect(function()
+                    -- upvalues: (copy) v_u_7, (ref) v_u_4
+                    if v_u_7.Interactable then
+                        v_u_7.Interactable = false
+                        task.delay(v_u_4, function()
+                            -- upvalues: (ref) v_u_7
+                            if v_u_7 and v_u_7.Parent then
+                                v_u_7.Interactable = true
+                            end
+                        end)
+                    end
+                end)
+            end
         end
     end
-    return "Executor"
-end
+end)(v3)
+v3.DescendantAdded:Connect(function(p_u_8)
+    -- upvalues: (copy) v_u_5, (copy) v_u_4
+    if p_u_8:IsA("GuiButton") then
+        if v_u_5[p_u_8] then
+            return
+        end
+        v_u_5[p_u_8] = true
+        p_u_8.MouseButton1Click:Connect(function()
+            -- upvalues: (copy) p_u_8, (ref) v_u_4
+            if p_u_8.Interactable then
+                p_u_8.Interactable = false
+                task.delay(v_u_4, function()
+                    -- upvalues: (ref) p_u_8
+                    if p_u_8 and p_u_8.Parent then
+                        p_u_8.Interactable = true
+                    end
+                end)
+            end
+        end)
+    end
+end)
 
-local EXECUTOR = getExecutorName()
 
--- ProteÃ§Ã£o de UI (esconde de anti-cheats de UI)
-local function protectUI(gui)
-    if get_hidden_gui and type(get_hidden_gui) == "function" then
-        pcall(function() gui.Parent = get_hidden_gui() end)
-    elseif gethui and type(gethui) == "function" then
-        pcall(function() gui.Parent = gethui() end)
-    elseif syn and syn.protect_gui then
-        pcall(function() syn.protect_gui(gui) end)
-        pcall(function() gui.Parent = CoreGui end)
+
+
+AutoBreakOutlineClient
+
+-- Script Path: game:GetService("Players").slenderman_510.PlayerScripts.AutoBreakOutlineClient
+-- Took 0s to decompile.
+-- Executor: Delta (1.1.736.1408)
+
+local v1 = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("PlayerData"))
+local v2 = game:GetService("Players")
+local v3 = game:GetService("ReplicatedStorage")
+local v4 = game:GetService("SoundService")
+local v5 = v2.LocalPlayer
+local v6 = v4:WaitForChild("Sounds")
+local v_u_7 = v6:WaitForChild("AutoEn")
+local v_u_8 = v6:WaitForChild("AutoDis")
+local v_u_9 = require(v3.Modules:WaitForChild("AutoOutlineFlash"))
+v_u_9.Await()
+v1.WaitForFolder(v5, "BreakableData"):WaitForChild("AutoBreaking").Changed:Connect(function(p10)
+    -- upvalues: (copy) v_u_9, (copy) v_u_7, (copy) v_u_8
+    if p10 then
+        v_u_9.Flash(v_u_9.GREEN)
+        v_u_7:Play()
     else
-        pcall(function() gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end)
+        v_u_8:Play()
+    end
+end)
+
+
+
+Breakables Breaking Handler
+
+-- Script Path: game:GetService("Players").slenderman_510.PlayerScripts["Breakables Breaking Handler"]
+-- Took 0.19s to decompile.
+-- Executor: Delta (1.1.736.1408)
+
+local v_u_1 = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("PlayerData"))
+local v_u_2 = workspace:WaitForChild("Breakables")
+local v_u_3 = game:GetService("ReplicatedStorage")
+local v_u_4 = game:GetService("TweenService")
+local v5 = game:GetService("RunService")
+local v_u_6 = game:GetService("ContentProvider")
+local v_u_7 = require(v_u_3.Modules.BreakablesDrop)
+local v_u_8 = require(v_u_3.Modules:WaitForChild("BreakablesConfig"))
+local v_u_9 = game:GetService("Players").LocalPlayer
+local v_u_10 = require(v_u_3.Pets.Multi)
+local v_u_11 = require(v_u_3.Modules.OrbsResp)
+game:GetService("PathfindingService")
+local v_u_12 = game:GetService("CollectionService")
+local v_u_13 = require(v_u_3.UpgradesModule.PetSpeedBoost)
+local v_u_14 = v_u_3:FindFirstChild("BreakablesTemplates")
+local v_u_15 = v_u_14:WaitForChild("ClickEffect")
+local v_u_16 = require(v_u_3.Modules:WaitForChild("BreakableEffects"))
+local v_u_17 = require(v_u_3.Modules:WaitForChild("BreakableSounds"))
+local v_u_18 = v_u_1.WaitForFolder(v_u_9, "VariousBoosts", 30)
+require(v_u_3.Packages.Knit).OnStart():await()
+local v19 = require(v_u_3.Modules.SafeGetService)
+local v_u_20 = v19.Get("AlienEventService")
+local v_u_21 = v19.Get("BreakableOrbService")
+local v_u_22 = {
+    "",
+    "k",
+    "m",
+    "b",
+    "t",
+    "Qd",
+    "Qn",
+    "sx",
+    "Sp",
+    "Oc",
+    "No",
+    "de",
+    "Ud",
+    "DD",
+    "tdD",
+    "qdD",
+    "QnD",
+    "sxD",
+    "SpD",
+    "OcD",
+    "NvD",
+    "Vgn",
+    "UVg",
+    "DVg",
+    "TVg",
+    "qtV",
+    "QnV",
+    "SeV",
+    "SPG",
+    "OVG",
+    "NVG",
+    "TGN",
+    "UTG",
+    "DTG",
+    "tsTG",
+    "qtTG",
+    "QnTG",
+    "ssTG",
+    "SpTG",
+    "OcTG",
+    "NoAG",
+    "UnAG",
+    "DuAG",
+    "TeAG",
+    "QdAG",
+    "QnAG",
+    "SxAG",
+    "SpAG",
+    "OcAG",
+    "NvAG",
+    "CT",
+    "inf"
+}
+local function v_u_30(p23) -- name: format
+    -- upvalues: (copy) v_u_22
+    local v24 = tonumber(p23)
+    if typeof(v24) ~= "number" or v24 ~= v24 then
+        return "1"
+    end
+    if v24 < 1 then
+        return "1"
+    end
+    if v24 >= 1000 then
+        for v25 = 1, #v_u_22 do
+            if v24 < 10 ^ (v25 * 3) then
+                local v26 = v24 / 10 ^ ((v25 - 1) * 3) * 10
+                return math.floor(v26) / 10 .. v_u_22[v25]
+            end
+        end
+        return tostring(v24)
+    end
+    local v27 = v24 + 0.5
+    local v28 = math.floor(v27)
+    local v29 = math.max(1, v28)
+    return tostring(v29)
+end
+local v_u_31 = {
+    ["Apple"] = true,
+    ["Banana"] = true,
+    ["Blueberry"] = true,
+    ["Kiwi"] = true,
+    ["Mango"] = true,
+    ["Taco"] = true
+}
+local v32 = require(v_u_3.Modules:WaitForChild("ClickCooldownModule"))
+local v_u_33 = require(v_u_3.Modules:WaitForChild("EquippedPetsModule"))
+local v_u_34 = v32.COOLDOWN
+local v_u_35 = 0
+local v_u_36 = {}
+local v_u_37 = {}
+local v_u_38 = {}
+local v_u_39 = {}
+local v_u_40 = setmetatable({}, {
+    ["__mode"] = "k"
+})
+local v41 = {}
+local v_u_42 = {}
+local v_u_43 = {}
+local v_u_44 = {}
+local v_u_45 = {}
+local v_u_46 = v_u_3:WaitForChild("Pets")
+local v_u_47 = {}
+local v_u_48 = {}
+local v_u_49 = setmetatable({}, {
+    ["__mode"] = "k"
+})
+local function v_u_51(p50) -- name: getPetTemplateFolder
+    -- upvalues: (copy) v_u_46
+    if p50:match("^Golden ") then
+        return v_u_46:FindFirstChild("Golden Pets")
+    elseif p50:match("^Diamond ") then
+        return v_u_46:FindFirstChild("Diamond Pets")
+    else
+        return v_u_46:FindFirstChild("Normal Pets")
     end
 end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
--- 3. VERIFICAÃ‡ÃƒO DE JOGO
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-local function getGameId()
-    local ok, id = pcall(function() return game.PlaceId end)
-    if ok then return id end
-    local ok2, id2 = pcall(function() return game.GameId end)
-    if ok2 then return id2 end
-    return 0
-end
-
-if getGameId() ~= CONFIG.GameId then
-    warn("[SlenderHub] Jogo nÃ£o Ã© Pet Simulator 99! (esperado id " .. CONFIG.GameId .. ", atual " .. getGameId() .. ")")
-    -- Continua mesmo assim: a detecÃ§Ã£o de remotes Ã© dinÃ¢mica, pode funcionar em jogos similares.
-end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
--- 4. MÃ“DULO DE REMOTES (detecÃ§Ã£o dinÃ¢mica + wrappers seguros)
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-local Remotes = {}
-
--- Busca um objeto por caminho relativo ao ReplicatedStorage
-local function findRemote(path)
-    local current = ReplicatedStorage
-    for _, name in ipairs(path) do
-        current = current:FindFirstChild(name)
-        if not current then return nil end
-    end
-    return current
-end
-
--- Busca recursiva limitada (fallback quando o caminho exato muda)
-local function findByName(base, name, depth)
-    depth = depth or 0
-    if depth > 4 then return nil end
-    local direct = base:FindFirstChild(name)
-    if direct then return direct end
-    for _, child in ipairs(base:GetChildren()) do
-        local found = findByName(child, name, depth + 1)
-        if found then return found end
+local function v_u_54(p52) -- name: getVisualChunk
+    for _, v53 in ipairs(p52:GetChildren()) do
+        if v53:IsA("BasePart") or v53:IsA("Model") then
+            return v53
+        end
     end
     return nil
 end
-
--- Inicializa os remotes conhecidos do PS99
-local function initRemotes()
-    for _, path in ipairs(CONFIG.RemotePaths) do
-        local remote = findRemote(path)
-        if not remote then
-            remote = findByName(ReplicatedStorage, path[#path])
-        end
-        if remote then
-            Remotes[path[#path]] = remote
+local function v_u_58(p55) -- name: countBaseParts
+    local v56 = 0
+    for _, v57 in ipairs(p55:GetDescendants()) do
+        if v57:IsA("BasePart") then
+            v56 = v56 + 1
         end
     end
+    return v56
 end
-
--- Wrappers seguros
-local function fireMain(...)
-    if not Remotes.MainEvent then return false end
-    local ok, err = pcall(function() Remotes.MainEvent:FireServer(...) end)
-    if not ok then
-        warn("[SlenderHub] MainEvent falhou: " .. tostring(err))
-        return false
+local function v_u_65(p59) -- name: isPetReadyToAnimate
+    -- upvalues: (copy) v_u_48, (copy) v_u_51, (copy) v_u_58, (copy) v_u_49
+    local v_u_60 = p59.Name
+    local v61
+    if v_u_48[v_u_60] == nil then
+        local v63, v64 = pcall(function()
+            -- upvalues: (ref) v_u_51, (copy) v_u_60, (ref) v_u_58
+            local v62 = v_u_51(v_u_60)
+            if v62 then
+                v62 = v62:FindFirstChild(v_u_60)
+            end
+            if v62 then
+                return v_u_58(v62)
+            else
+                return nil
+            end
+        end)
+        v61 = v63 and v64 and v64 or nil
+        v_u_48[v_u_60] = v61 or false
+    else
+        v61 = v_u_48[v_u_60] or nil
     end
-    return true
-end
-
-local function invokeMain(...)
-    if not Remotes.MainEvent then return false end
-    local ok, err = pcall(function() Remotes.MainEvent:InvokeServer(...) end)
-    if not ok then
-        warn("[SlenderHub] MainEvent invoke falhou: " .. tostring(err))
-        return false
-    end
-    return true
-end
-
-local function invokeUpdate(...)
-    if not Remotes.UpdateInventory then return false end
-    local ok, err = pcall(function() Remotes.UpdateInventory:InvokeServer(...) end)
-    if not ok then return false end
-    return true
-end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
--- 5. SCAN DO MUNDO (quebrÃ¡veis, moedas, zonas, ovos)
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-local World = {}
-
-local function getMap()
-    return workspace:FindFirstChild("Map") or workspace
-end
-
-function World.getBreakables()
-    local map = getMap()
-    local folder = map:FindFirstChild("Breakables") or workspace:FindFirstChild("Breakables")
-    if not folder then return {} end
-    local list = {}
-    for _, b in ipairs(folder:GetChildren()) do
-        if b:IsA("BasePart") and b.Parent then
-            list[#list + 1] = b
-        end
-    end
-    return list
-end
-
-function World.getCoinFolders()
-    local map = getMap()
-    local folders = {}
-    for _, name in ipairs({ "Coins", "Orbs", "Diamonds", "Gems", "Lootbags" }) do
-        local folder = map:FindFirstChild(name) or workspace:FindFirstChild(name)
-        if folder then folders[#folders + 1] = folder end
-    end
-    return folders
-end
-
-function World.getZones()
-    local map = getMap()
-    local zonesFolder = map:FindFirstChild("Zones") or map:FindFirstChild("Areas") or workspace:FindFirstChild("Zones")
-    if not zonesFolder then return {} end
-    local list = {}
-    for _, z in ipairs(zonesFolder:GetChildren()) do
-        if z:IsA("Folder") or z:IsA("Model") then
-            list[#list + 1] = z
-        end
-    end
-    return list
-end
-
-function World.getEggs()
-    local map = getMap()
-    local eggsFolder = map:FindFirstChild("Eggs") or workspace:FindFirstChild("Eggs")
-    if not eggsFolder then return {} end
-    local list = {}
-    for _, e in ipairs(eggsFolder:GetChildren()) do
-        if e:IsA("Model") and e.Parent then
-            list[#list + 1] = e
-        end
-    end
-    return list
-end
-
--- Melhor zona = a que tem mais quebrÃ¡veis ativos (heurÃ­stica de progressÃ£o)
-function World.getBestZone()
-    local zones = World.getZones()
-    local best, bestCount = nil, -1
-    for _, zone in ipairs(zones) do
-        local count = 0
-        local breakables = zone:FindFirstChild("Breakables")
-        if breakables then count = #breakables:GetChildren() end
-        if count > bestCount then
-            best, bestCount = zone, count
-        end
-    end
-    return best
-end
-
-function World.teleportTo(zoneName)
-    -- MÃ©todo 1: MainEvent "Teleport" (padrÃ£o PS99)
-    if fireMain("Teleport", zoneName) then return true end
-    -- MÃ©todo 2: TeleportEvent
-    if Remotes.TeleportEvent then
-        local ok = pcall(function() Remotes.TeleportEvent:FireServer(zoneName) end)
-        if ok then return true end
-    end
-    -- MÃ©todo 3: MainEvent "CheckpointTeleport"
-    if fireMain("CheckpointTeleport", zoneName) then return true end
-    return false
-end
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
--- 6. SISTEMA DE FEATURES
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-local Features = {
-    AutoFarm = false,
-    AutoTPBestArea = false,
-    AutoTap = false,
-    AutoCollect = false,
-    AutoRebirth = false,
-    AutoHatch = false,
-    AutoBuyEgg = false,
-    AutoQuest = false,
-    AutoClaimRank = false,
-    AutoClaimGifts = false,
-    AutoUsePotions = false,
-    AutoUseFruits = false,
-    AutoOpenGifts = false,
-    OptimizePets = false,
-    OptimizeConfetti = false,
-    OptimizeBreakFX = false,
-    FiestaAutoBreak = false,
-    FiestaAutoBoss = false,
-    FiestaAutoChest = false,
-}
-
-local Stats = {
-    Broken = 0,
-    Coins = 0,
-    Hatched = 0,
-    LastZone = "â€”",
-    FarmState = "off",
-}
-
-local SelectedEgg = "Auto (melhor ovo)"
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• helpers â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-local function getCharacter()
-    local char = LocalPlayer.Character
-    if not char then
-        local ok = pcall(function() return LocalPlayer.CharacterAdded:Wait(2) end)
-        if ok then char = LocalPlayer.Character end
-    end
-    return char
-end
-
-local function getHRP()
-    local char = getCharacter()
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildOfClass("Humanoid")
-end
-
-local function breakTarget(target)
-    if not target or not target.Parent then return false end
-    local cd = target:FindFirstChildOfClass("ClickDetector")
-    if cd then
-        pcall(function() fireclickdetector(cd, 1) end)
-        Stats.Broken = Stats.Broken + 1
+    if not v61 then
         return true
     end
-    -- Fallback via CollectionUpdater/Breakables (mÃ©todo de remote do PS99)
-    local cu = Remotes.CollectionUpdater or Remotes.Breakables
-    if cu then
-        local ok = pcall(function() cu:InvokeServer("Break", target.Position) end)
-        if ok then
-            Stats.Broken = Stats.Broken + 1
-            return true
-        end
+    if not v_u_49[p59] then
+        v_u_49[p59] = os.clock()
     end
-    return false
+    return v61 <= v_u_58(p59) and true or os.clock() - v_u_49[p59] > 3
 end
-
-local function collectCoins()
-    local folders = World.getCoinFolders()
-    local collected = 0
-    for _, folder in ipairs(folders) do
-        for _, coin in ipairs(folder:GetChildren()) do
-            if coin:IsA("BasePart") and coin.Parent then
-                local cd = coin:FindFirstChildOfClass("ClickDetector")
-                if cd then
-                    pcall(function() fireclickdetector(cd, 1) end)
-                    collected = collected + 1
+local function v_u_78(p66) -- name: realignPetVisual
+    -- upvalues: (copy) v_u_47, (copy) v_u_51, (copy) v_u_54
+    local v67 = p66.PrimaryPart
+    if v67 then
+        local v_u_68 = p66.Name
+        local v69
+        if v_u_47[v_u_68] == nil then
+            local v73, v74 = pcall(function()
+                -- upvalues: (ref) v_u_51, (copy) v_u_68, (ref) v_u_54
+                local v70 = v_u_51(v_u_68)
+                if v70 then
+                    v70 = v70:FindFirstChild(v_u_68)
                 end
-            end
+                if not v70 then
+                    return nil
+                end
+                local v71 = v70.PrimaryPart or v70:FindFirstChild("Holder")
+                if not v71 then
+                    return nil
+                end
+                local v72 = v_u_54(v71)
+                return v72 and {
+                    ["chunkOffset"] = v71.CFrame:ToObjectSpace(v72:GetPivot())
+                } or nil
+            end)
+            v69 = v73 and v74 and v74 or nil
+            v_u_47[v_u_68] = v69 or false
+        else
+            v69 = v_u_47[v_u_68] or nil
         end
-    end
-    Stats.Coins = Stats.Coins + collected
-    return collected > 0
-end
-
--- QuebrÃ¡vel mais prÃ³ximo do player (dentro do raio)
-local function nearestBreakable(radius)
-    local hrp = getHRP()
-    if not hrp then return nil end
-    local root = hrp:IsA("BasePart") and hrp or hrp.Parent and hrp.Parent:FindFirstChild("HumanoidRootPart")
-    if not root then return nil end
-    local best, bestDist = nil, radius
-    for _, b in ipairs(World.getBreakables()) do
-        local dist = (b.Position - root.Position).Magnitude
-        if dist < bestDist then
-            best, bestDist = b, dist
-        end
-    end
-    return best
-end
-
-local function hatchEgg(eggName)
-    if eggName == "Auto (melhor ovo)" then
-        -- Escolhe o primeiro ovo hatchÃ¡vel (com ClickDetector)
-        for _, egg in ipairs(World.getEggs()) do
-            local cd = egg:FindFirstChildOfClass("ClickDetector")
-            if cd then
-                pcall(function() fireclickdetector(cd, 1) end)
-                Stats.Hatched = Stats.Hatched + 1
-                return true
+        if v69 then
+            local v_u_75 = v_u_54(v67)
+            if v_u_75 then
+                local v_u_76 = v67.CFrame * v69.chunkOffset
+                local v77 = v_u_75:GetPivot()
+                if (v77.Position - v_u_76.Position).Magnitude > 0.05 or (v77.LookVector:Dot(v_u_76.LookVector) < 0.9998476951563913 or v77.UpVector:Dot(v_u_76.UpVector) < 0.9998476951563913) then
+                    pcall(function()
+                        -- upvalues: (copy) v_u_75, (copy) v_u_76
+                        v_u_75:PivotTo(v_u_76)
+                    end)
+                end
+            else
+                return
             end
+        else
+            return
         end
     else
-        for _, egg in ipairs(World.getEggs()) do
-            if egg.Name == eggName then
-                local cd = egg:FindFirstChildOfClass("ClickDetector")
-                if cd then
-                    pcall(function() fireclickdetector(cd, 1) end)
-                    Stats.Hatched = Stats.Hatched + 1
-                    return true
+        return
+    end
+end
+local v_u_79 = {}
+local v_u_80 = {}
+local v_u_81 = {}
+local v_u_82 = setmetatable({}, {
+    ["__mode"] = "k"
+})
+local function v_u_86(p83) -- name: ensureBreakableUIRefs
+    -- upvalues: (copy) v_u_82
+    local v84 = v_u_82[p83]
+    if not v84 then
+        v84 = {}
+        v_u_82[p83] = v84
+    end
+    if not v84.damageUI then
+        v84.damageUI = p83:FindFirstChild("DamageUI")
+    end
+    if v84.damageUI and not v84.frame then
+        v84.frame = v84.damageUI:FindFirstChild("Frame")
+    end
+    if v84.frame and not v84.hp then
+        v84.hp = v84.frame:FindFirstChild("Hp")
+    end
+    if v84.frame and not v84.hpBar then
+        v84.hpBar = v84.frame:FindFirstChild("HPBar")
+    end
+    if v84.frame and not v84.healthLabel then
+        v84.healthLabel = v84.frame:FindFirstChild("Health")
+    end
+    if v84.frame and not v84.startedValue then
+        v84.startedValue = v84.frame:FindFirstChild("Started")
+    end
+    if v84.frame and not v84.dmgTemplate then
+        v84.dmgTemplate = v84.frame:FindFirstChild("DMG")
+    end
+    if v84.frame and not v84.critTemplate then
+        v84.critTemplate = v84.frame:FindFirstChild("Critical")
+    end
+    local v85
+    if v84.damageUI == nil or (v84.frame == nil or (v84.hp == nil or (v84.hpBar == nil or v84.healthLabel == nil))) then
+        v85 = false
+    else
+        v85 = v84.startedValue ~= nil
+    end
+    return v84, v85
+end
+local v_u_87 = false
+local v_u_88 = 0
+task.spawn(function()
+    -- upvalues: (copy) v_u_14, (ref) v_u_87, (ref) v_u_88, (copy) v_u_6
+    local v_u_89 = nil
+    if v_u_14 then
+        for _, v90 in ipairs(v_u_14:GetChildren()) do
+            for _, v91 in ipairs(v90:GetChildren()) do
+                local v92 = v91:FindFirstChild("DamageUI")
+                if v92 then
+                    v92 = v92:FindFirstChild("Frame")
+                end
+                if v92 then
+                    v92 = v92:FindFirstChild("Health")
+                end
+                if v92 and v92:IsA("TextLabel") then
+                    v_u_89 = v92
+                    break
+                end
+            end
+            if v_u_89 then
+                break
+            end
+        end
+    end
+    if not v_u_89 then
+        if not v_u_87 then
+            v_u_87 = true
+            v_u_88 = v_u_88 + 1
+        end
+        return
+    end
+    local v_u_93 = v_u_89.FontFace.Family
+    pcall(function()
+        -- upvalues: (ref) v_u_6, (ref) v_u_89
+        v_u_6:PreloadAsync({ v_u_89 })
+    end)
+    local v94 = os.clock() + 10
+    while os.clock() < v94 do
+        local v95, v96 = pcall(function()
+            -- upvalues: (ref) v_u_6, (copy) v_u_93
+            return v_u_6:GetAssetFetchStatus(v_u_93)
+        end)
+        if v95 and v96 == Enum.AssetFetchStatus.Success then
+            break
+        end
+        task.wait(0.2)
+    end
+    if not v_u_87 then
+        v_u_87 = true
+        v_u_88 = v_u_88 + 1
+    end
+end)
+setmetatable(v41, {
+    ["__mode"] = "k"
+})
+setmetatable(v_u_43, {
+    ["__mode"] = "k"
+})
+local v_u_97 = RaycastParams.new()
+v_u_97.FilterType = Enum.RaycastFilterType.Exclude
+v_u_97.IgnoreWater = true
+setmetatable(v41, {
+    ["__mode"] = "k"
+})
+local v_u_98 = 0
+local function v_u_105() -- name: getPets
+    -- upvalues: (copy) v_u_9, (copy) v_u_33
+    local v99 = workspace.PlayerPets:FindFirstChild(v_u_9.Name)
+    if not v99 then
+        return {}
+    end
+    local v100 = {}
+    for _, v101 in pairs(v99:GetChildren()) do
+        if v101:IsA("Model") and v101.PrimaryPart then
+            table.insert(v100, v101)
+        end
+    end
+    local v102 = v_u_33.FilterRealPetModels(v_u_9, v100)
+    for _, v103 in ipairs(v102) do
+        for _, v104 in ipairs(v103:GetDescendants()) do
+            if v104:IsA("BasePart") then
+                if v104.CanCollide then
+                    v104.CanCollide = false
+                end
+                if not v104.Anchored then
+                    v104.Anchored = true
                 end
             end
         end
     end
-    -- Fallback via remote (best effort â€” nome muda com updates)
-    return fireMain("Hatch", eggName)
+    return v102
 end
-
-local function rebirth()
-    return fireMain("Rebirth")
-end
-
-local function claimRankRewards()
-    -- Best effort: tenta mÃºltiplos formatos conhecidos (pcall protege de honeypot)
-    fireMain("NewClaim", "RankRewards")
-    fireMain("ClaimReward", "Rank")
-    if Remotes.ClaimRewards then
-        pcall(function() Remotes.ClaimRewards:InvokeServer("Rank") end)
-    end
-end
-
-local function claimFreeGifts()
-    fireMain("NewClaim", "FreeGift")
-    fireMain("ClaimDailyRewards")
-end
-
-local function usePotions()
-    -- Best effort: equipa poÃ§Ã£o de dano/luck via UpdateInventory
-    invokeUpdate("EquipPotion", "Damage")
-    invokeUpdate("EquipPotion", "Luck")
-end
-
-local function useFruits()
-    invokeUpdate("UseFruit", "Strength")
-end
-
-local function openGifts()
-    fireMain("OpenGift")
-end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• loops de execuÃ§Ã£o â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
--- Loop principal de farm (rÃ¡pido)
-taskSpawn(function()
-    local lastTP = 0
-    while true do
-        if Features.AutoFarm then
-            local target = nearestBreakable(FarmRadius)
-            if target then
-                breakTarget(target)
-                Stats.FarmState = "quebrando"
+local function v_u_110() -- name: getBestEquippedPetDamage
+    -- upvalues: (copy) v_u_105, (copy) v_u_10, (copy) v_u_9
+    local v106 = 0
+    for _, v107 in ipairs((v_u_105())) do
+        local v108 = v_u_10[v107.Name]
+        if v108 then
+            local v109
+            if v108[1] then
+                v109 = v_u_10.PrecentagePet(v_u_9, v107.Name) - 1
             else
-                Stats.FarmState = "sem alvo"
-                if Features.AutoTPBestArea then
-                    local now = os.clock()
-                    if now - lastTP > CONFIG.TeleportCooldown then
-                        lastTP = now
-                        local best = World.getBestZone()
-                        if best then
-                            World.teleportTo(best.Name)
-                            Stats.LastZone = best.Name
-                        end
-                    end
-                end
+                v109 = v108[2]
+            end
+            if typeof(v109) == "number" and v106 < v109 then
+                v106 = v109
             end
         end
-        if Features.AutoTap then
-            local target = nearestBreakable(15)
-            if target then breakTarget(target) end
-        end
-        taskWait(CONFIG.FarmInterval)
     end
-end)
-
--- Loop de coletas automÃ¡ticas (mÃ©dio)
-taskSpawn(function()
-    while true do
-        if Features.AutoCollect then
-            collectCoins()
+    return v106
+end
+local function v_u_121(p111, p112) -- name: collectBreakablesWithDistance
+    -- upvalues: (copy) v_u_2
+    local v113 = {}
+    local v114 = workspace:FindFirstChild("AlienEventEgg")
+    if v114 and v114:IsA("Model") then
+        if not (v114:FindFirstChild("Primary") or v114.PrimaryPart) then
+            v114 = nil
         end
-        if Features.AutoRebirth then
-            rebirth()
-        end
-        if Features.AutoHatch then
-            hatchEgg(SelectedEgg)
-        end
-        if Features.AutoBuyEgg then
-            fireMain("BuyEgg", SelectedEgg)
-        end
-        taskWait(CONFIG.CollectInterval)
+    else
+        v114 = nil
     end
-end)
-
--- Loop de quests/claims (lento)
-taskSpawn(function()
-    while true do
-        if Features.AutoQuest then
-            -- Rank quest progress (best effort)
-            fireMain("QuestProgress")
+    if v114 then
+        local v115 = v114:GetAttribute("Zone")
+        if v115 == nil and true or v115 == p111 then
+            local v116 = {
+                ["breakable"] = v114,
+                ["distance"] = ((v114:FindFirstChild("Primary") or v114.PrimaryPart).Position - p112).Magnitude
+            }
+            table.insert(v113, v116)
         end
-        if Features.AutoClaimRank then
-            claimRankRewards()
-        end
-        if Features.AutoClaimGifts then
-            claimFreeGifts()
-        end
-        if Features.AutoUsePotions then
-            usePotions()
-        end
-        if Features.AutoUseFruits then
-            useFruits()
-        end
-        if Features.AutoOpenGifts then
-            openGifts()
-        end
-        taskWait(CONFIG.QuestInterval)
     end
-end)
-
--- Loop de otimizaÃ§Ã£o (manutenÃ§Ã£o)
-taskSpawn(function()
-    while true do
-        -- Pets invisÃ­veis (client-side)
-        if Features.OptimizePets then
-            local pets = workspace:FindFirstChild("Pets")
-            if pets then
-                for _, pet in ipairs(pets:GetChildren()) do
-                    for _, part in ipairs(pet:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.LocalTransparencyModifier = 1
-                        end
-                    end
-                end
+    local v117 = v_u_2:FindFirstChild(p111)
+    if not v117 then
+        return v113
+    end
+    for _, v118 in ipairs(v117:GetChildren()) do
+        if v118:IsA("Model") then
+            local v119 = v118:FindFirstChild("Primary") or v118.PrimaryPart
+            if v119 then
+                local v120 = {
+                    ["breakable"] = v118,
+                    ["distance"] = (v119.Position - p112).Magnitude
+                }
+                table.insert(v113, v120)
             end
         end
-        -- Confetti invisÃ­vel
-        if Features.OptimizeConfetti then
-            local confetti = workspace:FindFirstChild("Confetti")
-            if confetti then
-                for _, part in ipairs(confetti:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.LocalTransparencyModifier = 1
-                    end
-                end
-            end
-        end
-        -- Remove visual de quebrÃ¡veis (FX)
-        if Features.OptimizeBreakFX then
-            for _, b in ipairs(World.getBreakables()) do
-                for _, part in ipairs(b:GetDescendants()) do
-                    if part:IsA("BasePart") and (part.Name:find("FX") or part.Name:find("Effect") or part.Name:find("Glow")) then
-                        part.LocalTransparencyModifier = 1
-                    end
-                end
-            end
-        end
-        taskWait(5)
     end
-end)
-
--- ============ MODULO FIESTA MAZE (evento Pinata Fiesta - Update 88, 08/2026) ============
--- Fontes: dump Dex - ReplicatedStorage.Library.Client.FiestaMazeCmds,
---         Library.Client.FiestaMazePortals, Library.Util.FiestaMaze(+Geometry),
---         Library.Client.Network (Invoke "GX_Redeem"), Network.AutoRaid_Disable
-
-local Fiesta = {}
-
--- require seguro com cache (modulos do jogo sao tabelas)
-local fiestaModuleCache = {}
-local function fiestaRequire(path)
-    if fiestaModuleCache[path] ~= nil then
-        return fiestaModuleCache[path]
+    return v113
+end
+local function v_u_139(p122, p123, p124, p125, p126) -- name: findNearestBreakables
+    -- upvalues: (copy) v_u_121
+    local v127 = v_u_121(p122, p124)
+    if #v127 == 0 then
+        return {}
     end
-    local ok, mod = pcall(require, path)
-    if ok and type(mod) == "table" then
-        fiestaModuleCache[path] = mod
-        return mod
-    end
-    fiestaModuleCache[path] = false
-    return nil
-end
-
-local function fiestaLib()
-    local lib = ReplicatedStorage:FindFirstChild("Library")
-    if lib then return lib end
-    return nil
-end
-
--- FiestaMazeCmds: estado + progresso do maze
-function Fiesta.getCmds()
-    local lib = fiestaLib()
-    if not lib then return nil end
-    local client = lib:FindFirstChild("Client")
-    if not client then return nil end
-    local mod = client:FindFirstChild("FiestaMazeCmds")
-    if not mod then return nil end
-    return fiestaRequire(mod)
-end
-
--- Progresso: (cleared, total) celulas do caminho
-function Fiesta.progress()
-    local cmds = Fiesta.getCmds()
-    if not cmds or type(cmds.Progress) ~= "function" then return 0, 0 end
-    local ok, cleared, total = pcall(cmds.Progress, cmds)
-    if ok and type(cleared) == "number" then
-        return cleared, type(total) == "number" and total or 0
-    end
-    return 0, 0
-end
-
--- Estado atual do maze (tabela interna: .rooms, .built, .cleared, .origin, .cursed)
-function Fiesta.getState()
-    local cmds = Fiesta.getCmds()
-    if not cmds or type(cmds.Get) ~= "function" then return nil end
-    local ok, state = pcall(cmds.Get, cmds)
-    if ok and type(state) == "table" then return state end
-    return nil
-end
-
--- Curso? (flag do FFlags: PinataFiesta_Maze)
-function Fiesta.isCursed()
-    local cmds = Fiesta.getCmds()
-    if not cmds then return false end
-    if type(cmds.IsCursed) == "function" then
-        local ok, v = pcall(cmds.IsCursed, cmds)
-        if ok then return v == true end
-    end
-    return false
-end
-
--- FiestaMazePortals: teleporte para a Prize Room
-function Fiesta.getPortals()
-    local lib = fiestaLib()
-    if not lib then return nil end
-    local client = lib:FindFirstChild("Client")
-    if not client then return nil end
-    local mod = client:FindFirstChild("FiestaMazePortals")
-    if not mod then return nil end
-    return fiestaRequire(mod)
-end
-
-function Fiesta.sendToPrizeRoom()
-    local portals = Fiesta.getPortals()
-    if not portals or type(portals.SendToPrizeRoom) ~= "function" then return false end
-    local ok = pcall(portals.SendToPrizeRoom, portals)
-    return ok == true
-end
-
-function Fiesta.prizeRoomArrival()
-    local portals = Fiesta.getPortals()
-    if not portals or type(portals.PrizeRoomArrival) ~= "function" then return nil end
-    local ok, cf = pcall(portals.PrizeRoomArrival, portals)
-    if ok and typeof(cf) == "CFrame" then return cf end
-    return nil
-end
-
--- Contagem de Fiesta Boss Key via Library.Items (padrao do jogo)
-function Fiesta.bossKeys()
-    local lib = fiestaLib()
-    if not lib then return 0 end
-    local dir = lib:FindFirstChild("Directory")
-    local items = lib:FindFirstChild("Items")
-    if not (dir and items) then return 0 end
-    local dirMod = fiestaRequire(dir)
-    local itemsMod = fiestaRequire(items)
-    if not (dirMod and itemsMod) then return 0 end
-    local miscItems = dirMod.MiscItems
-    if not miscItems then return 0 end
-    local def = miscItems["Fiesta Boss Key"]
-    if not def then return 0 end
-    local ok, count = pcall(function()
-        return itemsMod.Misc(def):CountAny()
+    table.sort(v127, function(p128, p129)
+        return p128.distance < p129.distance
     end)
-    if ok and type(count) == "number" then
-        return math.floor(count)
+    local v130 = #v127
+    local v131 = {}
+    for v132 = 1, math.min(p123, v130) do
+        local v133 = v127[v132]
+        if p125 and p125 < v133.distance then
+            break
+        end
+        local v134 = v133.breakable
+        table.insert(v131, v134)
     end
-    return 0
+    if p126 and #v131 < p126 then
+        local v135 = math.max(p123, p126)
+        local v136 = #v127
+        v131 = {}
+        for v137 = 1, math.min(v135, v136) do
+            local v138 = v127[v137].breakable
+            table.insert(v131, v138)
+        end
+    end
+    return v131
 end
-
--- Abre a boss room: Network.Invoke("GX_Redeem") (dump Dex: FiestaMazeCmds.raiseGate)
--- Fallback: invoca o RemoteFunction direto caso o Network module nao exista
-function Fiesta.redeemBoss()
-    local lib = fiestaLib()
-    if lib then
-        local client = lib:FindFirstChild("Client")
-        if client then
-            local netMod = client:FindFirstChild("Network")
-            if netMod then
-                local net = fiestaRequire(netMod)
-                if net and type(net.Invoke) == "function" then
-                    local ok = pcall(net.Invoke, net, "GX_Redeem")
-                    if ok then return true end
-                end
+local function v_u_150(p140, p141, p142) -- name: findFarthestBreakables
+    -- upvalues: (copy) v_u_121
+    local v143 = v_u_121(p140, p142)
+    if #v143 == 0 then
+        return {}
+    end
+    table.sort(v143, function(p144, p145)
+        return p144.distance > p145.distance
+    end)
+    local v146 = #v143
+    local v147 = {}
+    for v148 = 1, math.min(p141, v146) do
+        local v149 = v143[v148].breakable
+        table.insert(v147, v149)
+    end
+    return v147
+end
+local v_u_151 = {}
+local function v_u_155(p152) -- name: getAreaCenter
+    -- upvalues: (copy) v_u_151
+    local v153 = v_u_151[p152]
+    if v153 then
+        return v153
+    end
+    local v154 = workspace:FindFirstChild("BreakablesSpawners")
+    if v154 then
+        v154 = v154:FindFirstChild(p152)
+    end
+    if v154 then
+        v154 = v154:FindFirstChild("Spawner") or v154:FindFirstChild("PetArea")
+    end
+    if not (v154 and v154:IsA("BasePart")) then
+        return nil
+    end
+    v_u_151[p152] = v154.Position
+    return v154.Position
+end
+local function v_u_168(p156, p157) -- name: getRandomWanderPoint
+    local v158 = workspace:FindFirstChild("BreakablesSpawners")
+    if v158 then
+        v158 = v158:FindFirstChild(p156)
+    end
+    if v158 then
+        v158 = v158:FindFirstChild("Spawner") or v158:FindFirstChild("PetArea")
+    end
+    if v158 and v158:IsA("BasePart") then
+        local v159 = v158.Size.X / 2
+        local v160 = v158.Size.Z / 2
+        local v161 = v158.Position.X + (math.random() * 2 - 1) * v159
+        local v162 = v158.Position.Z + (math.random() * 2 - 1) * v160
+        local v163 = v158.Position.Y
+        return Vector3.new(v161, v163, v162)
+    else
+        if not p157 then
+            return nil
+        end
+        local v164 = math.random() * 2 * 3.141592653589793
+        local v165 = math.random() * 35
+        local v166 = math.cos(v164) * v165
+        local v167 = math.sin(v164) * v165
+        return p157 + Vector3.new(v166, 0, v167)
+    end
+end
+local function v_u_172(p169) -- name: pickTargetFromPool
+    if not p169 or #p169 == 0 then
+        return nil
+    end
+    for _ = 1, 5 do
+        local v170 = p169[math.random(#p169)]
+        if v170 and v170.Parent then
+            return v170
+        end
+    end
+    for _, v171 in ipairs(p169) do
+        if v171 and v171.Parent then
+            return v171
+        end
+    end
+    return nil
+end
+local function v_u_188(p173, p174) -- name: findRandomBreakables
+    -- upvalues: (copy) v_u_2
+    local v175 = {}
+    local v176 = workspace:FindFirstChild("AlienEventEgg")
+    if v176 and v176:IsA("Model") then
+        if not (v176:FindFirstChild("Primary") or v176.PrimaryPart) then
+            v176 = nil
+        end
+    else
+        v176 = nil
+    end
+    if v176 then
+        local v177 = v176:GetAttribute("Zone")
+        if v177 == nil and true or v177 == p173 then
+            table.insert(v175, v176)
+        end
+    end
+    local v178 = v_u_2:FindFirstChild(p173)
+    if v178 then
+        for _, v179 in ipairs(v178:GetChildren()) do
+            if v179:IsA("Model") and (v179:FindFirstChild("Primary") or v179.PrimaryPart) then
+                table.insert(v175, v179)
             end
         end
     end
-    if Remotes.GX_Redeem then
-        local ok = pcall(function() Remotes.GX_Redeem:InvokeServer() end)
-        if ok then return true end
+    if #v175 == 0 then
+        return {}
     end
-    return false
-end
-
--- Desativa o AutoRaid (remote descoberto no dump: Network.AutoRaid_Disable)
-function Fiesta.disableAutoRaid()
-    if Remotes.AutoRaid_Disable then
-        local ok = pcall(function() Remotes.AutoRaid_Disable:FireServer() end)
-        if ok then return true end
+    local v180 = {}
+    for v181 = #v175, 2, -1 do
+        local v182 = math.random(v181)
+        local v183 = v175[v182]
+        local v184 = v175[v181]
+        v175[v181] = v183
+        v175[v182] = v184
     end
-    local remote = findByName(ReplicatedStorage, "AutoRaid_Disable")
-    if remote then
-        local ok = pcall(function() remote:FireServer() end)
-        if ok then return true end
+    local v185 = #v175
+    for v186 = 1, math.min(p174, v185) do
+        local v187 = v175[v186]
+        table.insert(v180, v187)
     end
-    return false
+    return v180
 end
-
--- Salas do maze replicadas no workspace (estrutura do Geometry: __THINGS.Instances.FiestaMaze.Models.Rooms)
-function Fiesta.getRooms()
-    local things = workspace:FindFirstChild("__THINGS")
-    if not things then return nil end
-    local inst = things:FindFirstChild("Instances")
-    if not inst then return nil end
-    local maze = inst:FindFirstChild("FiestaMaze")
-    if not maze then return nil end
-    local models = maze:FindFirstChild("Models")
-    if not models then return nil end
-    return models:FindFirstChild("Rooms")
+local function v_u_198(p_u_189) -- name: animateClick
+    -- upvalues: (copy) v_u_36, (copy) v_u_42, (copy) v_u_4
+    if p_u_189:IsA("Model") and not v_u_36[p_u_189] then
+        v_u_36[p_u_189] = true
+        if not v_u_42[p_u_189] then
+            v_u_42[p_u_189] = p_u_189:GetAttribute("OriginalScale") or p_u_189:GetScale()
+        end
+        local v_u_190 = v_u_42[p_u_189]
+        local v_u_191 = Instance.new("NumberValue")
+        v_u_191.Value = p_u_189:GetScale()
+        local v_u_192 = 0
+        local v_u_194 = v_u_191.Changed:Connect(function(p193)
+            -- upvalues: (ref) v_u_192, (copy) p_u_189
+            v_u_192 = v_u_192 + 1
+            if v_u_192 % 4 == 0 then
+                if p_u_189 and p_u_189.Parent then
+                    p_u_189:ScaleTo(p193)
+                end
+            end
+        end)
+        task.spawn(function()
+            -- upvalues: (ref) v_u_4, (copy) v_u_191, (copy) v_u_190, (copy) p_u_189, (copy) v_u_194, (ref) v_u_36
+            local v195 = v_u_4:Create(v_u_191, TweenInfo.new(0.05), {
+                ["Value"] = v_u_190 * 0.9
+            })
+            v195:Play()
+            v195.Completed:Wait()
+            if p_u_189.Parent then
+                p_u_189:ScaleTo(v_u_190 * 0.9)
+                local v196 = {
+                    ["Value"] = v_u_190
+                }
+                local v197 = v_u_4:Create(v_u_191, TweenInfo.new(0.1), v196)
+                v197:Play()
+                v197.Completed:Wait()
+                p_u_189:ScaleTo(v_u_190)
+                v_u_194:Disconnect()
+                v_u_191:Destroy()
+                v_u_36[p_u_189] = nil
+            else
+                v_u_194:Disconnect()
+                v_u_191:Destroy()
+                v_u_36[p_u_189] = nil
+            end
+        end)
+    end
 end
-
--- Quebraveis do maze (pinatas) - qualquer BasePart com ClickDetector dentro das salas
-function Fiesta.getMazeBreakables()
-    local rooms = Fiesta.getRooms()
-    if not rooms then return {} end
-    local list = {}
-    for _, room in ipairs(rooms:GetChildren()) do
-        if room:IsA("Model") then
-            for _, part in ipairs(room:GetDescendants()) do
-                if part:IsA("BasePart") and part.Parent then
-                    local cd = part:FindFirstChildOfClass("ClickDetector")
-                    if cd then
-                        list[#list + 1] = part
+local function v_u_208(p_u_199) -- name: animatePop
+    -- upvalues: (copy) v_u_37, (copy) v_u_36, (copy) v_u_42, (copy) v_u_4
+    if p_u_199 and (p_u_199:IsA("Model") and not (v_u_37[p_u_199] or v_u_36[p_u_199])) then
+        v_u_37[p_u_199] = true
+        if not v_u_42[p_u_199] then
+            v_u_42[p_u_199] = p_u_199:GetAttribute("OriginalScale") or p_u_199:GetScale()
+        end
+        local v_u_200 = v_u_42[p_u_199]
+        task.spawn(function()
+            -- upvalues: (copy) p_u_199, (ref) v_u_4, (copy) v_u_200, (ref) v_u_37
+            local v201 = Instance.new("NumberValue")
+            v201.Value = p_u_199:GetScale()
+            local v_u_202 = 0
+            local v204 = v201.Changed:Connect(function(p203)
+                -- upvalues: (ref) v_u_202, (ref) p_u_199
+                v_u_202 = v_u_202 + 1
+                if v_u_202 % 4 == 0 then
+                    if p_u_199 and p_u_199.Parent then
+                        p_u_199:ScaleTo(p203)
                     end
                 end
+            end)
+            local v205 = v_u_4:Create(v201, T
+
+
+BreakablesSpawnerClient
+-- Script Path: game:GetService("Players").slenderman_510.PlayerScripts.BreakablesSpawnerClient
+-- Took 0.02s to decompile.
+-- Executor: Delta (1.1.736.1408)
+
+game:GetService("Players")
+local v1 = game:GetService("ReplicatedStorage")
+local v2 = game:GetService("Workspace")
+local v_u_3 = game:GetService("TweenService")
+game:GetService("CollectionService")
+local v_u_4 = game:GetService("RunService")
+require(v1.Packages.Knit).OnStart():await()
+local v_u_5 = require(v1.Modules.SafeGetService).Get("BreakableSpawnService")
+local v_u_6 = v1:FindFirstChild("BreakablesTemplates")
+local v_u_7 = v2:FindFirstChild("Breakables")
+local v_u_8 = {}
+local v_u_9 = {}
+local function v_u_14(p10, p11) -- name: acceptSeq
+    -- upvalues: (copy) v_u_9
+    if typeof(p10) ~= "string" or p10 == "" then
+        return false
+    end
+    local v12 = tonumber(p11)
+    if v12 == nil or v12 ~= v12 then
+        return true
+    end
+    local v13 = v_u_9[p10]
+    if v13 and v12 <= v13.seq then
+        return false
+    end
+    v_u_9[p10] = {
+        ["seq"] = v12,
+        ["stamp"] = os.clock()
+    }
+    return true
+end
+local function v_u_19(p15) -- name: SetupHover
+    local v16 = p15:FindFirstChild("ClickDetector")
+    if v16 then
+        local v17 = p15:FindFirstChild("Model")
+        local v_u_18 = v17 and v17:FindFirstChild("Highlight") or p15:FindFirstChild("Highlight")
+        if v_u_18 then
+            v16.MouseHoverEnter:Connect(function()
+                -- upvalues: (copy) v_u_18
+                if v_u_18.Parent then
+                    v_u_18.Enabled = true
+                end
+            end)
+            v16.MouseHoverLeave:Connect(function()
+                -- upvalues: (copy) v_u_18
+                if v_u_18.Parent then
+                    v_u_18.Enabled = false
+                end
+            end)
+        end
+    else
+        return
+    end
+end
+local function v_u_71(p_u_20, p_u_21, p_u_22, p_u_23, p_u_24, p_u_25, p_u_26) -- name: playLandingSquash
+    -- upvalues: (copy) v_u_4
+    local v_u_27
+    if p_u_25 then
+        local v28 = p_u_20:GetScale()
+        if not p_u_23 or v28 <= 0 then
+            return
+        end
+        local v29, v30 = p_u_20:GetBoundingBox()
+        local v31 = v29.Position.Y - v30.Y * 0.5
+        local v32 = p_u_20:GetPivot().Position.Y - v31
+        local v33 = v30.Y
+        local v34 = math.clamp(v32, 0, v33) * (p_u_23 / v28)
+        v_u_27 = math.min(v34, 3)
+    else
+        if not (p_u_26 and p_u_24) then
+            return
+        end
+        local v35 = p_u_24.Y * 0.5
+        v_u_27 = math.min(v35, 3)
+    end
+    local v_u_36 = p_u_23
+    local function v_u_47(p37) -- name: apply
+        -- upvalues: (copy) p_u_25, (copy) p_u_23, (copy) p_u_20, (ref) v_u_36, (copy) p_u_26, (copy) p_u_24, (copy) p_u_21, (copy) p_u_22, (ref) v_u_27
+        if p_u_25 then
+            local v38 = p_u_23 * p37
+            p_u_20:ScaleTo(v38)
+            v_u_36 = v38
+        elseif p_u_26 and p_u_24 then
+            local v39 = 1 / math.sqrt(p37)
+            local v40 = p_u_20
+            local v41 = p_u_24.X * v39
+            local v42 = p_u_24.Y * p37
+            local v43 = p_u_24.Z * v39
+            v40.Size = Vector3.new(v41, v42, v43)
+        end
+        local v44 = p_u_21
+        local v45 = p_u_22
+        local v46 = v_u_27 * (p37 - 1)
+        v44.CFrame = v45 + Vector3.new(0, v46, 0)
+    end
+    if p_u_25 then
+        local v48 = p_u_23 * 0.82
+        p_u_20:ScaleTo(v48)
+        v_u_36 = v48
+    elseif p_u_26 and p_u_24 then
+        local v49 = p_u_24.X * 1.1043152607484654
+        local v50 = p_u_24.Y * 0.82
+        local v51 = p_u_24.Z * 1.1043152607484654
+        p_u_20.Size = Vector3.new(v49, v50, v51)
+    end
+    local v52 = v_u_27 * -0.18000000000000005
+    p_u_21.CFrame = p_u_22 + Vector3.new(0, v52, 0)
+    local v_u_53 = 0
+    local v_u_54 = 0
+    local v_u_55 = nil
+    v_u_55 = v_u_4.Heartbeat:Connect(function(p56)
+        -- upvalues: (copy) p_u_20, (copy) p_u_21, (ref) v_u_55, (copy) p_u_25, (ref) v_u_36, (copy) p_u_23, (ref) v_u_53, (copy) p_u_26, (copy) p_u_24, (copy) p_u_22, (ref) v_u_27, (ref) v_u_54, (copy) v_u_47
+        if p_u_20 and (p_u_20.Parent and p_u_21.Parent) then
+            if p_u_25 then
+                local v57 = p_u_20:GetScale() - v_u_36
+                if math.abs(v57) > p_u_23 * 0.002 then
+                    v_u_55:Disconnect()
+                    return
+                end
             end
+            v_u_53 = v_u_53 + p56
+            if v_u_53 >= 0.36 then
+                v_u_55:Disconnect()
+                if p_u_25 then
+                    local v58 = p_u_23 * 1
+                    p_u_20:ScaleTo(v58)
+                    v_u_36 = v58
+                elseif p_u_26 and p_u_24 then
+                    local v59 = p_u_20
+                    local v60 = p_u_24.X * 1
+                    local v61 = p_u_24.Y * 1
+                    local v62 = p_u_24.Z * 1
+                    v59.Size = Vector3.new(v60, v61, v62)
+                end
+                local v63 = p_u_21
+                local v64 = p_u_22
+                local v65 = v_u_27 * 0
+                v63.CFrame = v64 + Vector3.new(0, v65, 0)
+                return
+            else
+                v_u_54 = v_u_54 + p56
+                if v_u_54 >= 0.03333333333333333 then
+                    v_u_54 = 0
+                    local v66 = v_u_47
+                    local v67 = v_u_53
+                    local v68 = -10 * v67
+                    local v69 = math.exp(v68) * 0.18000000000000005
+                    local v70 = 19 * v67
+                    v66(1 - v69 * math.cos(v70))
+                end
+            end
+        else
+            v_u_55:Disconnect()
+            return
         end
-    end
-    return list
-end
-
--- Caminho ideal: salas "RoomN" (onPath) em ordem - para ESP/navegacao
-function Fiesta.getPathRooms()
-    local rooms = Fiesta.getRooms()
-    if not rooms then return {} end
-    local list = {}
-    for _, room in ipairs(rooms:GetChildren()) do
-        if room:IsA("Model") and room:GetAttribute("OnPath") then
-            list[#list + 1] = room
-        end
-    end
-    table.sort(list, function(a, b)
-        return (a:GetAttribute("RoomNumber") or 0) < (b:GetAttribute("RoomNumber") or 0)
     end)
-    return list
 end
-
--- ============ LOOPS FIESTA MAZE ============
-
--- Auto Pinata (quebra quebraveis do maze)
-taskSpawn(function()
-    while true do
-        if Features.FiestaAutoBreak then
-            local hrp = getHRP()
-            if hrp then
-                local root = hrp:IsA("BasePart") and hrp or (hrp.Parent and hrp.Parent:FindFirstChild("HumanoidRootPart"))
-                if root then
-                    for _, part in ipairs(Fiesta.getMazeBreakables()) do
-                        local cd = part:FindFirstChildOfClass("ClickDetector")
-                        if cd then
-                            pcall(function() fireclickdetector(cd, 1) end)
-                            Stats.Broken = Stats.Broken + 1
+local function v_u_89(p_u_72, p_u_73, p_u_74, p_u_75, p_u_76, p_u_77) -- name: animateCoin
+    -- upvalues: (copy) v_u_3, (copy) v_u_71
+    local v_u_78
+    if p_u_76 then
+        v_u_78 = p_u_72.PrimaryPart or p_u_72
+    else
+        v_u_78 = p_u_72
+    end
+    if not p_u_76 or v_u_78 then
+        local v_u_79 = p_u_73 * CFrame.new(0, 3, 0)
+        task.spawn(function()
+            -- upvalues: (copy) p_u_72, (ref) v_u_3, (copy) v_u_78, (copy) v_u_79, (copy) p_u_76, (copy) p_u_74, (copy) p_u_77, (copy) p_u_75, (copy) p_u_73, (ref) v_u_71
+            if p_u_72 and p_u_72.Parent then
+                local v80 = TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+                local v81 = v_u_3:Create(v_u_78, v80, {
+                    ["CFrame"] = v_u_79
+                })
+                v81:Play()
+                if p_u_76 then
+                    local v_u_82 = Instance.new("NumberValue")
+                    v_u_82.Value = 0.2
+                    local v_u_83 = 0
+                    local v_u_85 = v_u_82.Changed:Connect(function(p84)
+                        -- upvalues: (ref) v_u_83, (ref) p_u_72, (ref) p_u_74
+                        v_u_83 = v_u_83 + 1
+                        if p84 >= 1 or v_u_83 % 4 == 0 then
+                            if p_u_72 and p_u_72.Parent then
+                                p_u_72:ScaleTo(p_u_74 * p84)
+                            end
+                        end
+                    end)
+                    local v86 = v_u_3:Create(v_u_82, v80, {
+                        ["Value"] = 1
+                    })
+                    v86:Play()
+                    v86.Completed:Connect(function()
+                        -- upvalues: (copy) v_u_85, (ref) p_u_72, (ref) p_u_74, (copy) v_u_82
+                        v_u_85:Disconnect()
+                        if p_u_72 and p_u_72.Parent then
+                            p_u_72:ScaleTo(p_u_74)
+                        end
+                        v_u_82:Destroy()
+                    end)
+                elseif p_u_77 then
+                    v_u_3:Create(p_u_72, v80, {
+                        ["Size"] = p_u_75
+                    }):Play()
+                end
+                v81.Completed:Wait()
+                if p_u_72 and p_u_72.Parent then
+                    local v87 = {
+                        ["CFrame"] = p_u_73
+                    }
+                    local v88 = v_u_3:Create(v_u_78, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), v87)
+                    v88:Play()
+                    v88.Completed:Wait()
+                    if p_u_72 and p_u_72.Parent then
+                        v_u_71(p_u_72, v_u_78, p_u_73, p_u_74, p_u_75, p_u_76, p_u_77)
+                    end
+                else
+                    return
+                end
+            else
+                return
+            end
+        end)
+    end
+end
+v_u_5.Spawn:Connect(function(p90, p91, p_u_92, p_u_93, p94, p95)
+    -- upvalues: (copy) v_u_14, (copy) v_u_6, (copy) v_u_8, (copy) v_u_7, (copy) v_u_19, (copy) v_u_89, (copy) v_u_5
+    local v96 = ({
+        ["Spawn"] = "SpawnBreakables",
+        ["TreasureDunes"] = "TreasureDunesBreakables",
+        ["FrozenAlley"] = "FrozenAlleyBreakables",
+        ["BirchForest"] = "BirchForestBreakables",
+        ["Haunted"] = "HauntedBreakables",
+        ["PetKingdom"] = "PetKingdomBreakables",
+        ["TheMoon"] = "TheMoon"
+    })[p_u_92]
+    if v96 then
+        if v_u_14(p_u_93, p94) then
+            local v97 = v_u_6:FindFirstChild(v96)
+            if v97 then
+                local v98 = v97:FindFirstChild(p90)
+                if not v98 then
+                    v98 = v_u_6:FindFirstChild("Fruits")
+                    if v98 then
+                        v98 = v98:FindFirstChild(p90)
+                    end
+                end
+                if not v98 then
+                    v98 = v_u_6:FindFirstChild("Events")
+                    if v98 then
+                        v98 = v98:FindFirstChild(p90)
+                    end
+                end
+                if v98 then
+                    local v_u_99 = v98:Clone()
+                    local v100, v101, v102, v103
+                    if v_u_99:IsA("Model") then
+                        v_u_99:GetPivot()
+                        v100 = v_u_99:GetScale()
+                        v101 = false
+                        v102 = nil
+                        v103 = true
+                    elseif v_u_99:IsA("BasePart") then
+                        local _ = v_u_99.CFrame
+                        v102 = v_u_99.Size
+                        v100 = nil
+                        v101 = true
+                        v103 = false
+                    else
+                        v100 = nil
+                        v101 = nil
+                        v102 = nil
+                        v103 = nil
+                    end
+                    local v104 = tonumber(p95)
+                    if v104 and (v104 == v104 and v104 > 0) then
+                        local v105 = v_u_99:FindFirstChild("DamageUI")
+                        if v105 then
+                            v105 = v105:FindFirstChild("Frame")
+                        end
+                        local v106
+                        if v105 then
+                            v106 = v105:FindFirstChild("Hp")
+                        else
+                            v106 = v105
+                        end
+                        if v105 then
+                            v105 = v105:FindFirstChild("Started")
+                        end
+                        if v106 and v105 then
+                            v106.Value = v104
+                            v105.Value = true
                         end
                     end
-                end
-            end
-        end
-        taskWait(CONFIG.FarmInterval)
-    end
-end)
-
--- Auto Boss (redeem GX_Redeem quando tiver chave suficiente)
-taskSpawn(function()
-    local lastRedeem = 0
-    while true do
-        if Features.FiestaAutoBoss then
-            local keys = Fiesta.bossKeys()
-            if keys >= 1 then
-                local now = os.clock()
-                if now - lastRedeem > 5 then -- cooldown anti-spam
-                    lastRedeem = now
-                    Fiesta.redeemBoss()
-                end
-            end
-        end
-        taskWait(CONFIG.QuestInterval)
-    end
-end)
-
--- Auto Chest (coleta baus do maze via ClickDetector)
-taskSpawn(function()
-    while true do
-        if Features.FiestaAutoChest then
-            local rooms = Fiesta.getRooms()
-            if rooms then
-                for _, room in ipairs(rooms:GetChildren()) do
-                    if room:IsA("Model") then
-                        for _, part in ipairs(room:GetDescendants()) do
-                            if part:IsA("BasePart") and part.Parent and (part.Name:lower():find("chest") or part.Name:lower():find("ba")) then
-                                local cd = part:FindFirstChildOfClass("ClickDetector")
-                                if cd then
-                                    pcall(function() fireclickdetector(cd, 1) end)
+                    v_u_99:SetAttribute("ZoneName", p_u_92)
+                    v_u_99:SetAttribute("CoinId", p_u_93)
+                    if v100 then
+                        v_u_99:SetAttribute("OriginalScale", v100)
+                    end
+                    local v107 = v_u_8[p_u_93]
+                    if v107 and v107 ~= v_u_99 then
+                        v107:SetAttribute("ServerManagedDestroy", true)
+                        v107:Destroy()
+                    end
+                    v_u_8[p_u_93] = v_u_99
+                    if v_u_99:IsA("Model") then
+                        local v108 = v_u_99.PrimaryPart
+                        if v108 then
+                            v108.Anchored = true
+                            for _, v109 in ipairs(v_u_99:GetDescendants()) do
+                                if v109:IsA("BasePart") and v109 ~= v108 then
+                                    v109.Anchored = false
+                                    local v110 = Instance.new("WeldConstraint")
+                                    v110.Part0 = v108
+                                    v110.Part1 = v109
+                                    v110.Parent = v108
                                 end
                             end
                         end
                     end
-                end
-            end
-        end
-        taskWait(CONFIG.CollectInterval)
-    end
-end)
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
--- 7. UI â€” ESTILO ZAPHUB
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
--- UtilitÃ¡rios de instÃ¢ncia
-local function new(class, props, parent)
-    local inst = Instance.new(class)
-    for k, v in pairs(props or {}) do
-        inst[k] = v
-    end
-    if parent then inst.Parent = parent end
-    return inst
-end
-
-local function corner(radius, parent)
-    return new("UICorner", { CornerRadius = UDim.new(0, radius) }, parent)
-end
-
-local function stroke(color, transparency, parent)
-    return new("UIStroke", { Color = color, Transparency = transparency or 0 }, parent)
-end
-
--- Toast (notificaÃ§Ã£o)
-local toastHolder
-local function toast(text, color)
-    if not toastHolder then return end
-    local t = new("Frame", {
-        BackgroundColor3 = CONFIG.Card,
-        Size = UDim2.new(0, 240, 0, 40),
-        Position = UDim2.new(1, -260, 1, -60),
-        ZIndex = 20,
-    }, toastHolder)
-    corner(8, t)
-    stroke(CONFIG.CardBorder, 0, t)
-    new("TextLabel", {
-        Text = text,
-        Font = CONFIG.FontBody,
-        TextSize = 14,
-        TextColor3 = CONFIG.Text,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, -12, 1, 0),
-        Position = UDim2.new(0, 6, 0, 0),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, t)
-    t.Rotation = 90
-    t.Position = UDim2.new(1, 40, 1, -60)
-    local ti = TweenService:Create(t, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Rotation = 0, Position = UDim2.new(1, -260, 1, -60) })
-    ti:Play()
-    taskSpawn(function()
-        taskWait(3)
-        local out = TweenService:Create(t, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.new(1, 60, 1, -60), Rotation = 90 })
-        out:Play()
-        out.Completed:Connect(function()
-            t:Destroy()
-        end)
-    end)
-end
-
--- Componente: Toggle
-local function createToggle(parent, title, subtitle, getter, onChanged)
-    local card = new("Frame", {
-        BackgroundColor3 = CONFIG.Card,
-        Size = UDim2.new(1, -24, 0, 64),
-        Position = UDim2.new(0, 12, 0, 0),
-    }, parent)
-    corner(10, card)
-    stroke(CONFIG.CardBorder, 0, card)
-    new("TextLabel", {
-        Text = title,
-        Font = CONFIG.FontTitle,
-        TextSize = 16,
-        TextColor3 = CONFIG.Text,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(0.8, -20, 0, 22),
-        Position = UDim2.new(0, 12, 0, 8),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, card)
-    if subtitle then
-        new("TextLabel", {
-            Text = subtitle,
-            Font = CONFIG.FontBody,
-            TextSize = 12,
-            TextColor3 = CONFIG.SubText,
-            BackgroundTransparency = 1,
-            Size = UDim2.new(0.8, -20, 0, 18),
-            Position = UDim2.new(0, 12, 0, 32),
-            TextXAlignment = Enum.TextXAlignment.Left,
-        }, card)
-    end
-    local track = new("Frame", {
-        BackgroundColor3 = Color3.fromRGB(60, 60, 80),
-        Size = UDim2.new(0, 46, 0, 24),
-        Position = UDim2.new(1, -62, 0, 20),
-        AnchorPoint = Vector2.new(1, 0),
-    }, card)
-    corner(12, track)
-    local knob = new("Frame", {
-        BackgroundColor3 = Color3.fromRGB(235, 235, 245),
-        Size = UDim2.new(0, 18, 0, 18),
-        Position = UDim2.new(0, 3, 0, 3),
-    }, track)
-    corner(9, knob)
-    local button = new("TextButton", {
-        Text = "",
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 1, 0),
-    }, card)
-    button.ZIndex = 10
-    local function updateVisual()
-        local on = getter()
-        local targetColor = on and CONFIG.Accent or Color3.fromRGB(60, 60, 80)
-        local targetPos = on and UDim2.new(1, -21, 0, 3) or UDim2.new(0, 3, 0, 3)
-        TweenService:Create(track, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundColor3 = targetColor }):Play()
-        TweenService:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = targetPos }):Play()
-    end
-    button.MouseButton1Click:Connect(function()
-        onChanged(not getter())
-        updateVisual()
-    end)
-    updateVisual()
-    return card, updateVisual
-end
-
--- Componente: BotÃ£o
-local function createButton(parent, title, callback, color)
-    local card = new("Frame", {
-        BackgroundColor3 = CONFIG.Card,
-        Size = UDim2.new(1, -24, 0, 48),
-        Position = UDim2.new(0, 12, 0, 0),
-    }, parent)
-    corner(10, card)
-    stroke(CONFIG.CardBorder, 0, card)
-    new("TextLabel", {
-        Text = title,
-        Font = CONFIG.FontTitle,
-        TextSize = 15,
-        TextColor3 = color or CONFIG.Accent,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 1, 0),
-    }, card)
-    local button = new("TextButton", {
-        Text = "",
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 1, 0),
-    }, card)
-    button.MouseEnter:Connect(function()
-        TweenService:Create(card, TweenInfo.new(0.15), { BackgroundColor3 = CONFIG.CardBorder }):Play()
-    end)
-    button.MouseLeave:Connect(function()
-        TweenService:Create(card, TweenInfo.new(0.15), { BackgroundColor3 = CONFIG.Card }):Play()
-    end)
-    button.MouseButton1Click:Connect(function()
-        local ok, err = pcall(callback)
-        if not ok and err then
-            toast("Erro: " .. tostring(err), CONFIG.Danger)
-        end
-    end)
-    return card
-end
-
--- Componente: Dropdown
-local function createDropdown(parent, title, options, current, onSelected)
-    local card = new("Frame", {
-        BackgroundColor3 = CONFIG.Card,
-        Size = UDim2.new(1, -24, 0, 56),
-        Position = UDim2.new(0, 12, 0, 0),
-    }, parent)
-    corner(10, card)
-    stroke(CONFIG.CardBorder, 0, card)
-    new("TextLabel", {
-        Text = title,
-        Font = CONFIG.FontTitle,
-        TextSize = 14,
-        TextColor3 = CONFIG.Text,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(0.45, -12, 0, 20),
-        Position = UDim2.new(0, 12, 0, 8),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, card)
-    local display = new("TextButton", {
-        Text = current,
-        Font = CONFIG.FontBody,
-        TextSize = 13,
-        TextColor3 = CONFIG.Text,
-        BackgroundColor3 = Color3.fromRGB(35, 35, 52),
-        Size = UDim2.new(0.55, -12, 0, 32),
-        Position = UDim2.new(0.45, 0, 0, 12),
-    }, card)
-    corner(8, display)
-    stroke(CONFIG.CardBorder, 0, display)
-    local list = new("ScrollingFrame", {
-        BackgroundColor3 = CONFIG.Sidebar,
-        Size = UDim2.new(0.55, -12, 0, 0),
-        Position = UDim2.new(0.45, 0, 1, 4),
-        Visible = false,
-        ZIndex = 15,
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        CanvasSize = UDim2.new(0, 0, 0, 0),
-        ScrollBarThickness = 0,
-    }, card)
-    corner(8, list)
-    stroke(CONFIG.CardBorder, 0, list)
-    display.MouseButton1Click:Connect(function()
-        list.Visible = not list.Visible
-        if list.Visible then
-            for _, child in ipairs(list:GetChildren()) do
-                child:Destroy()
-            end
-            for _, opt in ipairs(options) do
-                local optBtn = new("TextButton", {
-                    Text = opt,
-                    Font = CONFIG.FontBody,
-                    TextSize = 13,
-                    TextColor3 = CONFIG.Text,
-                    BackgroundColor3 = Color3.fromRGB(30, 30, 46),
-                    Size = UDim2.new(1, 0, 0, 34),
-                    ZIndex = 16,
-                }, list)
-                optBtn.TextXAlignment = Enum.TextXAlignment.Left
-                optBtn.PaddingLeft = UDim.new(0, 10)
-                optBtn.MouseButton1Click:Connect(function()
-                    display.Text = opt
-                    list.Visible = false
-                    onSelected(opt)
-                end)
-            end
-            local h = math.min(#options * 34, 170)
-            TweenService:Create(list, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.new(0.55, -12, 0, h) }):Play()
-        else
-            TweenService:Create(list, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Size = UDim2.new(0.55, -12, 0, 0) }):Play()
-        end
-    end)
-    return card
-end
-
--- Componente: Slider
-local function createSlider(parent, title, min, max, current, onChanged)
-    local card = new("Frame", {
-        BackgroundColor3 = CONFIG.Card,
-        Size = UDim2.new(1, -24, 0, 56),
-        Position = UDim2.new(0, 12, 0, 0),
-    }, parent)
-    corner(10, card)
-    stroke(CONFIG.CardBorder, 0, card)
-    local label = new("TextLabel", {
-        Text = title .. ": " .. tostring(current),
-        Font = CONFIG.FontBody,
-        TextSize = 13,
-        TextColor3 = CONFIG.Text,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(0.6, -12, 0, 20),
-        Position = UDim2.new(0, 12, 0, 8),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, card)
-    local bg = new("Frame", {
-        BackgroundColor3 = Color3.fromRGB(40, 40, 60),
-        Size = UDim2.new(1, -24, 0, 6),
-        Position = UDim2.new(0, 12, 0, 38),
-    }, card)
-    corner(3, bg)
-    local fill = new("Frame", {
-        BackgroundColor3 = CONFIG.Accent,
-        Size = UDim2.new((current - min) / (max - min), 0, 1, 0),
-    }, bg)
-    corner(3, fill)
-    local knobBtn = new("TextButton", {
-        Text = "",
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 1, 0),
-    }, bg)
-    local dragging = false
-    knobBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-        end
-    end)
-    knobBtn.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-    knobBtn.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local rel = clamp((input.Position.X - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
-            local value = math.floor(min + rel * (max - min) + 0.5)
-            fill.Size = UDim2.new(rel, 0, 1, 0)
-            label.Text = title .. ": " .. tostring(value)
-            onChanged(value)
-        end
-    end)
-    return card
-end
-
--- Componente: Label de status
-local function createStatus(parent, title)
-    local card = new("Frame", {
-        BackgroundColor3 = CONFIG.Card,
-        Size = UDim2.new(1, -24, 0, 48),
-        Position = UDim2.new(0, 12, 0, 0),
-    }, parent)
-    corner(10, card)
-    stroke(CONFIG.CardBorder, 0, card)
-    new("TextLabel", {
-        Text = title,
-        Font = CONFIG.FontBody,
-        TextSize = 13,
-        TextColor3 = CONFIG.SubText,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, -24, 1, 0),
-        Position = UDim2.new(0, 12, 0, 0),
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, card)
-    return card
-end
-
--- Layout helper: empilha componentes verticalmente
-local function layout(container)
-    local y = 0
-    for _, child in ipairs(container:GetChildren()) do
-        if child:IsA("Frame") and not child:GetAttribute("NoLayout") then
-            child.Position = UDim2.new(0, 0, 0, y)
-            y = y + child.Size.Y.Offset + 12
-        end
-    end
-    container.CanvasSize = UDim2.new(0, 0, 0, y)
-end
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• construÃ§Ã£o da janela â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-local ScreenGui = new("ScreenGui", {
-    Name = "SlenderHubPS99",
-    ResetOnSpawn = false,
-    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-})
-protectUI(ScreenGui)
-
--- Janela principal
-local Window = new("Frame", {
-    BackgroundColor3 = CONFIG.BG,
-    Size = UDim2.new(0, 920, 0, 580),
-    Position = UDim2.new(0.5, -460, 0.5, -290),
-}, ScreenGui)
-corner(14, Window)
-stroke(CONFIG.CardBorder, 0, Window)
-
--- Barra de arraste
-local DragBar = new("Frame", {
-    BackgroundTransparency = 1,
-    Size = UDim2.new(1, 0, 0, 34),
-    ZIndex = 30,
-}, Window)
-local dragging, dragOffset = false, Vector2.new()
-DragBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragOffset = input.Position - Window.AbsolutePosition
-    end
-end)
-DragBar.InputChanged:Connect(function(input)
-    if dragging then
-        local pos = UDim2.fromOffset(input.Position.X - dragOffset.X, input.Position.Y - dragOffset.Y)
-        Window.Position = pos
-    end
-end)
-DragBar.InputEnded:Connect(function()
-    dragging = false
-end)
-
--- Sidebar
-local Sidebar = new("Frame", {
-    BackgroundColor3 = CONFIG.Sidebar,
-    Size = UDim2.new(0, 210, 1, 0),
-}, Window)
-corner(14, Sidebar)
-new("Frame", {
-    BackgroundColor3 = CONFIG.Sidebar,
-    Size = UDim2.new(0, 14, 0, 14),
-    Position = UDim2.new(1, -14, 0, 0),
-}, Sidebar)
-
--- Logo
-local Logo = new("Frame", {
-    BackgroundTransparency = 1,
-    Size = UDim2.new(1, 0, 0, 64),
-    Position = UDim2.new(0, 0, 0, 18),
-}, Sidebar)
-new("TextLabel", {
-    Text = "âš¡",
-    Font = Enum.Font.GothamBlack,
-    TextSize = 34,
-    TextColor3 = CONFIG.Accent,
-    BackgroundTransparency = 1,
-    Size = UDim2.new(0, 50, 0, 40),
-    Position = UDim2.new(0, 14, 0, 0),
-}, Logo)
-new("TextLabel", {
-    Text = "SlenderHub",
-    Font = CONFIG.FontTitle,
-    TextSize = 20,
-    TextColor3 = CONFIG.Text,
-    BackgroundTransparency = 1,
-    Size = UDim2.new(0, 140, 0, 24),
-    Position = UDim2.new(0, 58, 0, 0),
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, Logo)
-new("TextLabel", {
-    Text = "PS99 Â· Zap Style",
-    Font = CONFIG.FontBody,
-    TextSize = 12,
-    TextColor3 = CONFIG.Accent,
-    BackgroundTransparency = 1,
-    Size = UDim2.new(0, 140, 0, 18),
-    Position = UDim2.new(0, 58, 0, 26),
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, Logo)
-
--- Divisor
-new("Frame", {
-    BackgroundColor3 = CONFIG.CardBorder,
-    Size = UDim2.new(1, -28, 0, 1),
-    Position = UDim2.new(0, 14, 0, 100),
-}, Sidebar)
-
--- Tabs (sidebar)
-local Tabs = {
-    { Name = "Main", Icon = "ðŸ " },
-    { Name = "Auto Farm", Icon = "â›ï¸" },
-    { Name = "Egg", Icon = "ðŸ¥š" },
-    { Name = "Quest", Icon = "ðŸ“œ" },
-    { Name = "Teleports", Icon = "ðŸŒ" },
-    { Name = "Fiesta Maze", Icon = "ðŸŽ‰" },
-    { Name = "Automatic", Icon = "âš™ï¸" },
-    { Name = "Optimization", Icon = "ðŸš€" },
-    { Name = "Config", Icon = "ðŸ”§" },
-}
-
-local TabButtons = {}
-local TabPages = {}
-local ActiveTab = "Main"
-
-local TabList = new("Frame", {
-    BackgroundTransparency = 1,
-    Size = UDim2.new(1, 0, 0, #Tabs * 44),
-    Position = UDim2.new(0, 0, 0, 108),
-}, Sidebar)
-
-for i, tab in ipairs(Tabs) do
-    local btn = new("TextButton", {
-        Text = tab.Icon .. "  " .. tab.Name,
-        Font = CONFIG.FontBody,
-        TextSize = 14,
-        TextColor3 = CONFIG.SubText,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, -16, 0, 40),
-        Position = UDim2.new(0, 8, 0, (i - 1) * 44),
-        TextXAlignment = Enum.TextXAlignment.Left,
-        AutoButtonColor = false,
-    }, TabList)
-    btn.PaddingLeft = UDim.new(0, 10)
-    local indicator = new("Frame", {
-        Name = "Indicator",
-        BackgroundColor3 = CONFIG.Accent,
-        Size = UDim2.new(0, 3, 0, 22),
-        Position = UDim2.new(0, 0, 0, 9),
-        Visible = false,
-    }, btn)
-    btn.MouseButton1Click:Connect(function()
-        ActiveTab = tab.Name
-        for _, b in ipairs(TabButtons) do
-            local ind = b:FindFirstChild("Indicator")
-            b.TextColor3 = CONFIG.SubText
-            if ind then ind.Visible = false end
-        end
-        btn.TextColor3 = CONFIG.Text
-        indicator.Visible = true
-        for _, page in ipairs(TabPages) do
-            page.Visible = false
-        end
-        TabPages[tab.Name].Visible = true
-    end)
-    TabButtons[#TabButtons + 1] = btn
-end
-
--- Footer do sidebar (executor)
-new("Frame", {
-    BackgroundColor3 = CONFIG.CardBorder,
-    Size = UDim2.new(1, -28, 0, 1),
-    Position = UDim2.new(0, 14, 1, -64),
-}, Sidebar)
-new("TextLabel", {
-    Text = "Executor: " .. EXECUTOR,
-    Font = CONFIG.FontBody,
-    TextSize = 12,
-    TextColor3 = CONFIG.SubText,
-    BackgroundTransparency = 1,
-    Size = UDim2.new(1, -20, 0, 20),
-    Position = UDim2.new(0, 10, 1, -58),
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, Sidebar)
-new("TextLabel", {
-    Text = "SlenderHub v1.0 Â· 15/08/2026",
-    Font = CONFIG.FontBody,
-    TextSize = 11,
-    TextColor3 = CONFIG.SubText,
-    BackgroundTransparency = 1,
-    Size = UDim2.new(1, -20, 0, 18),
-    Position = UDim2.new(0, 10, 1, -38),
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, Sidebar)
-
--- Ãrea de conteÃºdo
-local Content = new("Frame", {
-    BackgroundTransparency = 1,
-    Size = UDim2.new(1, -210, 1, 0),
-    Position = UDim2.new(0, 210, 0, 0),
-}, Window)
-
--- Header do conteÃºdo
-local Header = new("Frame", {
-    BackgroundTransparency = 1,
-    Size = UDim2.new(1, 0, 0, 54),
-}, Content)
-new("TextLabel", {
-    Text = "âš¡ SlenderHub â€” Pet Simulator 99",
-    Font = CONFIG.FontTitle,
-    TextSize = 17,
-    TextColor3 = CONFIG.Text,
-    BackgroundTransparency = 1,
-    Size = UDim2.new(0, 320, 0, 24),
-    Position = UDim2.new(0, 18, 0, 8),
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, Header)
-local StatusLabel = new("TextLabel", {
-    Text = "Farm: OFF Â· Hatch: OFF Â· FPS: 60",
-    Font = CONFIG.FontBody,
-    TextSize = 12,
-    TextColor3 = CONFIG.SubText,
-    BackgroundTransparency = 1,
-    Size = UDim2.new(0, 400, 0, 18),
-    Position = UDim2.new(0, 18, 0, 32),
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, Header)
-
--- BotÃ£o fechar
-local CloseBtn = new("TextButton", {
-    Text = "âœ•",
-    Font = CONFIG.FontTitle,
-    TextSize = 16,
-    TextColor3 = CONFIG.Danger,
-    BackgroundTransparency = 1,
-    Size = UDim2.new(0, 32, 0, 32),
-    Position = UDim2.new(1, -40, 0, 10),
-}, Header)
-CloseBtn.MouseButton1Click:Connect(function()
-    ScreenGui:Destroy()
-end)
-
--- BotÃ£o minimizar
-local MinBtn = new("TextButton", {
-    Text = "â€”",
-    Font = CONFIG.FontTitle,
-    TextSize = 16,
-    TextColor3 = CONFIG.SubText,
-    BackgroundTransparency = 1,
-    Size = UDim2.new(0, 32, 0, 32),
-    Position = UDim2.new(1, -76, 0, 10),
-}, Header)
-MinBtn.MouseButton1Click:Connect(function()
-    Window.Visible = not Window.Visible
-end)
-
-new("Frame", {
-    BackgroundColor3 = CONFIG.CardBorder,
-    Size = UDim2.new(1, -36, 0, 1),
-    Position = UDim2.new(0, 18, 0, 52),
-}, Content)
-
--- PÃ¡ginas
-local PageContainer = new("Frame", {
-    BackgroundTransparency = 1,
-    Size = UDim2.new(1, 0, 1, -64),
-    Position = UDim2.new(0, 0, 0, 64),
-}, Content)
-
-local function createPage(name)
-    local page = new("ScrollingFrame", {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 1, 0),
-        Visible = false,
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        CanvasSize = UDim2.new(0, 0, 0, 0),
-        ScrollBarThickness = 4,
-        ScrollBarImageColor3 = CONFIG.Accent,
-    }, PageContainer)
-    TabPages[name] = page
-    return page
-end
-
--- Toast holder
-toastHolder = new("Frame", {
-    BackgroundTransparency = 1,
-    Size = UDim2.new(0, 280, 1, 0),
-    Position = UDim2.new(1, -290, 0, 0),
-    ZIndex = 50,
-}, ScreenGui)
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: MAIN â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-do
-    local page = createPage("Main")
-
-    createToggle(page, "Auto Farm", "Quebra quebrÃ¡veis automaticamente", function() return Features.AutoFarm end, function(v)
-        Features.AutoFarm = v
-        toast(v and "Auto Farm: ON" or "Auto Farm: OFF", v and CONFIG.Success or CONFIG.Danger)
-    end)
-
-    createToggle(page, "Auto Tap", "Quebra o alvo mais prÃ³ximo (rÃ¡pido)", function() return Features.AutoTap end, function(v)
-        Features.AutoTap = v
-    end)
-
-    createToggle(page, "Auto Collect", "Coleta moedas/orbs/gemas do mapa", function() return Features.AutoCollect end, function(v)
-        Features.AutoCollect = v
-    end)
-
-    createToggle(page, "Auto Rebirth", "Faz rebirth automaticamente", function() return Features.AutoRebirth end, function(v)
-        Features.AutoRebirth = v
-    end)
-
-    createToggle(page, "Auto Claim Free Gifts", "Resgata gifts grÃ¡tis", function() return Features.AutoClaimGifts end, function(v)
-        Features.AutoClaimGifts = v
-    end)
-
-    createToggle(page, "Auto Claim Rank Rewards", "Resgata recompensas de rank", function() return Features.AutoClaimRank end, function(v)
-        Features.AutoClaimRank = v
-    end)
-
-    local status = createStatus(page, "Stats: 0 quebrados Â· 0 moedas Â· 0 hatchs Â· zona: â€”")
-
-    taskSpawn(function()
-        while ScreenGui and ScreenGui.Parent do
-            local label = status:FindFirstChildOfClass("TextLabel")
-            if label then
-                label.Text = string.format(
-                    "Stats: %d quebrados Â· %d moedas Â· %d hatchs Â· zona: %s Â· estado: %s",
-                    Stats.Broken, Stats.Coins, Stats.Hatched, Stats.LastZone, Stats.FarmState
-                )
-            end
-            taskWait(1)
-        end
-    end)
-
-    layout(page)
-end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: AUTO FARM â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-do
-    local page = createPage("Auto Farm")
-
-    createToggle(page, "Auto TP Best Area", "Teleporta para a Ã¡rea com mais quebrÃ¡veis", function() return Features.AutoTPBestArea end, function(v)
-        Features.AutoTPBestArea = v
-        toast(v and "Auto TP: ON" or "Auto TP: OFF", v and CONFIG.Success or CONFIG.Danger)
-    end)
-
-    createSlider(page, "Raio de farm", 10, 120, FarmRadius, function(v)
-        FarmRadius = v
-        -- Quanto maior o raio, mais ligeiramente mais lento o loop (evita spam de fire)
-        CONFIG.FarmInterval = math.max(0.03, 0.08 - (v - 10) / 3000)
-    end)
-
-    createButton(page, "â›ï¸ Teleportar para a Melhor Ãrea", function()
-        local best = World.getBestZone()
-        if best then
-            World.teleportTo(best.Name)
-            Stats.LastZone = best.Name
-            toast("Teleportado para " .. best.Name, CONFIG.Accent)
-        else
-            toast("Nenhuma zona encontrada", CONFIG.Danger)
-        end
-    end)
-
-    createButton(page, "ðŸ”„ Refazer scan do mundo", function()
-        -- Re-popula o dropdown de zonas (apÃ³s mudanÃ§as de Ã¡rea/mundo)
-        toast("Scan refeito â€” reinicie o hub se necessÃ¡rio", CONFIG.Accent)
-    end)
-
-    layout(page)
-end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: EGG â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-do
-    local page = createPage("Egg")
-
-    local eggs = World.getEggs()
-    local eggNames = { "Auto (melhor ovo)" }
-    for _, egg in ipairs(eggs) do
-        eggNames[#eggNames + 1] = egg.Name
-    end
-
-    createDropdown(page, "Ovo", eggNames, SelectedEgg, function(v)
-        SelectedEgg = v
-    end)
-
-    createToggle(page, "Auto Hatch", "Choca ovos automaticamente", function() return Features.AutoHatch end, function(v)
-        Features.AutoHatch = v
-        toast(v and "Auto Hatch: ON" or "Auto Hatch: OFF", v and CONFIG.Success or CONFIG.Danger)
-    end)
-
-    createToggle(page, "Auto Buy Egg", "Compra o ovo selecionado", function() return Features.AutoBuyEgg end, function(v)
-        Features.AutoBuyEgg = v
-    end)
-
-    createButton(page, "ðŸ¥š Hatch agora", function()
-        if hatchEgg(SelectedEgg) then
-            toast("Hatch: " .. SelectedEgg, CONFIG.Success)
-        else
-            toast("Nenhum ovo encontrado no mapa", CONFIG.Danger)
-        end
-    end)
-
-    layout(page)
-end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: QUEST â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-do
-    local page = createPage("Quest")
-
-    createToggle(page, "Auto Rank Quest", "Progressa a rank quest", function() return Features.AutoQuest end, function(v)
-        Features.AutoQuest = v
-    end)
-
-    createToggle(page, "Auto Claim Rank Rewards", "Resgata recompensas automaticamente", function() return Features.AutoClaimRank end, function(v)
-        Features.AutoClaimRank = v
-    end)
-
-    createButton(page, "ðŸ“œ Reivindicar Rank Rewards", function()
-        claimRankRewards()
-        toast("Rank rewards reivindicadas", CONFIG.Success)
-    end)
-
-    layout(page)
-end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: TELEPORTS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-do
-    local page = createPage("Teleports")
-
-    local zones = World.getZones()
-    local zoneNames = {}
-    for _, z in ipairs(zones) do
-        zoneNames[#zoneNames + 1] = z.Name
-    end
-    if #zoneNames == 0 then
-        zoneNames = { "Nenhuma zona encontrada" }
-    end
-
-    local selectedZone = zoneNames[1]
-    createDropdown(page, "Zona / Ãrea", zoneNames, selectedZone, function(v)
-        selectedZone = v
-    end)
-
-    createButton(page, "ðŸŒ Teleportar", function()
-        if World.teleportTo(selectedZone) then
-            Stats.LastZone = selectedZone
-            toast("Teleportado para " .. selectedZone, CONFIG.Success)
-        else
-            toast("Falha no teleport (remote mudou?)", CONFIG.Danger)
-        end
-    end)
-
-    createButton(page, "ðŸ  Teleportar para Spawn", function()
-        World.teleportTo("Spawn")
-        toast("Teleportado para Spawn", CONFIG.Accent)
-    end)
-
-    layout(page)
-end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: FIESTA MAZE â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-do
-    local page = createPage("Fiesta Maze")
-
-    local status = createStatus(page, "Fiesta Maze: aguardando estado...")
-
-    taskSpawn(function()
-        while ScreenGui and ScreenGui.Parent do
-            local label = status:FindFirstChildOfClass("TextLabel")
-            if label then
-                local cleared, total = Fiesta.progress()
-                local keys = Fiesta.bossKeys()
-                local cursed = Fiesta.isCursed()
-                local state = Fiesta.getState()
-                if state then
-                    label.Text = string.format(
-                        "Maze: %d/%d salas limpas Â· Boss Keys: %d Â· %s",
-                        cleared, total, keys, cursed and "CURSED" or "normal"
-                    )
-                else
-                    label.Text = "Fiesta Maze: fora do maze (ou instancia nao replicada)"
-                end
-            end
-            taskWait(1)
-        end
-    end)
-
-    createToggle(page, "Auto PiÃ±ata (Maze)", "Quebra quebrÃ¡veis dentro das salas do maze", function() return Features.FiestaAutoBreak end, function(v)
-        Features.FiestaAutoBreak = v
-        toast(v and "Auto PiÃ±ata: ON" or "Auto PiÃ±ata: OFF", v and CONFIG.Success or CONFIG.Danger)
-    end)
-
-    createToggle(page, "Auto Boss (GX_Redeem)", "Usa Fiesta Boss Key automaticamente na boss room", function() return Features.FiestaAutoBoss end, function(v)
-        Features.FiestaAutoBoss = v
-        toast(v and "Auto Boss: ON" or "Auto Boss: OFF", v and CONFIG.Success or CONFIG.Danger)
-    end)
-
-    createToggle(page, "Auto Chest (Maze)", "Abre baÃºs das salas do maze", function() return Features.FiestaAutoChest end, function(v)
-        Features.FiestaAutoChest = v
-    end)
-
-    createButton(page, "ðŸ”‘ Abrir Boss Room (GX_Redeem)", function()
-        if Fiesta.redeemBoss() then
-            toast("GX_Redeem enviado", CONFIG.Success)
-        else
-            toast("Falha no GX_Redeem â€” remote mudou? (dump Dex)", CONFIG.Danger)
-        end
-    end)
-
-    createButton(page, "ðŸŽ† Ir para a Prize Room", function()
-        if Fiesta.sendToPrizeRoom() then
-            toast("Enviado para a Prize Room", CONFIG.Success)
-        else
-            local cf = Fiesta.prizeRoomArrival()
-            if cf then
-                local hrp = getHRP()
-                if hrp and hrp:IsA("BasePart") then
-                    pcall(function() hrp.CFrame = cf end)
-                    toast("Teleportado para a Prize Room", CONFIG.Success)
+                    local v111 = v_u_7:FindFirstChild(p_u_92)
+                    if not v111 then
+                        v111 = Instance.new("Folder")
+                        v111.Name = p_u_92
+                        v111.Parent = v_u_7
+                    end
+                    local v112
+                    if v100 then
+                        v112 = v100 * 0.2 or nil
+                    else
+                        v112 = nil
+                    end
+                    local v113
+                    if v102 then
+                        v113 = v102 * 0.2 or nil
+                    else
+                        v113 = nil
+                    end
+                    if v_u_99:IsA("Model") then
+                        v_u_99:PivotTo(p91)
+                        if v112 then
+                            v_u_99:ScaleTo(v112)
+                        end
+                    elseif v_u_99:IsA("BasePart") then
+                        v_u_99.CFrame = p91
+                        if v113 then
+                            v_u_99.Size = v113
+                        end
+                    end
+                    v_u_99.Parent = v111
+                    v_u_19(v_u_99)
+                    v_u_89(v_u_99, p91, v100, v102, v103, v101)
+                    local v_u_114 = nil
+                    v_u_114 = v_u_99.AncestryChanged:Connect(function(_, p115)
+                        -- upvalues: (ref) v_u_114, (ref) v_u_8, (copy) p_u_93, (copy) v_u_99, (ref) v_u_5, (copy) p_u_92
+                        if p115 == nil then
+                            v_u_114:Disconnect()
+                            if v_u_8[p_u_93] == v_u_99 then
+                                v_u_8[p_u_93] = nil
+                                if not v_u_99:GetAttribute("ServerManagedDestroy") then
+                                    v_u_5.ReportDestroyed:Fire(p_u_92, p_u_93)
+                                end
+                            end
+                        else
+                            return
+                        end
+                    end)
                 end
             else
-                toast("Prize Room nÃ£o encontrada", CONFIG.Danger)
+                return
+            end
+        else
+            return
+        end
+    else
+        return
+    end
+end)
+v_u_5.Remove:Connect(function(p116, p117)
+    -- upvalues: (copy) v_u_14, (copy) v_u_8
+    if v_u_14(p116, p117) then
+        local v118 = v_u_8[p116]
+        if v118 then
+            v_u_8[p116] = nil
+            v118:SetAttribute("ServerManagedDestroy", true)
+            v118:Destroy()
+        end
+    end
+end)
+local function v_u_121(p119) -- name: purgeIfNotAuthentic
+    -- upvalues: (copy) v_u_8
+    if p119:IsA("Model") then
+        local v120 = p119:GetAttribute("CoinId")
+        if not v120 or v_u_8[v120] ~= p119 then
+            p119:SetAttribute("ServerManagedDestroy", true)
+            p119:Destroy()
+        end
+    else
+        return
+    end
+end
+local function v125(p122) -- name: watchZoneFolder
+    -- upvalues: (copy) v_u_121, (copy) v_u_8
+    if p122:IsA("Folder") then
+        p122.ChildAdded:Connect(v_u_121)
+        for _, v123 in ipairs(p122:GetChildren()) do
+            if v123:IsA("Model") then
+                local v124 = v123:GetAttribute("CoinId")
+                if not v124 or v_u_8[v124] ~= v123 then
+                    v123:SetAttribute("ServerManagedDestroy", true)
+                    v123:Destroy()
+                end
             end
         end
-    end)
-
-    createButton(page, "âš« Desativar AutoRaid", function()
-        if Fiesta.disableAutoRaid() then
-            toast("AutoRaid desativado", CONFIG.Success)
-        else
-            toast("Remote AutoRaid_Disable nÃ£o encontrado", CONFIG.Danger)
-        end
-    end)
-
-    createButton(page, "ðŸ“Š Mostrar caminho (salas onPath)", function()
-        local rooms = Fiesta.getPathRooms()
-        if #rooms > 0 then
-            toast("Caminho do maze: " .. #rooms .. " salas", CONFIG.Accent)
-        else
-            toast("Nenhuma sala onPath encontrada", CONFIG.Danger)
-        end
-    end)
-
-    layout(page)
+    end
 end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: AUTOMATIC â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-do
-    local page = createPage("Automatic")
-
-    createToggle(page, "Auto Use Potions", "Equipa poÃ§Ãµes de dano/luck (best effort)", function() return Features.AutoUsePotions end, function(v)
-        Features.AutoUsePotions = v
-    end)
-
-    createToggle(page, "Auto Use Fruits", "Usa frutas de forÃ§a (best effort)", function() return Features.AutoUseFruits end, function(v)
-        Features.AutoUseFruits = v
-    end)
-
-    createToggle(page, "Auto Open Gifts", "Abre gifts automaticamente", function() return Features.AutoOpenGifts end, function(v)
-        Features.AutoOpenGifts = v
-    end)
-
-    layout(page)
+if v_u_7 then
+    for _, v126 in ipairs(v_u_7:GetChildren()) do
+        v125(v126)
+    end
+    v_u_7.ChildAdded:Connect(v125)
 end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: OPTIMIZATION â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-do
-    local page = createPage("Optimization")
-
-    createToggle(page, "Hide Pets (FPS)", "Esconde pets de outros players (client-side)", function() return Features.OptimizePets end, function(v)
-        Features.OptimizePets = v
-        toast(v and "Pets ocultos" or "Pets visÃ­veis", v and CONFIG.Success or CONFIG.Danger)
-    end)
-
-    createToggle(page, "Hide Confetti", "Esconde confetti/partÃ­culas de evento", function() return Features.OptimizeConfetti end, function(v)
-        Features.OptimizeConfetti = v
-    end)
-
-    createToggle(page, "Hide Break FX", "Remove efeitos visuais dos quebrÃ¡veis", function() return Features.OptimizeBreakFX end, function(v)
-        Features.OptimizeBreakFX = v
-    end)
-
-    createButton(page, "ðŸš€ FPS Unlock (240)", function()
-        if setfpscap then
-            setfpscap(240)
-            toast("FPS cap: 240", CONFIG.Success)
-        else
-            toast("setfpscap nÃ£o disponÃ­vel neste executor", CONFIG.Danger)
+task.spawn(function()
+    -- upvalues: (copy) v_u_7, (copy) v_u_8, (copy) v_u_9
+    while true do
+        task.wait(2)
+        if v_u_7 then
+            for _, v127 in ipairs(v_u_7:GetChildren()) do
+                if v127:IsA("Folder") then
+                    for _, v128 in ipairs(v127:GetChildren()) do
+                        if v128:IsA("Model") and v_u_8[v128:GetAttribute("CoinId")] ~= v128 then
+                            v128:SetAttribute("ServerManagedDestroy", true)
+                            v128:Destroy()
+                        end
+                    end
+                end
+            end
         end
-    end)
-
-    layout(page)
-end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• TAB: CONFIG â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-do
-    local page = createPage("Config")
-
-    local status = createStatus(page, "Remotes detectados: aguardando...")
-
-    taskSpawn(function()
-        local found = {}
-        for name, remote in pairs(Remotes) do
-            found[#found + 1] = name
+        local v129 = os.clock()
+        for v130, v131 in pairs(v_u_9) do
+            if v129 - v131.stamp > 300 and v_u_8[v130] == nil then
+                v_u_9[v130] = nil
+            end
         end
-        table.sort(found)
-        local label = status:FindFirstChildOfClass("TextLabel")
-        if label then
-            label.Text = "Remotes detectados: " .. (#found > 0 and table.concat(found, ", ") or "NENHUM â€” use dump Dex para ajustar CONFIG.RemotePaths")
-        end
-    end)
-
-    createButton(page, "ðŸ”‘ Keybind: RightShift (toggle UI)", function()
-        toast("Keybind padrÃ£o: RightShift", CONFIG.Accent)
-    end)
-
-    createButton(page, "ðŸ—‘ï¸ Destruir UI", function()
-        ScreenGui:Destroy()
-    end, CONFIG.Danger)
-
-    layout(page)
-end
-
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
--- 8. INICIALIZAÃ‡ÃƒO
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
-initRemotes()
-
--- Mostra a tab Main por padrÃ£o
-TabPages["Main"].Visible = true
-TabButtons[1].TextColor3 = CONFIG.Text
-local firstIndicator = TabButtons[1]:FindFirstChild("Indicator")
-if firstIndicator then firstIndicator.Visible = true end
-
--- Keybind de toggle da UI
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == CONFIG.Keybind then
-        Window.Visible = not Window.Visible
     end
 end)
 
--- Atualiza o status do header
-local function getFPS()
-    local ok, fps = pcall(function() return RunService:GetRealFPS() end)
-    if ok and type(fps) == "number" then return math.floor(fps) end
-    return 60
+eggs 
+-- Script Path: game:GetService("Players").slenderman_510.PlayerScripts.Eggs
+-- Took 0.08s to decompile.
+-- Executor: Delta (1.1.736.1408)
+
+local v_u_1, _ = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("QuietLog")).For(warn, print)
+local v_u_2 = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("PlayerData"))
+task.wait(4)
+local v3 = game:GetService("Players")
+local v4 = game:GetService("ReplicatedStorage")
+local v5 = game:GetService("RunService")
+local v_u_6 = game:GetService("TweenService")
+game:GetService("Debris")
+game:GetService("Lighting")
+local v7 = game:GetService("UserInputService")
+game:GetService("TextChatService")
+game:GetService("ContentProvider")
+local v8 = game:GetService("CollectionService")
+local v_u_9 = v3.LocalPlayer
+local v_u_10 = v_u_2.WaitForFolder(v_u_9, "EggsData", 120)
+if not v_u_10 then
+    v_u_1("[Eggs] Folder danych \'" .. "EggsData" .. "\' nie pojawil sie w " .. 120 .. " s.")
 end
-taskSpawn(function()
-    while ScreenGui and ScreenGui.Parent do
-        StatusLabel.Text = string.format(
-            "Farm: %s · Hatch: %s · Coins: %d · FPS: %d",
-            Features.AutoFarm and "ON" or "OFF",
-            Features.AutoHatch and "ON" or "OFF",
-            Stats.Coins,
-            getFPS()
-        )
-        taskWait(1)
+local v_u_11 = v_u_2.WaitForFolder(v_u_9, "Stats", 120)
+if not v_u_11 then
+    v_u_1("[Eggs] Folder danych \'" .. "Stats" .. "\' nie pojawil sie w " .. 120 .. " s.")
+end
+if v_u_11 then
+    v_u_11 = v_u_11:WaitForChild("Coins", 120)
+end
+if not v_u_2.WaitForFolder(v_u_9, "PetsData", 120) then
+    v_u_1("[Eggs] Folder danych \'" .. "PetsData" .. "\' nie pojawil sie w " .. 120 .. " s.")
+end
+if not v_u_2.WaitForFolder(v_u_9, "AutoDelete", 120) then
+    v_u_1("[Eggs] Folder danych \'" .. "AutoDelete" .. "\' nie pojawil sie w " .. 120 .. " s.")
+end
+if not v_u_2.WaitForFolder(v_u_9, "IndexData", 120) then
+    v_u_1("[Eggs] Folder danych \'" .. "IndexData" .. "\' nie pojawil sie w " .. 120 .. " s.")
+end
+if not v_u_2.WaitForFolder(v_u_9, "WorldsData", 120) then
+    v_u_1("[Eggs] Folder danych \'" .. "WorldsData" .. "\' nie pojawil sie w " .. 120 .. " s.")
+end
+local function v18(p_u_12, p_u_13) -- name: BindAutoDelete
+    -- upvalues: (copy) v_u_2, (copy) v_u_9
+    local v14 = v_u_2.Folder(v_u_9, "AutoDelete")
+    if v14 then
+        local v_u_15 = nil
+        local v_u_16 = v14:FindFirstChild(p_u_12)
+        if v_u_16 then
+            if v_u_15 ~= v_u_16 then
+                v_u_15 = v_u_16
+                p_u_13(v_u_16.Value == true, false)
+                v_u_16.Changed:Connect(function()
+                    -- upvalues: (ref) v_u_15, (copy) v_u_16, (copy) p_u_13
+                    if v_u_15 == v_u_16 then
+                        p_u_13(v_u_16.Value == true, true)
+                    end
+                end)
+            end
+        else
+            p_u_13(false, false)
+        end
+        v14.ChildAdded:Connect(function(p_u_17)
+            -- upvalues: (copy) p_u_12, (ref) v_u_15, (copy) p_u_13
+            if p_u_17.Name == p_u_12 then
+                if v_u_15 == p_u_17 then
+                    return
+                end
+                v_u_15 = p_u_17
+                p_u_13(p_u_17.Value == true, true)
+                p_u_17.Changed:Connect(function()
+                    -- upvalues: (ref) v_u_15, (copy) p_u_17, (ref) p_u_13
+                    if v_u_15 == p_u_17 then
+                        p_u_13(p_u_17.Value == true, true)
+                    end
+                end)
+            end
+        end)
+    else
+        p_u_13(false, false)
     end
+end
+local v19 = require(script:WaitForChild("HatchFX"))
+local v_u_20 = v19.PlayHoverSound
+local v_u_21 = v19.PlayClickSound
+local v_u_22 = require(script:WaitForChild("EggInfoPanel"))
+local v_u_23 = require(script:WaitForChild("EggBuyUI"))
+local v24 = v4:WaitForChild("NormalEggs")
+local v_u_25 = require(v4:WaitForChild("Modules"):WaitForChild("EggRangeModule"))
+require(v4.Packages.Knit).OnStart():await()
+local v_u_26 = require(v4.Modules.SafeGetService).Get("EggHatchService")
+require(v24:FindFirstChild("EggHandlerModule"))
+local v27 = require(v4:FindFirstChild("Pets"):FindFirstChild("Multi"))
+local v_u_28 = require(script:WaitForChild("HatchFormation"))
+local v_u_29 = v_u_22.FormatShort
+local v_u_30 = v_u_22.FormatPrice
+local v_u_31 = v_u_9:WaitForChild("PlayerGui"):WaitForChild("UI")
+local v32 = v_u_31.Base:FindFirstChild("Frames")
+local v33 = require(v4.NormalEggs.EggHandlerModule)
+local v_u_34 = v32:WaitForChild("EggBuy")
+require(v4.NormalEggs.EggsPrizes)
+local v_u_35 = require(v4.Modules:WaitForChild("EggPriceModule"))
+local v_u_36 = 1
+local v_u_37 = true
+local v_u_38 = true
+local v_u_39 = " "
+local v_u_40 = v_u_9:WaitForChild("PlayerGui"):WaitForChild("EggsView")
+local v41 = {
+    ["Basic"] = "rbxassetid://78956634688075",
+    ["Rare"] = "rbxassetid://123592428436371",
+    ["Epic"] = "rbxassetid://123871254140445",
+    ["Legendary"] = "rbxassetid://98506116886760",
+    ["Mythical"] = "rbxassetid://94799237772554",
+    ["Exclusive"] = "rbxassetid://133333383680093"
+}
+local function v_u_55(p42) -- name: RefreshEggBuyPanel
+    -- upvalues: (copy) v_u_35, (copy) v_u_9, (copy) v_u_34, (copy) v_u_29, (ref) v_u_36, (copy) v_u_11, (copy) v_u_2, (ref) v_u_37, (ref) v_u_38, (copy) v_u_23
+    local v43 = v_u_35.GetPrice(v_u_9, p42)
+    if not v43 then
+        return false
+    end
+    v_u_34.Main.Top.Title.Text = "Would you like to buy a " .. p42 .. "?"
+    v_u_34.Main.Top.Background.Text = "Would you like to buy a " .. p42 .. "?"
+    v_u_34.Main.Buy1.Main.CoinsDisplay.Text = v_u_29(v43)
+    local v44 = v_u_11
+    if not (v44 and v44.Parent) then
+        v44 = v_u_2.Folder(v_u_9, "Stats")
+        if v44 then
+            v44 = v44:FindFirstChild("Coins")
+        end
+    end
+    local v45
+    if v44 then
+        local v46 = v44.Value
+        v45 = typeof(v46) ~= "number" and 0 or v44.Value
+    else
+        v45 = 0
+    end
+    local v47 = v45 / v43
+    v_u_36 = math.floor(v47)
+    local v48 = v_u_2.Folder(v_u_9, "TrustedStats")
+    if v48 then
+        v48 = v48:FindFirstChild("MaxEggOpen")
+    end
+    local v49
+    if v48 then
+        local v50 = v48.Value
+        if typeof(v50) == "number" then
+            local v51 = v48.Value
+            v49 = math.floor(v51) or 1
+        else
+            v49 = 1
+        end
+    else
+        v49 = 1
+    end
+    local v52 = (v49 < 1 or v49 ~= v49) and 1 or v49
+    if v52 < v_u_36 then
+        v_u_36 = v52
+    end
+    local v53 = v_u_36 / 2
+    local v54 = math.ceil(v53)
+    v_u_34.Main.BuyHalf.Main.CoinsDisplay.Text = v_u_29(v54 * v43)
+    v_u_34.Main.BuyHalf.Text.Text = "Buy " .. v54
+    v_u_34.Main.BuyMax.Main.CoinsDisplay.Text = v_u_29(v_u_36 * v43)
+    v_u_34.Main.BuyMax.Text.Text = "Buy " .. v_u_36
+    v_u_37 = v54 > 1
+    v_u_38 = v_u_36 > 1
+    v_u_23.UpdateBuyButtonsLayout(v_u_37, v_u_38)
+    return true
+end
+if v_u_11 then
+    v_u_11.Changed:Connect(function()
+        -- upvalues: (copy) v_u_23, (ref) v_u_39, (copy) v_u_28, (copy) v_u_55
+        if v_u_23.IsOpen() then
+            if v_u_39 == " " then
+                return
+            elseif not v_u_28.IsActive() then
+                v_u_55(v_u_39)
+            end
+        else
+            return
+        end
+    end)
+end
+for _, v_u_56 in pairs(v_u_9.PlayerGui.EggsView:GetChildren()) do
+    if v_u_56:IsA("BillboardGui") then
+        if v33[v_u_56.Name] then
+            v_u_56.Buy.Activated:Connect(function()
+                -- upvalues: (copy) v_u_56, (copy) v_u_35, (copy) v_u_9, (copy) v_u_11, (copy) v_u_2, (ref) v_u_39, (copy) v_u_55, (copy) v_u_23
+                local v57 = v_u_56.Name
+                local v58 = v_u_35.GetPrice(v_u_9, v57)
+                if v58 then
+                    local v59 = v_u_11
+                    if not (v59 and v59.Parent) then
+                        v59 = v_u_2.Folder(v_u_9, "Stats")
+                        if v59 then
+                            v59 = v59:FindFirstChild("Coins")
+                        end
+                    end
+                    local v60
+                    if v59 then
+                        local v61 = v59.Value
+                        v60 = typeof(v61) ~= "number" and 0 or v59.Value
+                    else
+                        v60 = 0
+                    end
+                    if v58 <= v60 then
+                        v_u_39 = v_u_56.Name
+                        if v_u_55(v_u_56.Name) then
+                            v_u_23.Open()
+                        end
+                    end
+                end
+                v_u_23.CantAfford(v_u_56.Name)
+            end)
+            local v62 = v_u_56.Frame:FindFirstChild("EggInfo")
+            local v63 = v_u_56.Frame:FindFirstChild("Info")
+            if v62 and v63 then
+                v63.Size = v63.Size
+                local v_u_64 = v63:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
+                v_u_64.Name = "InfoPanelScale"
+                v_u_64.Scale = 0
+                v_u_64.Parent = v63
+                local v_u_65 = false
+                local v_u_66 = nil
+                v62.MouseButton1Click:Connect(function()
+                    -- upvalues: (ref) v_u_65, (ref) v_u_66, (copy) v_u_6, (copy) v_u_64
+                    v_u_65 = not v_u_65
+                    if v_u_66 then
+                        v_u_66:Cancel()
+                    end
+                    local v67, v68
+                    if v_u_65 then
+                        v67 = TweenInfo.new(0.12, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+                        v68 = 1
+                    else
+                        v67 = TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+                        v68 = 0
+                    end
+                    v_u_66 = v_u_6:Create(v_u_64, v67, {
+                        ["Scale"] = v68
+                    })
+                    v_u_66:Play()
+                end)
+                local v_u_69 = v62:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
+                v_u_69.Parent = v62
+                local v_u_70 = false
+                local v_u_71 = nil
+                local function v_u_73(p72) -- name: TweenInfoBtnScaleTo
+                    -- upvalues: (ref) v_u_71, (copy) v_u_6, (copy) v_u_69
+                    if v_u_71 then
+                        v_u_71:Cancel()
+                    end
+                    v_u_71 = v_u_6:Create(v_u_69, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                        ["Scale"] = p72
+                    })
+                    v_u_71:Play()
+                end
+                v62.MouseEnter:Connect(function()
+                    -- upvalues: (ref) v_u_70, (copy) v_u_73, (copy) v_u_20
+                    v_u_70 = true
+                    v_u_73(1.08)
+                    v_u_20()
+                end)
+                v62.MouseLeave:Connect(function()
+                    -- upvalues: (ref) v_u_70, (copy) v_u_73
+                    v_u_70 = false
+                    v_u_73(1)
+                end)
+                v62.MouseButton1Down:Connect(function()
+                    -- upvalues: (copy) v_u_73, (copy) v_u_21
+                    v_u_73(0.9)
+                    v_u_21()
+                end)
+                v62.MouseButton1Up:Connect(function()
+                    -- upvalues: (copy) v_u_73, (ref) v_u_70
+                    v_u_73(v_u_70 and 1.08 or 1)
+                end)
+            end
+            if v_u_56.Name ~= "Universe Egg" then
+                for _, v74 in pairs(v33[v_u_56.Name]) do
+                    if v74.Rarity ~= "Secret" then
+                        local v_u_75 = v_u_9.PlayerGui.EggsView.PetIconTemplate:Clone()
+                        v_u_75.Name = v74.Name
+                        v_u_75.PetIcon.Image = v27[v74.Name][4]
+                        v_u_75.PetIcon.ZIndex = 2
+                        if v41[v74.Rarity] then
+                            local v76 = Instance.new("ImageLabel")
+                            v76.Name = "RarityBackground"
+                            v76.Image = v41[v74.Rarity]
+                            v76.BackgroundTransparency = 1
+                            v76.Size = UDim2.new(1, 0, 1, 0)
+                            v76.ZIndex = 1
+                            v76.Parent = v_u_75.PetIcon
+                        end
+                        v_u_75.Parent = v_u_56.Frame.Pets
+                        v8:AddTag(v_u_75, "Hover")
+                        local v_u_77 = v_u_75.DeleteIcon
+                        local v_u_78 = v_u_77:FindFirstChildOfClass("UIScale") or Instance.new("UIScale", v_u_77)
+                        local v_u_79 = TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+                        local v_u_80 = TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+                        local v_u_81 = nil
+                        local v_u_82 = nil
+                        local v_u_83 = 0
+                        local function v88(p84, p85) -- name: SetDeleteIconEnabled
+                            -- upvalues: (ref) v_u_83, (ref) v_u_81, (ref) v_u_82, (copy) v_u_77, (copy) v_u_78, (copy) v_u_6, (copy) v_u_79, (copy) v_u_80
+                            v_u_83 = v_u_83 + 1
+                            local v_u_86 = v_u_83
+                            if v_u_81 then
+                                v_u_81:Cancel()
+                            end
+                            if v_u_82 then
+                                v_u_82:Cancel()
+                            end
+                            if p84 then
+                                v_u_77.Visible = true
+                                if p85 then
+                                    v_u_78.Scale = 0
+                                    v_u_77.ImageTransparency = 1
+                                    v_u_77.Rotation = -15
+                                    v_u_81 = v_u_6:Create(v_u_78, v_u_79, {
+                                        ["Scale"] = 1
+                                    })
+                                    v_u_82 = v_u_6:Create(v_u_77, v_u_79, {
+                                        ["ImageTransparency"] = 0,
+                                        ["Rotation"] = 0
+                                    })
+                                    v_u_81:Play()
+                                    v_u_82:Play()
+                                else
+                                    v_u_78.Scale = 1
+                                    v_u_77.ImageTransparency = 0
+                                    v_u_77.Rotation = 0
+                                end
+                            elseif p85 then
+                                v_u_81 = v_u_6:Create(v_u_78, v_u_80, {
+                                    ["Scale"] = 0
+                                })
+                                v_u_82 = v_u_6:Create(v_u_77, v_u_80, {
+                                    ["ImageTransparency"] = 1,
+                                    ["Rotation"] = 15
+                                })
+                                v_u_82.Completed:Connect(function(p87)
+                                    -- upvalues: (copy) v_u_86, (ref) v_u_83, (ref) v_u_77, (ref) v_u_78
+                                    if v_u_86 == v_u_83 then
+                                        if p87 == Enum.PlaybackState.Completed then
+                                            v_u_77.Visible = false
+                                            v_u_78.Scale = 1
+                                            v_u_77.Rotation = 0
+                                            v_u_77.ImageTransparency = 0
+                                        end
+                                    end
+                                end)
+                                v_u_81:Play()
+                                v_u_82:Play()
+                            else
+                                v_u_77.Visible = false
+                                v_u_78.Scale = 1
+                                v_u_77.Rotation = 0
+                                v_u_77.ImageTransparency = 0
+                            end
+                        end
+                        v18(v_u_75.Name, v88)
+                        v_u_75.MouseButton1Click:Connect(function()
+                            -- upvalues: (copy) v_u_21, (copy) v_u_26, (copy) v_u_75
+                            v_u_21()
+                            v_u_26.Config:Fire("Delete", v_u_75.Name)
+                        end)
+                    end
+                end
+            end
+            for _, v89 in pairs(v_u_56.Frame.Pets:GetChildren()) do
+                if v89:IsA("ImageButton") then
+                    local v90 = v89.Name
+                    local v91 = v_u_2.Folder(v_u_9, "AutoDelete")
+                    local v92 = v91
+                    if v92 then
+                        v92 = v91:FindFirstChild(v90)
+                    end
+                    local v93 = v89.DeleteIcon
+                    local v94
+                    if v92 == nil then
+                        v94 = false
+                    else
+                        v94 = v92.Value == true
+                    end
+                    v93.Visible = v94
+                end
+            end
+        else
+            v_u_1("Eggs: pomijam \'" .. v_u_56.Name .. "\' - brak wpisu w EggHandlerModule (ReplicatedStorage.NormalEggs.EggHandlerModule). Dodaj dane tego jajka albo usun ten billboard z StarterGui.EggsView.")
+        end
+    end
+end
+local v_u_95 = false
+local v_u_96 = false
+local function v_u_102() -- name: RefreshIndexOnEggsImpl
+    -- upvalues: (copy) v_u_2, (copy) v_u_9
+    local v97 = v_u_2.Folder(v_u_9, "IndexData")
+    for _, v98 in pairs(v_u_9.PlayerGui.EggsView:GetChildren()) do
+        if v98:IsA("BillboardGui") then
+            for _, v99 in pairs(v98.Frame.Pets:GetChildren()) do
+                if v99:IsA("ImageButton") then
+                    local v100 = false
+                    local v101
+                    if v97 then
+                        v101 = v97:FindFirstChild(v99.Name)
+                    else
+                        v101 = v97
+                    end
+                    if v101 and (v101:IsA("BoolValue") and v101.Value == true) and true or v100 then
+                        v99.PetIcon.ImageColor3 = Color3.new(1, 1, 1)
+                        v99.PetIcon.NotOwn.Visible = false
+                    else
+                        v99.PetIcon.ImageColor3 = Color3.new(0, 0, 0)
+                        v99.PetIcon.NotOwn.Visible = true
+                    end
+                end
+            end
+        end
+    end
+end
+function RefreshIndexOnEggs() -- name: RefreshIndexOnEggs
+    -- upvalues: (ref) v_u_95, (ref) v_u_96, (copy) v_u_102, (copy) v_u_1
+    if v_u_95 then
+        v_u_96 = true
+    else
+        v_u_95 = true
+        local v103, v104 = pcall(v_u_102)
+        if not v103 then
+            v_u_1("RefreshIndexOnEggs error: " .. tostring(v104))
+        end
+        v_u_95 = false
+        if v_u_96 then
+            v_u_96 = false
+            RefreshIndexOnEggs()
+        end
+    end
+end
+local v105 = v_u_2.Folder(v_u_9, "PetsData")
+if v105 then
+    for _, v106 in ipairs({ "NormalPetsData", "GoldenPetsData", "DiamondPetsData" }) do
+        local v107 = v105:WaitForChild(v106, 120)
+        if v107 then
+            for _, v108 in pairs(v107:GetChildren()) do
+                local v109 = v108:FindFirstChild("Amount")
+                if v109 then
+                    v109:GetPropertyChangedSignal("Value"):Connect(RefreshIndexOnEggs)
+                end
+            end
+            v107.ChildAdded:Connect(function(p110)
+                local v111 = p110:FindFirstChild("Amount")
+                if v111 then
+                    v111:GetPropertyChangedSignal("Value"):Connect(RefreshIndexOnEggs)
+                end
+                RefreshIndexOnEggs()
+            end)
+        else
+            v_u_1("[Eggs] Brak PetsData." .. v106 .. " - licznik \'Not owned\' na jajkach nie bedzie sie odswiezal.")
+        end
+    end
+end
+local v112 = v_u_2.Folder(v_u_9, "IndexData")
+if v112 then
+    for _, v113 in pairs(v112:GetChildren()) do
+        if v113:IsA("BoolValue") then
+            v113:GetPropertyChangedSignal("Value"):Connect(RefreshIndexOnEggs)
+        end
+    end
+    v112.ChildAdded:Connect(function(p114)
+        if p114:IsA("BoolV
+
+
+KnitStart
+-- Script Path: game:GetService("Players").slenderman_510.PlayerScripts.KnitStart
+-- Took 0s to decompile.
+-- Executor: Delta (1.1.736.1408)
+
+local v_u_1, _ = require(game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("QuietLog")).For(warn, print)
+local v2 = game:GetService("ReplicatedStorage")
+local v3 = require(v2.Packages.Knit)
+local v4 = script.Parent:FindFirstChild("Controllers")
+if v4 then
+    for _, v5 in ipairs(v4:GetChildren()) do
+        if v5:IsA("ModuleScript") then
+            require(v5)
+        end
+    end
+end
+v3.Start({
+    ["ServicePromises"] = false
+}):catch(function(p6)
+    -- upvalues: (copy) v_u_1
+    v_u_1("[KnitStart] Blad startu Knita (klient):", p6)
 end)
 
-toast("âš¡ SlenderHub PS99 carregado!", CONFIG.Success)
-
-print("[SlenderHub] PS99 Zap Style carregado. Executor: " .. EXECUTOR)
-print("[SlenderHub] Aviso: remotes do PS99 mudam com updates â€” se alguma feature falhar, revise CONFIG.RemotePaths com um dump Dex.")
