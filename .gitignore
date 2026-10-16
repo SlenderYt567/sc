@@ -1,5 +1,5 @@
 -- SlenderHub Client Exporter v1.0
--- SlenderHub Client Exporter v1.1
+-- SlenderHub Client Exporter v1.2
 -- Execute no cliente. Saida relativa ao workspace do executor.
 -- Exporta um retrato do que esta acessivel, nao um jogo completo/restauravel.
 -- Cancelar: getgenv().SlenderHubExport.Cancel = true
@@ -14,12 +14,15 @@ local CONFIG = {
     IncludeDetached = true,
 }
 
+local VERSION = "1.2"
+warn("[SlenderHub v" .. VERSION .. "] Iniciado | JSON local | build SH-CE-12")
 local env = (type(getgenv) == "function" and getgenv()) or _G
 if env.SlenderHubExport and env.SlenderHubExport.Running then
     warn("[SlenderHub] Uma exportacao ja esta em andamento.")
     return
 end
 local state = { Running = true, Cancel = false, Phase = "starting" }
+local state = { Running = true, Cancel = false, Phase = "starting", Version = VERSION }
 env.SlenderHubExport = state
 local Http = game:GetService("HttpService")
 local function capability(name, fallback)
@@ -144,6 +147,7 @@ local function recordError(stage, target, reason)
     errors[#errors + 1] = { stage = stage, target = target, error = tostring(reason) }
 end
 local function save(relative, content)
+    state.Operation = "writefile: " .. relative
     local ok, reason = pcall(write, root .. "/" .. relative, content)
     if not ok then error("Falha gravando " .. relative .. ": " .. tostring(reason), 0) end
 end
@@ -220,6 +224,7 @@ local function encodeJSON(value, active, location)
 end
 local function json(relative, data)
     save(relative, Http:JSONEncode(data))
+    state.Operation = "encode: " .. relative
     local ok, content = pcall(encodeJSON, data, {}, relative)
     if not ok then error("Falha serializando " .. relative .. ": " .. tostring(content), 0) end
     save(relative, content)
@@ -228,6 +233,7 @@ local function checkpoint()
     json("manifest.json", manifest)
 end
 local function ensureDirectory(path)
+    state.Operation = "makefolder: " .. path
     if isdir then
         local ok, exists = pcall(isdir, path)
         if ok and exists then return end
@@ -244,13 +250,14 @@ local function run()
     ensureDirectory(root .. "/scripts")
     ensureDirectory(root .. "/remotes")
     state.Output = root
-    manifest.exporterVersion = "1.1"
+    manifest.exporterVersion = VERSION
     manifest.jsonEncoding = "local_utf8_safe; invalid bytes escaped as U+00XX; nonfinite numbers tagged"
     manifest.capabilities = { decompile = decode ~= nil }
     for _, provider in ipairs(providers) do manifest.capabilities[provider[1]] = provider[2] ~= nil end
     checkpoint()
     save("README.txt", table.concat(manifest.limitations, "\n") .. "\n\nConsulte manifest.json para estado e contagens; scripts/index.json para fontes e falhas.\nA arvore usa IDs de parent/instancia, inclusive para nomes duplicados.\nOs remotes sao um catalogo, nao uma descricao de argumentos ou comportamento.\n")
     warn("[SlenderHub] Exportando para " .. root)
+    warn("[SlenderHub v" .. VERSION .. "] Exportando para " .. root)
 
     local chunk, seen = {}, {}
     local function flush()
@@ -308,6 +315,7 @@ local function run()
             local object = table.remove(stack)
             if not seen[object] then
                 seen[object] = true
+                state.Operation = "inspect: " .. pathOf(object)
                 local ok, reason = pcall(inspect, object, origin)
                 if not ok then recordError("instance", pathOf(object), reason) end
                 local okChildren, children = pcall(function() return object:GetChildren() end)
@@ -326,6 +334,7 @@ local function run()
         for _, provider in ipairs(providers) do
             if state.Cancel or manifest.instanceLimitReached then break end
             if provider[2] then
+                state.Operation = "discovery: " .. provider[1]
                 local ok, objects = pcall(provider[2])
                 if ok and type(objects) == "table" then
                     for _, object in pairs(objects) do
@@ -366,6 +375,7 @@ local function run()
             else
                 attempts = attempts + 1
                 -- pcall captura erros Lua, nao impede crash/trava de funcao nativa.
+                state.Operation = "decompile: " .. entry.path
                 local ok, result = pcall(decode, object)
                 if ok and type(result) == "string" and result:find("%S") then
                     source, method = result, "decompiled"
@@ -409,11 +419,31 @@ local function run()
     warn(string.format("[SlenderHub] %s: %d instancias, %d remotes, %d fontes, %d decompilados, %d indisponiveis. Pasta: %s", manifest.status, manifest.counts.instances, #remotes, manifest.counts.source, manifest.counts.decompiled, manifest.counts.unavailable, root))
 end
 local ok, reason = pcall(run)
+local function captureFailure(reason)
+    local message = tostring(reason)
+    if debug and type(debug.traceback) == "function" then
+        local okTrace, trace = pcall(debug.traceback, message, 2)
+        if okTrace then return trace end
+    end
+    return message
+end
+local ok, reason = xpcall(run, captureFailure)
 state.Running = false
+local failedPhase, failedOperation = state.Phase, state.Operation
 state.Phase = ok and manifest.status or "failed"
 if not ok then
     state.Error = tostring(reason)
     manifest.status, manifest.error = "failed", tostring(reason)
     if root and write then pcall(checkpoint) end
     warn("[SlenderHub] Exportacao falhou: " .. tostring(reason))
+    manifest.failedPhase, manifest.failedOperation = failedPhase, failedOperation
+    local diagnostic = "SlenderHub v" .. VERSION .. " | SH-CE-12\nEtapa: " .. tostring(failedPhase)
+        .. "\nOperacao: " .. tostring(failedOperation) .. "\n" .. tostring(reason)
+    if root and write then
+        -- Texto simples: diagnostico disponivel mesmo quando o JSON falhar.
+        pcall(write, root .. "/failure.txt", diagnostic)
+        pcall(checkpoint)
+    end
+    state.Operation = failedOperation
+    warn("[SlenderHub v" .. VERSION .. "] Exportacao falhou:\n" .. diagnostic)
 end
